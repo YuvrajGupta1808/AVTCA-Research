@@ -9,9 +9,6 @@ This repository implements a multimodal network for emotion recognition using th
 AVT-CA Model Diagram
 </p>
 
-### Important Note:
-While this code is functional, it has not been parameter-tuned to the exact settings used for the results published in the paper. You may need to experiment with hyperparameters and settings to achieve similar results. However, it provides a solid foundation to build upon and explore further.
-
 Feel free to play around with the code, and let us know if you have any questions or face any issues!
 
 ## Citation
