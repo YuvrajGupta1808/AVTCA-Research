@@ -15,7 +15,7 @@ Feel free to play around with the code, and let us know if you have any question
 
 If you use our work, please cite as:
 ```bibtex
-@misc{r2024multimodalemotionrecognitionusing,
+@misc{AVTCA,
       title={Multimodal Emotion Recognition using Audio-Video Transformer Fusion with Cross Attention}, 
       author={Joe Dhanith P R and Shravan Venkatraman and Modigari Narendra and Vigya Sharma and Santhosh Malarvannan and Amir H. Gandomi},
       year={2024},
