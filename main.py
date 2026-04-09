@@ -49,8 +49,14 @@ if __name__ == '__main__':
         torch.manual_seed(opt.manual_seed)
         model, parameters = generate_model(opt)
 
-        checkpoint = torch.load(r"results\\model.pth")
-        model.load_state_dict(checkpoint)
+        if not opt.resume_path:
+            checkpoint_path = os.path.join(opt.result_path, 'model.pth')
+            if os.path.isfile(checkpoint_path):
+                checkpoint = torch.load(checkpoint_path, map_location=torch.device(opt.device))
+                model.load_state_dict(checkpoint)
+                print('Loaded model weights from {}'.format(checkpoint_path))
+            else:
+                print('No existing model weights found at {}. Starting from initialized weights.'.format(checkpoint_path))
 
         criterion = nn.CrossEntropyLoss()
         criterion = criterion.to(opt.device)

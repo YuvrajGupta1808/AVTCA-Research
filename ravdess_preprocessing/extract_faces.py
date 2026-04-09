@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+import argparse
 import os
 import numpy as np          
 import cv2
@@ -18,7 +19,20 @@ save_length = 3.6 #seconds
 save_avi = True
 
 failed_videos = []
-root = r"C:\\Users\\HP pav\\Desktop\\Capstone\\Emotion-Recognition-using-Vision-Transformers\\RAVDESS"
+
+
+def parse_args():
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        '--data_root',
+        default=os.environ.get('RAVDESS_ROOT', 'RAVDESS'),
+        help='Directory containing ACTORxx folders',
+    )
+    return parser.parse_args()
+
+
+args = parse_args()
+root = os.path.abspath(os.path.expanduser(args.data_root))
 
 select_distributed = lambda m, n: [i*n//m + n//(2*m) for i in range(m)]
 n_processed = 0
