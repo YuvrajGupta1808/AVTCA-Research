@@ -7,7 +7,8 @@ def get_training_set(opt, spatial_transform=None, audio_transform=None):
         training_data = RAVDESS(
             opt.annotation_path,
             'training',
-            spatial_transform=spatial_transform, data_type='audiovisual', audio_transform=audio_transform)
+            spatial_transform=spatial_transform, data_type='audiovisual', audio_transform=audio_transform,
+            data_root=opt.data_root)
     return training_data
 
 
@@ -18,7 +19,8 @@ def get_validation_set(opt, spatial_transform=None, audio_transform=None):
         validation_data = RAVDESS(
             opt.annotation_path,
             'validation',
-            spatial_transform=spatial_transform, data_type = 'audiovisual', audio_transform=audio_transform)
+            spatial_transform=spatial_transform, data_type = 'audiovisual', audio_transform=audio_transform,
+            data_root=opt.data_root)
     return validation_data
 
 
@@ -34,5 +36,6 @@ def get_test_set(opt, spatial_transform=None, audio_transform=None):
         test_data = RAVDESS(
             opt.annotation_path,
             subset,
-            spatial_transform=spatial_transform, data_type='audiovisual',audio_transform=audio_transform)
+            spatial_transform=spatial_transform, data_type='audiovisual',audio_transform=audio_transform,
+            data_root=opt.data_root)
     return test_data

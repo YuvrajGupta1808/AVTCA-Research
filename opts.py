@@ -9,6 +9,7 @@ import argparse
 def parse_opts():
     parser = argparse.ArgumentParser()
     parser.add_argument('--annotation_path', default='ravdess_preprocessing/annotations.txt', type=str, help='Annotation file path')
+    parser.add_argument('--data_root', default='', type=str, help='Root directory containing the preprocessed RAVDESS ACTOR folders')
     parser.add_argument('--result_path', default='results', type=str, help='Result directory path')
     parser.add_argument('--store_name', default='model', type=str, help='Name to store checkpoints')
     parser.add_argument('--dataset', default='RAVDESS', type=str, help='Used dataset. Currently supporting Ravdess')
@@ -40,7 +41,7 @@ def parse_opts():
     parser.add_argument('--no_val', action='store_true', help='If true, validation is not performed.')
     parser.set_defaults(no_val=False)
     parser.add_argument('--test', action='store_true', help='If true, test is performed.')
-    parser.set_defaults(test=True)
+    parser.set_defaults(test=False)
     parser.add_argument('--test_subset', default='test', type=str, help='Used subset in test (val | test)')
     
     parser.add_argument('--n_threads', default=16, type=int, help='Number of threads for multi-thread loading')

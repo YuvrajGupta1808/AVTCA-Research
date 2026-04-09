@@ -1,6 +1,7 @@
 '''
 This code is based on https://github.com/okankop/Efficient-3DCNNs
 '''
+import os
 import torch
 from torch.autograd import Variable
 import time
@@ -120,9 +121,8 @@ def train_epoch(epoch, data_loader, model, criterion, optimizer, opt,
     
     if opt.model == 'multimodalcnn':
         train_epoch_multimodal(epoch,  data_loader, model, criterion, optimizer, opt, epoch_logger, batch_logger)
-        torch.save(
-                 obj=model.state_dict(),
-                 f=f"C:/Users/HP pav/Desktop/Capstone/Emotion-Recognition-using-Vision-Transformers/results/model.pth"
-         )
+        model_path = os.path.join(opt.result_path, 'model.pth')
+        torch.save(obj=model.state_dict(), f=model_path)
+        print('Saved model weights to {}'.format(model_path))
         return
     
