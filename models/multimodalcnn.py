@@ -63,6 +63,11 @@ class EfficientFaceTemporal(nn.Module):
     def forward_features(self, x):
         x = self.conv1(x)
         x = self.maxpool(x)
+        # [VERY SERIOUS #3] The diagram shows Channel Attention, Spatial Attention, and
+        # LocalFeatureExtractor as three parallel paths that combine *before* the Inverted
+        # Residual blocks. Here the Modulator (which contains both channel and spatial
+        # attention) is applied to the *output* of stage2 (which already contains the
+        # InvertedResidual blocks). The topology is inverted relative to the diagram.
         x = self.modulator(self.stage2(x)) + self.local(x)
         x = self.stage3(x)
         x = self.stage4(x)
@@ -116,6 +121,15 @@ def get_model(num_classes, task, seq_length):
     return model  
 
 
+# [MEDIUM #5] The diagram shows "3X3 CONV" for the audio branch, implying 2D convolution
+# over the frequency x time MFCC spectrogram. This uses nn.Conv1d instead, treating the
+# 10 MFCC coefficients as channels and convolving over time only. Inter-frequency
+# relationships are not captured.
+#
+# [MEDIUM #7] MaxPool1d(2, 1) has stride=1, so each pool reduces the temporal dimension
+# by only 1 frame. After 4 audio blocks a ~172-frame MFCC becomes ~168 frames. The video
+# branch produces 15 frames at the same cross-attention point — an ~11x length mismatch
+# that forces the attention to span a much longer audio sequence.
 def conv1d_block_audio(in_channels, out_channels, kernel_size=3, stride=1, padding='same'):
     return nn.Sequential(nn.Conv1d(in_channels, out_channels, kernel_size=kernel_size,stride=stride, padding='valid'),nn.BatchNorm1d(out_channels),
                                    nn.ReLU(inplace=True), nn.MaxPool1d(2,1))
@@ -171,6 +185,11 @@ class MultiModalCNN(nn.Module):
         init_feature_extractor(self.visual_model, pretr_ef)
                            
         e_dim = 128
+        # [VERY SERIOUS #2] This line unconditionally overwrites the num_heads parameter
+        # passed into __init__. The --num_heads CLI flag (described in opts.py as
+        # "number of heads, in the paper 1 or 4") is forwarded here but immediately
+        # discarded. Every run uses 8 heads regardless of user configuration, making
+        # the paper's ablation over head counts unreproducible.
         num_heads = 8
         input_dim_video = 128
         input_dim_audio = 128
@@ -192,6 +211,11 @@ class MultiModalCNN(nn.Module):
             self.va1 = Attention(in_dim_k=input_dim_audio, in_dim_q=input_dim_video, out_dim=input_dim_video, num_heads=num_heads)
 
             
+        # [VERY SERIOUS #4] The diagram shows two separate self-attention blocks — one for
+        # the audio branch and one for the video branch. A single MultiheadAttention
+        # instance is created here and applied to both branches in forward_feature_3.
+        # Shared weights mean audio and video compete to learn the same attention
+        # projection rather than developing branch-specific temporal attention.
         self.finalAttention = MultiheadAttention(e_dim, num_heads)
 
         self.classifier_1 = nn.Sequential(
@@ -249,6 +273,7 @@ class MultiModalCNN(nn.Module):
         x_audio = x_audio.permute(2, 0, 1)
         x_visual = x_visual.permute(2, 0, 1)
 
+        # [VERY SERIOUS #4] Same shared module used for both branches — see __init__ note.
         x_audio_attention, _ = self.finalAttention(x_audio, x_audio, x_audio)
         x_visual_attention, _ = self.finalAttention(x_visual, x_visual, x_visual)
 
@@ -258,6 +283,12 @@ class MultiModalCNN(nn.Module):
         # print(f"Shape of x_audio_attention after Attention: {x_audio_attention.shape}")
         # print(f"Shape of x_visual_attention after Attention: {x_visual_attention.shape}")
 
+        # [VERY SERIOUS #1] The diagram shows a CROSS ATTENTION step between the two
+        # branches here, after self-attention and before pooling. That cross-attention
+        # is not implemented. The branches are only merged by concatenation below.
+        #
+        # [MEDIUM #6] The diagram shows MAXPOOLING before softmax. Mean pooling is used
+        # here instead (.mean rather than .max across the temporal dimension).
         audio_pooled = x_audio_attention.mean([-1]) #mean accross temporal dimension
         video_pooled = x_visual_attention.mean([-1])
 
@@ -282,9 +313,15 @@ class MultiModalCNN(nn.Module):
         # print(f"proj_x_a shape: {proj_x_a.shape}")
         # print(f"proj_x_v shape: {proj_x_v.shape}")
 
+        # [MEDIUM #8] Attention.forward returns (attended_output, attention_matrix).
+        # The attended output (first value) is discarded here with _. The raw softmax
+        # attention weight matrix (second value) is kept and used as a multiplicative
+        # scaling mask on the original features below. This is an unconventional gating
+        # design — the variable names h_av/h_va suggest attended representations, but
+        # they are actually attention weight matrices.
         _, h_av = self.av1(proj_x_v, proj_x_a)
         _, h_va = self.va1(proj_x_a, proj_x_v)
-        
+
         if h_av.size(1) > 1: #if more than 1 head, take average
             h_av = torch.mean(h_av, axis=1).unsqueeze(1)
        
