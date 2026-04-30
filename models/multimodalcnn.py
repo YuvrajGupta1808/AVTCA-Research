@@ -63,11 +63,9 @@ class EfficientFaceTemporal(nn.Module):
     def forward_features(self, x):
         x = self.conv1(x)
         x = self.maxpool(x)
-        # [ISSUE #3] The diagram shows Channel Attention, Spatial Attention, and
-        # LocalFeatureExtractor as three parallel paths that combine *before* the Inverted
-        # Residual blocks. Here the Modulator (which contains both channel and spatial
-        # attention) is applied to the *output* of stage2 (which already contains the
-        # InvertedResidual blocks). The topology is inverted relative to the diagram.
+        # Modulator (channel + spatial attention) and LocalFeatureExtractor both run on
+        # the raw post-maxpool features. Their combined output feeds into the Inverted
+        # Residual blocks, matching the diagram order: attend first, then process deeply.
         x = self.stage2(self.modulator(x)) + self.local(x)
         x = self.stage3(x)
         x = self.stage4(x)
