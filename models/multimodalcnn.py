@@ -179,7 +179,7 @@ class AudioCNNPool(nn.Module):
 class MultiModalCNN(nn.Module):
     def __init__(self, num_classes=8, fusion='it', seq_length=15, pretr_ef='None', num_heads=1):
         super(MultiModalCNN, self).__init__()
-        assert fusion in ['ia', 'it', 'lt'], print('Unsupported fusion method: {}'.format(fusion))
+        assert fusion in ['ia', 'it', 'lt'], f'Unsupported fusion method: {fusion}'
 
         self.audio_model = AudioCNNPool(num_classes=num_classes)
         self.visual_model = EfficientFaceTemporal([4, 8, 4], [29, 116, 232, 464, 1024], num_classes, seq_length)
@@ -308,10 +308,6 @@ class MultiModalCNN(nn.Module):
         x_visual = self.visual_model.forward_stage1(x_visual)
         proj_x_v = self.visual_model.forward_stage2(x_visual)
 
-        # print("Forward Transformer")
-        # print(f"proj_x_a shape: {proj_x_a.shape}")
-        # print(f"proj_x_v shape: {proj_x_v.shape}")
-           
         proj_x_a = proj_x_a.permute(0, 2, 1)
         proj_x_v = proj_x_v.permute(0, 2, 1)
         h_av = self.av(proj_x_v, proj_x_a)
