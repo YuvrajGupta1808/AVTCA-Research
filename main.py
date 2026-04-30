@@ -27,7 +27,12 @@ if __name__ == '__main__':
     test_accuracies = []
     
     if opt.device != 'cpu':
-        opt.device = 'cuda' if torch.cuda.is_available() else 'cpu'  
+        if torch.cuda.is_available():
+            opt.device = 'cuda'
+        elif hasattr(torch.backends, 'mps') and torch.backends.mps.is_available():
+            opt.device = 'mps'
+        else:
+            opt.device = 'cpu'
 
     pretrained = opt.pretrain_path != 'None'    
     
@@ -48,6 +53,21 @@ if __name__ == '__main__':
             
         torch.manual_seed(opt.manual_seed)
         model, parameters = generate_model(opt)
+
+        total_params     = sum(p.numel() for p in model.parameters())
+        trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
+        print(f'Model: {opt.model}  fusion={opt.fusion}  num_heads={opt.num_heads}  '
+              f'seq_len={opt.sample_duration}')
+        print(f'Params: total={total_params:,}  trainable={trainable_params:,}')
+        print(f'Device: {opt.device}')
+        if opt.device == 'cuda':
+            print(f'  GPU: {torch.cuda.get_device_name(0)}  '
+                  f'memory={torch.cuda.get_device_properties(0).total_memory/1e9:.1f} GB  '
+                  f'count={torch.cuda.device_count()}')
+        elif opt.device == 'mps':
+            print('  GPU: Apple MPS')
+        else:
+            print('  Running on CPU — training will be slow')
 
         if not opt.resume_path:
             checkpoint_path = os.path.join(opt.result_path, 'model.pth')

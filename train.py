@@ -7,6 +7,14 @@ from torch.autograd import Variable
 import time
 from utils import AverageMeter, calculate_accuracy,calculate_accuracy1
 
+def _grad_norm(model):
+    total = 0.0
+    for p in model.parameters():
+        if p.grad is not None:
+            total += p.grad.data.norm(2).item() ** 2
+    return total ** 0.5
+
+
 def train_epoch_multimodal(epoch, data_loader, model, criterion, optimizer, opt,
                 epoch_logger, batch_logger):
     print('train at epoch {}'.format(epoch))
@@ -61,6 +69,10 @@ def train_epoch_multimodal(epoch, data_loader, model, criterion, optimizer, opt,
         audio_inputs = Variable(audio_inputs)
         visual_inputs = Variable(visual_inputs)
 
+        if i == 0 and epoch == 1:
+            print(f'  [shape] audio={tuple(audio_inputs.shape)}  '
+                  f'visual={tuple(visual_inputs.shape)}  targets={tuple(targets.shape)}')
+
         targets = Variable(targets)
         outputs = model(audio_inputs, visual_inputs)
         loss = criterion(outputs, targets)
@@ -72,6 +84,7 @@ def train_epoch_multimodal(epoch, data_loader, model, criterion, optimizer, opt,
         acc=calculate_accuracy1(outputs.data, targets.data, binary=False)
         optimizer.zero_grad()
         loss.backward()
+        gnorm = _grad_norm(model)
         optimizer.step()
 
         batch_time.update(time.time() - end_time)
@@ -87,13 +100,19 @@ def train_epoch_multimodal(epoch, data_loader, model, criterion, optimizer, opt,
             'lr': optimizer.param_groups[0]['lr'],
             'accuracy': acc
         })
-        if i % 10 ==0:
+        if i % 10 == 0:
+            mem_str = ''
+            if opt.device == 'cuda':
+                alloc = torch.cuda.memory_allocated() / 1e9
+                resv  = torch.cuda.memory_reserved()  / 1e9
+                mem_str = f'  GPU {alloc:.2f}/{resv:.2f} GB'
             print('Epoch: [{0}][{1}/{2}]\t lr: {lr:.5f}\t'
                   'Time {batch_time.val:.3f} ({batch_time.avg:.3f})\t'
                   'Data {data_time.val:.3f} ({data_time.avg:.3f})\t'
                   'Loss {loss.val:.4f} ({loss.avg:.4f})\t'
                   'Prec@1 {top1.val:.5f} ({top1.avg:.5f})\t'
-                  'Prec@5 {top5.val:.5f} ({top5.avg:.5f})'.format(
+                  'Prec@5 {top5.val:.5f} ({top5.avg:.5f})\t'
+                  'GradNorm {gnorm:.4f}{mem}'.format(
                       epoch,
                       i,
                       len(data_loader),
@@ -102,8 +121,11 @@ def train_epoch_multimodal(epoch, data_loader, model, criterion, optimizer, opt,
                       loss=losses,
                       top1=top1,
                       top5=top5,
-                      lr=optimizer.param_groups[0]['lr']))
-    print('Final Accuracy1:', acc)
+                      lr=optimizer.param_groups[0]['lr'],
+                      gnorm=gnorm,
+                      mem=mem_str))
+    print(f'Epoch {epoch} summary — loss: {losses.avg:.4f}  prec@1: {top1.avg:.4f}  '
+          f'prec@5: {top5.avg:.4f}  acc: {acc:.4f}  lr: {optimizer.param_groups[0]["lr"]:.6f}')
 
     epoch_logger.log({
         'epoch': epoch,
