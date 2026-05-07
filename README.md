@@ -74,3 +74,53 @@ python main.py --dataset CMU_MOSEI --batch_size 8 --n_epochs 128 --learning_rate
 ```bash
 python main.py --dataset CREMA_D --batch_size 8 --n_epochs 128 --learning_rate 0.01 --optimizer adam --transformer_heads 4 --cross_attention_heads 1
 ```
+
+## Token-Level Fusion Model
+
+The repository also includes `TokenFusionAVTCA`, a shared-transformer model that converts audio and video into token groups, prepends a `[CLS]` token and learned fusion bottleneck tokens, and performs multimodal reasoning in one transformer encoder sequence. This keeps the original `multimodalcnn` available for ablation while adding an architecture aimed at earlier audio-video interaction and macro-F1-oriented evaluation.
+
+Recommended training command:
+```bash
+python main.py \
+  --model token_fusion_avtca \
+  --num_heads 4 \
+  --embed_dim 256 \
+  --transformer_depth 4 \
+  --fusion_tokens 4 \
+  --token_grid 4 \
+  --dropout 0.2 \
+  --attention_dropout 0.1 \
+  --optimizer adamw \
+  --learning_rate 1e-4 \
+  --weight_decay 1e-2 \
+  --use_class_weights true \
+  --label_smoothing 0.05 \
+  --batch_size 8 \
+  --n_epochs 80 \
+  --seed 42
+```
+
+Quick smoke test command:
+```bash
+python main.py \
+  --model token_fusion_avtca \
+  --embed_dim 64 \
+  --transformer_depth 1 \
+  --num_heads 4 \
+  --fusion_tokens 2 \
+  --token_grid 2 \
+  --batch_size 2 \
+  --n_epochs 1 \
+  --debug true
+```
+
+Evaluate a saved checkpoint:
+```bash
+python main.py \
+  --model token_fusion_avtca \
+  --no_train \
+  --no_val \
+  --test \
+  --resume_path results/RAVDESS_token_fusion_avtca_15_best0.pth \
+  --unsafe_resume
+```
