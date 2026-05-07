@@ -161,7 +161,7 @@ class AudioCNNPool(nn.Module):
 
 
 class MultiModalCNN(nn.Module):
-    def __init__(self, num_classes=8, fusion='it', seq_length=15, pretr_ef='None', num_heads=1):
+    def __init__(self, num_classes=8, fusion='it', seq_length=15, pretr_ef='None', transformer_heads=1, cross_attention_heads=1):
         super(MultiModalCNN, self).__init__()
         assert fusion in ['ia', 'it', 'lt'], print('Unsupported fusion method: {}'.format(fusion))
 
@@ -171,28 +171,27 @@ class MultiModalCNN(nn.Module):
         init_feature_extractor(self.visual_model, pretr_ef)
                            
         e_dim = 128
-        num_heads = 8
         input_dim_video = 128
         input_dim_audio = 128
         self.fusion=fusion
 
         if fusion in ['lt', 'it']:
             if fusion  == 'lt':
-                self.av = AttentionBlock(in_dim_k=input_dim_video, in_dim_q=input_dim_audio, out_dim=e_dim, num_heads=num_heads)
-                self.va = AttentionBlock(in_dim_k=input_dim_audio, in_dim_q=input_dim_video, out_dim=e_dim, num_heads=num_heads)
+                self.av = AttentionBlock(in_dim_k=input_dim_video, in_dim_q=input_dim_audio, out_dim=e_dim, num_heads=cross_attention_heads)
+                self.va = AttentionBlock(in_dim_k=input_dim_audio, in_dim_q=input_dim_video, out_dim=e_dim, num_heads=cross_attention_heads)
             elif fusion == 'it':
                 input_dim_video = input_dim_video // 2
-                self.av1 = AttentionBlock(in_dim_k=input_dim_video, in_dim_q=input_dim_audio, out_dim=input_dim_audio, num_heads=num_heads)
-                self.va1 = AttentionBlock(in_dim_k=input_dim_audio, in_dim_q=input_dim_video, out_dim=input_dim_video, num_heads=num_heads)   
+                self.av1 = AttentionBlock(in_dim_k=input_dim_video, in_dim_q=input_dim_audio, out_dim=input_dim_audio, num_heads=cross_attention_heads)
+                self.va1 = AttentionBlock(in_dim_k=input_dim_audio, in_dim_q=input_dim_video, out_dim=input_dim_video, num_heads=cross_attention_heads)   
         
         elif fusion in ['ia']:
             input_dim_video = input_dim_video // 2
             
-            self.av1 = Attention(in_dim_k=input_dim_video, in_dim_q=input_dim_audio, out_dim=input_dim_audio, num_heads=num_heads)
-            self.va1 = Attention(in_dim_k=input_dim_audio, in_dim_q=input_dim_video, out_dim=input_dim_video, num_heads=num_heads)
+            self.av1 = Attention(in_dim_k=input_dim_video, in_dim_q=input_dim_audio, out_dim=input_dim_audio, num_heads=cross_attention_heads)
+            self.va1 = Attention(in_dim_k=input_dim_audio, in_dim_q=input_dim_video, out_dim=input_dim_video, num_heads=cross_attention_heads)
 
             
-        self.finalAttention = MultiheadAttention(e_dim, num_heads)
+        self.finalAttention = MultiheadAttention(e_dim, transformer_heads)
 
         self.classifier_1 = nn.Sequential(
             nn.Linear(e_dim*2, num_classes),

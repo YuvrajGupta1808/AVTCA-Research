@@ -39,8 +39,14 @@ if __name__ == '__main__':
     opt.store_name = '_'.join([opt.dataset, opt.model, str(opt.sample_duration)])
             
     for fold in range(n_folds):
-        #if opt.dataset == 'RAVDESS':
-        #    opt.annotation_path = '/lustre/scratch/chumache/ravdess-develop/annotations_croppad_fold'+str(fold+1)+'.txt'
+        
+        if opt.n_classes is None:
+            if opt.dataset == 'RAVDESS':
+                opt.n_classes = 8
+            elif opt.dataset in ['CMU_MOSEI', 'CREMA_D']:
+                opt.n_classes = 6
+            else:
+                opt.n_classes = 8
 
         print(opt)
         with open(os.path.join(opt.result_path, 'opts'+str(time.time())+str(fold)+'.json'), 'w') as opt_file:
@@ -48,15 +54,6 @@ if __name__ == '__main__':
             
         torch.manual_seed(opt.manual_seed)
         model, parameters = generate_model(opt)
-
-        if not opt.resume_path:
-            checkpoint_path = os.path.join(opt.result_path, 'model.pth')
-            if os.path.isfile(checkpoint_path):
-                checkpoint = torch.load(checkpoint_path, map_location=torch.device(opt.device))
-                model.load_state_dict(checkpoint)
-                print('Loaded model weights from {}'.format(checkpoint_path))
-            else:
-                print('No existing model weights found at {}. Starting from initialized weights.'.format(checkpoint_path))
 
         criterion = nn.CrossEntropyLoss()
         criterion = criterion.to(opt.device)
@@ -85,14 +82,20 @@ if __name__ == '__main__':
                 os.path.join(opt.result_path, 'train_batch'+str(fold)+'.log'),
                 ['epoch', 'batch', 'iter', 'loss', 'prec1', 'prec5', 'lr'])
             
+            if opt.optimizer == 'sgd':
+                optimizer = optim.SGD(
+                    parameters,
+                    lr=opt.learning_rate,
+                    momentum=opt.momentum,
+                    dampening=opt.dampening,
+                    weight_decay=opt.weight_decay,
+                    nesterov=False)
+            else:
+                optimizer = optim.Adam(
+                    parameters,
+                    lr=opt.learning_rate,
+                    weight_decay=opt.weight_decay)
 
-            optimizer = optim.SGD(
-                parameters,
-                lr=opt.learning_rate,
-                momentum=opt.momentum,
-                dampening=opt.dampening,
-                weight_decay=opt.weight_decay,
-                nesterov=False)
             scheduler = lr_scheduler.ReduceLROnPlateau(
                 optimizer, 'min', patience=opt.lr_patience)
             
@@ -119,11 +122,25 @@ if __name__ == '__main__':
         best_loss = 1e10
         if opt.resume_path:
             print('loading checkpoint {}'.format(opt.resume_path))
-            checkpoint = torch.load(opt.resume_path)
-            assert opt.arch == checkpoint['arch']
-            best_prec1 = checkpoint['best_prec1']
-            opt.begin_epoch = checkpoint['epoch']
-            model.load_state_dict(checkpoint['state_dict'])
+            # Safe checkpoint loading logic
+            try:
+                if opt.unsafe_resume:
+                    import warnings
+                    warnings.warn("Using unsafe pickle loading for checkpoint.")
+                    checkpoint = torch.load(opt.resume_path, map_location=torch.device(opt.device))
+                else:
+                    checkpoint = torch.load(opt.resume_path, map_location=torch.device(opt.device), weights_only=True)
+            except TypeError:
+                # Fallback for older PyTorch versions
+                checkpoint = torch.load(opt.resume_path, map_location=torch.device(opt.device))
+
+            if 'state_dict' in checkpoint:
+                assert opt.arch == checkpoint['arch']
+                best_prec1 = checkpoint['best_prec1']
+                opt.begin_epoch = checkpoint['epoch']
+                model.load_state_dict(checkpoint['state_dict'])
+            else:
+                model.load_state_dict(checkpoint)
 
         for i in range(opt.begin_epoch, opt.n_epochs + 1):
 
@@ -156,6 +173,8 @@ if __name__ == '__main__':
                
                 save_checkpoint(state, is_best, opt, fold)
 
+            if not opt.no_train and not opt.no_val:
+                scheduler.step(validation_loss)
                
         if opt.test:
 
@@ -186,5 +205,6 @@ if __name__ == '__main__':
             test_accuracies.append(test_prec1) 
                 
             
-    with open(os.path.join(opt.result_path, 'test_set_bestval.txt'), 'a') as f:
-        f.write('Prec1: ' + str(np.mean(np.array(test_accuracies))) +'+'+str(np.std(np.array(test_accuracies))) + '\n')
+    if len(test_accuracies) > 0:
+        with open(os.path.join(opt.result_path, 'test_set_bestval.txt'), 'a') as f:
+            f.write('Prec1: ' + str(np.mean(np.array(test_accuracies))) +'+'+str(np.std(np.array(test_accuracies))) + '\n')

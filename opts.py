@@ -12,11 +12,12 @@ def parse_opts():
     parser.add_argument('--data_root', default='', type=str, help='Root directory containing the preprocessed RAVDESS ACTOR folders')
     parser.add_argument('--result_path', default='results', type=str, help='Result directory path')
     parser.add_argument('--store_name', default='model', type=str, help='Name to store checkpoints')
-    parser.add_argument('--dataset', default='RAVDESS', type=str, help='Used dataset. Currently supporting Ravdess')
-    parser.add_argument('--n_classes', default=8, type=int, help='Number of classes')
+    parser.add_argument('--dataset', default='RAVDESS', type=str, choices=['RAVDESS', 'CMU_MOSEI', 'CREMA_D'], help='Used dataset')
+    parser.add_argument('--n_classes', default=None, type=int, help='Number of classes. Inferred if not set.')
     
     parser.add_argument('--model', default='multimodalcnn', type=str, help='')
-    parser.add_argument('--num_heads', default=1, type=int, help='number of heads, in the paper 1 or 4')
+    parser.add_argument('--transformer_heads', default=1, type=int, help='number of transformer heads')
+    parser.add_argument('--cross_attention_heads', default=1, type=int, help='number of cross-attention heads, in the paper 1 or 4')
     
     parser.add_argument('--device', default='cuda', type=str, help='Specify the device to run. Defaults to cuda, fallsback to cpu')
     
@@ -24,17 +25,19 @@ def parse_opts():
     parser.add_argument('--sample_size', default=224, type=int, help='Video dimensions: ravdess = 224 ')
     parser.add_argument('--sample_duration', default=15, type=int, help='Temporal duration of inputs, ravdess = 15')
     
-    parser.add_argument('--learning_rate', default=0.06, type=float, help='Initial learning rate (divided by 10 while training by lr scheduler)')
+    parser.add_argument('--learning_rate', default=0.01, type=float, help='Initial learning rate')
+    parser.add_argument('--optimizer', default='adam', type=str, choices=['adam', 'sgd'], help='Optimizer (adam or sgd)')
     parser.add_argument('--momentum', default=0.9, type=float, help='Momentum')
     parser.add_argument('--lr_steps', default=[40, 55, 65, 70, 200, 250], type=float, nargs="+", metavar='LRSteps', help='epochs to decay learning rate by 10')
     parser.add_argument('--dampening', default=0.9, type=float, help='dampening of SGD')
-    parser.add_argument('--weight_decay', default=1e-3, type=float, help='Weight Decay')
+    parser.add_argument('--weight_decay', default=0.001, type=float, help='Weight Decay')
     parser.add_argument('--lr_patience', default=10, type=int, help='Patience of LR scheduler. See documentation of ReduceLROnPlateau.')
     parser.add_argument('--batch_size', default=8, type=int, help='Batch Size')
-    parser.add_argument('--n_epochs', default=10, type=int, help='Number of total epochs to run')
+    parser.add_argument('--n_epochs', default=128, type=int, help='Number of total epochs to run')
     
     parser.add_argument('--begin_epoch', default=1, type=int, help='Training begins at this epoch. Previous trained model indicated by resume_path is loaded.')
     parser.add_argument('--resume_path', default='', type=str, help='Save data (.pth) of previous training')
+    parser.add_argument('--unsafe_resume', action='store_true', help='Opt-in to use unsafe pickle-based loading for trusted resume checkpoints')
     parser.add_argument('--pretrain_path', default="EfficientFace_Trained_on_AffectNet7.pth", type=str, help='Pretrained model (.pth), efficientface')
     parser.add_argument('--no_train', action='store_true', help='If true, training is not performed.')
     parser.set_defaults(no_train=False)

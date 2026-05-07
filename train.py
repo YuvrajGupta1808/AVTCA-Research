@@ -24,8 +24,6 @@ def train_epoch_multimodal(epoch, data_loader, model, criterion, optimizer, opt,
         data_time.update(time.time() - end_time)
 
    
-        targets = targets.to(opt.device)
-            
         if opt.mask is not None:
             with torch.no_grad():
                 
@@ -57,6 +55,10 @@ def train_epoch_multimodal(epoch, data_loader, model, criterion, optimizer, opt,
 
         visual_inputs = visual_inputs.permute(0,2,1,3,4)
         visual_inputs = visual_inputs.reshape(visual_inputs.shape[0]*visual_inputs.shape[1], visual_inputs.shape[2], visual_inputs.shape[3], visual_inputs.shape[4])
+
+        audio_inputs = audio_inputs.to(opt.device, non_blocking=True)
+        visual_inputs = visual_inputs.to(opt.device, non_blocking=True)
+        targets = targets.to(opt.device, non_blocking=True)
         
         audio_inputs = Variable(audio_inputs)
         visual_inputs = Variable(visual_inputs)
