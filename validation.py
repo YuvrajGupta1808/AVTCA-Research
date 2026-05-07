@@ -52,7 +52,9 @@ def val_epoch_multimodal(epoch, data_loader, model, criterion, opt, logger,modal
 
 
         
-        targets = targets.to(opt.device)
+        inputs_audio = inputs_audio.to(opt.device, non_blocking=True)
+        inputs_visual = inputs_visual.to(opt.device, non_blocking=True)
+        targets = targets.to(opt.device, non_blocking=True)
         with torch.no_grad():
             inputs_visual = Variable(inputs_visual)
             inputs_audio = Variable(inputs_audio)

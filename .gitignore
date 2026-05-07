@@ -4,3 +4,8 @@ datasets/__pycache__/
 models/__pycache__/
 results/
 *.pyc
+.conda-env/
+.pytest_cache/
+tests/__pycache__/
+results-run-*/
+processed.txt

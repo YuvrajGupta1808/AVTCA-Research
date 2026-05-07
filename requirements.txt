@@ -1,5 +1,14 @@
-torch==1.9.0
-torchvision==0.10.0
-librosa==0.8.1
+torch>=1.13.0
+torchvision>=0.14.0
+torchaudio>=0.13.0
+librosa>=0.10.0
 opencv-python
 tqdm
+facenet-pytorch
+timm
+numpy
+Pillow
+scipy
+soundfile
+scikit-learn
+pytest
