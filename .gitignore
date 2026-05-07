@@ -9,3 +9,4 @@ results/
 tests/__pycache__/
 results-run-*/
 processed.txt
+result_CodeFix.tex
