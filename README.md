@@ -11,6 +11,15 @@ AVT-CA Model Diagram
 
 Feel free to play around with the code, and let us know if you have any questions or face any issues!
 
+## Repository Structure
+
+- Core training code: `main.py`, `train.py`, `validation.py`, `model.py`, `opts.py`, `dataset.py`
+- `pretrained/`: pretrained base weights (EfficientFace initialization checkpoint)
+- `helpers/`: helper scripts (for example metric computation and dataset unzip utility)
+- `docs/`: project notes and technical writeups (`CLAUDE.md`, `DETAILS.md`, `ISSUE.md`, `GLOSSARY.md`)
+- `results/spec_01_baseline/`: baseline run artifacts (checkpoints, logs, metrics)
+- `results/spec_02_retrain_h4_e70/`: retrain (`num_heads=4`) run artifacts
+
 ## Citation
 
 If you use our work, please cite as:

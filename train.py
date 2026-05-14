@@ -2,68 +2,23 @@
 This code is based on https://github.com/okankop/Efficient-3DCNNs
 '''
 import os
-import time
-
 import torch
+from torch.autograd import Variable
+import time
+from utils import AverageMeter, calculate_accuracy,calculate_accuracy1
 
-from utils import AverageMeter, calculate_accuracy, classification_metrics_from_lists
-
-
-def _apply_modality_mask(audio_inputs, visual_inputs, targets, opt):
-    if opt.mask is None or opt.mask == 'nodropout':
-        return audio_inputs, visual_inputs, targets
-
-    with torch.no_grad():
-        if opt.mask == 'noise':
-            audio_inputs = torch.cat((audio_inputs, torch.randn(audio_inputs.size()), audio_inputs), dim=0)
-            visual_inputs = torch.cat((visual_inputs, visual_inputs, torch.randn(visual_inputs.size())), dim=0)
-            targets = torch.cat((targets, targets, targets), dim=0)
-        elif opt.mask == 'softhard':
-            coefficients = torch.randint(low=0, high=100, size=(audio_inputs.size(0), 1, 1)) / 100
-            vision_coefficients = 1 - coefficients
-            coefficients = coefficients.repeat(1, audio_inputs.size(1), audio_inputs.size(2))
-            vision_coefficients = vision_coefficients.unsqueeze(-1).unsqueeze(-1).repeat(
-                1,
-                visual_inputs.size(1),
-                visual_inputs.size(2),
-                visual_inputs.size(3),
-                visual_inputs.size(4),
-            )
-            audio_inputs = torch.cat(
-                (audio_inputs, audio_inputs * coefficients, torch.zeros(audio_inputs.size()), audio_inputs),
-                dim=0,
-            )
-            visual_inputs = torch.cat(
-                (visual_inputs, visual_inputs * vision_coefficients, visual_inputs, torch.zeros(visual_inputs.size())),
-                dim=0,
-            )
-            targets = torch.cat((targets, targets, targets, targets), dim=0)
-        else:
-            return audio_inputs, visual_inputs, targets
-
-        shuffle = torch.randperm(audio_inputs.size(0))
-        return audio_inputs[shuffle], visual_inputs[shuffle], targets[shuffle]
-
-
-def _prepare_batch(audio_inputs, visual_inputs, targets, opt):
-    if opt.model == 'multimodalcnn':
-        visual_inputs = visual_inputs.permute(0, 2, 1, 3, 4)
-        visual_inputs = visual_inputs.reshape(
-            visual_inputs.shape[0] * visual_inputs.shape[1],
-            visual_inputs.shape[2],
-            visual_inputs.shape[3],
-            visual_inputs.shape[4],
-        )
-
-    audio_inputs = audio_inputs.float().to(opt.device, non_blocking=True)
-    visual_inputs = visual_inputs.float().to(opt.device, non_blocking=True)
-    targets = targets.long().to(opt.device, non_blocking=True)
-    return audio_inputs, visual_inputs, targets
+def _grad_norm(model):
+    total = 0.0
+    for p in model.parameters():
+        if p.grad is not None:
+            total += p.grad.data.norm(2).item() ** 2
+    return total ** 0.5
 
 
 def train_epoch_multimodal(epoch, data_loader, model, criterion, optimizer, opt,
-                           epoch_logger, batch_logger, scheduler=None, scaler=None):
+                epoch_logger, batch_logger):
     print('train at epoch {}'.format(epoch))
+    
     model.train()
 
     batch_time = AverageMeter()
@@ -71,54 +26,70 @@ def train_epoch_multimodal(epoch, data_loader, model, criterion, optimizer, opt,
     losses = AverageMeter()
     top1 = AverageMeter()
     top5 = AverageMeter()
-    all_targets = []
-    all_predictions = []
-
-    amp_enabled = bool(getattr(opt, 'use_amp', False) and opt.device.startswith('cuda'))
+        
     end_time = time.time()
     for i, (audio_inputs, visual_inputs, targets) in enumerate(data_loader):
         data_time.update(time.time() - end_time)
-        audio_inputs, visual_inputs, targets = _apply_modality_mask(audio_inputs, visual_inputs, targets, opt)
-        audio_inputs, visual_inputs, targets = _prepare_batch(audio_inputs, visual_inputs, targets, opt)
 
-        optimizer.zero_grad(set_to_none=True)
-        if hasattr(torch, 'amp'):
-            autocast_context = torch.amp.autocast(device_type='cuda', enabled=amp_enabled)
-        else:
-            autocast_context = torch.cuda.amp.autocast(enabled=amp_enabled)
+   
+        targets = targets.to(opt.device)
+            
+        if opt.mask is not None:
+            with torch.no_grad():
+                
+                if opt.mask == 'noise':
+                    audio_inputs = torch.cat((audio_inputs, torch.randn(audio_inputs.size()), audio_inputs), dim=0)                   
+                    visual_inputs = torch.cat((visual_inputs, visual_inputs, torch.randn(visual_inputs.size())), dim=0) 
+                    targets = torch.cat((targets, targets, targets), dim=0)                    
+                    shuffle = torch.randperm(audio_inputs.size()[0])
+                    audio_inputs = audio_inputs[shuffle]
+                    visual_inputs = visual_inputs[shuffle]
+                    targets = targets[shuffle]
+                    
+                elif opt.mask == 'softhard':
+                    coefficients = torch.randint(low=0, high=100,size=(audio_inputs.size(0),1,1))/100
+                    vision_coefficients = 1 - coefficients
+                    coefficients = coefficients.repeat(1,audio_inputs.size(1),audio_inputs.size(2))
+                    vision_coefficients = vision_coefficients.unsqueeze(-1).unsqueeze(-1).repeat(1,visual_inputs.size(1), visual_inputs.size(2), visual_inputs.size(3), visual_inputs.size(4))
 
-        with autocast_context:
-            outputs = model(audio_inputs, visual_inputs)
-            loss = criterion(outputs, targets)
+                    audio_inputs = torch.cat((audio_inputs, audio_inputs*coefficients, torch.zeros(audio_inputs.size()), audio_inputs), dim=0) 
+                    visual_inputs = torch.cat((visual_inputs, visual_inputs*vision_coefficients, visual_inputs, torch.zeros(visual_inputs.size())), dim=0)   
+                    
+                    targets = torch.cat((targets, targets, targets, targets), dim=0)
+                    shuffle = torch.randperm(audio_inputs.size()[0])
+                    audio_inputs = audio_inputs[shuffle]
+                    visual_inputs = visual_inputs[shuffle]
+                    targets = targets[shuffle]
+   
+  
 
-        if scaler is not None and amp_enabled:
-            scaler.scale(loss).backward()
-            if opt.grad_clip and opt.grad_clip > 0:
-                scaler.unscale_(optimizer)
-                torch.nn.utils.clip_grad_norm_(model.parameters(), opt.grad_clip)
-            scaler.step(optimizer)
-            scaler.update()
-        else:
-            loss.backward()
-            if opt.grad_clip and opt.grad_clip > 0:
-                torch.nn.utils.clip_grad_norm_(model.parameters(), opt.grad_clip)
-            optimizer.step()
+        visual_inputs = visual_inputs.permute(0,2,1,3,4)
+        visual_inputs = visual_inputs.reshape(visual_inputs.shape[0]*visual_inputs.shape[1], visual_inputs.shape[2], visual_inputs.shape[3], visual_inputs.shape[4])
+        
+        audio_inputs = Variable(audio_inputs)
+        visual_inputs = Variable(visual_inputs)
 
-        if scheduler is not None:
-            scheduler.step()
+        if i == 0 and epoch == 1:
+            print(f'  [shape] audio={tuple(audio_inputs.shape)}  '
+                  f'visual={tuple(visual_inputs.shape)}  targets={tuple(targets.shape)}')
 
-        prec1, prec5 = calculate_accuracy(outputs.detach(), targets.detach(), topk=(1, 5))
-        losses.update(loss.detach(), audio_inputs.size(0))
+        targets = Variable(targets)
+        outputs = model(audio_inputs, visual_inputs)
+        loss = criterion(outputs, targets)
+
+        losses.update(loss.data, audio_inputs.size(0))
+        prec1, prec5 = calculate_accuracy(outputs.data, targets.data, topk=(1,5))
         top1.update(prec1, audio_inputs.size(0))
         top5.update(prec5, audio_inputs.size(0))
-        predictions = outputs.detach().argmax(dim=1)
-        all_predictions.extend(predictions.cpu().tolist())
-        all_targets.extend(targets.detach().cpu().tolist())
+        acc=calculate_accuracy1(outputs.data, targets.data, binary=False)
+        optimizer.zero_grad()
+        loss.backward()
+        gnorm = _grad_norm(model)
+        optimizer.step()
 
         batch_time.update(time.time() - end_time)
         end_time = time.time()
 
-        batch_metrics = classification_metrics_from_lists(all_targets, all_predictions, opt.n_classes)
         batch_logger.log({
             'epoch': epoch,
             'batch': i + 1,
@@ -126,17 +97,22 @@ def train_epoch_multimodal(epoch, data_loader, model, criterion, optimizer, opt,
             'loss': losses.val.item(),
             'prec1': top1.val.item(),
             'prec5': top5.val.item(),
-            'macro_f1': batch_metrics['macro_f1'],
-            'weighted_f1': batch_metrics['weighted_f1'],
             'lr': optimizer.param_groups[0]['lr'],
+            'accuracy': acc
         })
         if i % 10 == 0:
-            print('Epoch: [{0}][{1}/{2}]\t lr: {lr:.6f}\t'
+            mem_str = ''
+            if opt.device == 'cuda':
+                alloc = torch.cuda.memory_allocated() / 1e9
+                resv  = torch.cuda.memory_reserved()  / 1e9
+                mem_str = f'  GPU {alloc:.2f}/{resv:.2f} GB'
+            print('Epoch: [{0}][{1}/{2}]\t lr: {lr:.5f}\t'
                   'Time {batch_time.val:.3f} ({batch_time.avg:.3f})\t'
                   'Data {data_time.val:.3f} ({data_time.avg:.3f})\t'
                   'Loss {loss.val:.4f} ({loss.avg:.4f})\t'
                   'Prec@1 {top1.val:.5f} ({top1.avg:.5f})\t'
-                  'Prec@5 {top5.val:.5f} ({top5.avg:.5f})'.format(
+                  'Prec@5 {top5.val:.5f} ({top5.avg:.5f})\t'
+                  'GradNorm {gnorm:.4f}{mem}'.format(
                       epoch,
                       i,
                       len(data_loader),
@@ -145,41 +121,30 @@ def train_epoch_multimodal(epoch, data_loader, model, criterion, optimizer, opt,
                       loss=losses,
                       top1=top1,
                       top5=top5,
-                      lr=optimizer.param_groups[0]['lr']))
+                      lr=optimizer.param_groups[0]['lr'],
+                      gnorm=gnorm,
+                      mem=mem_str))
+    print(f'Epoch {epoch} summary — loss: {losses.avg:.4f}  prec@1: {top1.avg:.4f}  '
+          f'prec@5: {top5.avg:.4f}  acc: {acc:.4f}  lr: {optimizer.param_groups[0]["lr"]:.6f}')
 
-    epoch_metrics = classification_metrics_from_lists(all_targets, all_predictions, opt.n_classes)
-    print('Train macro F1: {:.4f}; weighted F1: {:.4f}'.format(
-        epoch_metrics['macro_f1'],
-        epoch_metrics['weighted_f1'],
-    ))
     epoch_logger.log({
         'epoch': epoch,
         'loss': losses.avg.item(),
         'prec1': top1.avg.item(),
         'prec5': top5.avg.item(),
-        'macro_f1': epoch_metrics['macro_f1'],
-        'weighted_f1': epoch_metrics['weighted_f1'],
         'lr': optimizer.param_groups[0]['lr'],
+        'accuracy': acc
     })
-    return losses.avg.item(), top1.avg.item(), epoch_metrics['macro_f1']
 
-
+ 
 def train_epoch(epoch, data_loader, model, criterion, optimizer, opt,
-                epoch_logger, batch_logger, scheduler=None, scaler=None):
-    result = train_epoch_multimodal(
-        epoch,
-        data_loader,
-        model,
-        criterion,
-        optimizer,
-        opt,
-        epoch_logger,
-        batch_logger,
-        scheduler=scheduler,
-        scaler=scaler,
-    )
+                epoch_logger, batch_logger):
+    print('train at epoch {}'.format(epoch))
+    
     if opt.model == 'multimodalcnn':
+        train_epoch_multimodal(epoch,  data_loader, model, criterion, optimizer, opt, epoch_logger, batch_logger)
         model_path = os.path.join(opt.result_path, 'model.pth')
         torch.save(obj=model.state_dict(), f=model_path)
         print('Saved model weights to {}'.format(model_path))
-    return result
+        return
+    
