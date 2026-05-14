@@ -6,7 +6,7 @@ import torch
 import shutil
 import numpy as np
 import sklearn
-from sklearn.metrics import accuracy_score
+from sklearn.metrics import accuracy_score, f1_score, recall_score
 
 
 
@@ -100,6 +100,35 @@ def calculate_accuracy1(output, target, binary=False):
         f1 = accuracy_score(target_np, pred_labels, average='binary')
         return accuracy, f1
     return accuracy
+
+
+def compute_epoch_metrics(all_preds, all_targets, class_names=None):
+    """
+    Full emotion-recognition metric suite for one epoch.
+    all_preds / all_targets: 1-D tensors or numpy arrays of integer class indices.
+    Returns a dict with scalar metrics and a per-class breakdown string.
+    """
+    preds   = all_preds.numpy()   if hasattr(all_preds,   'numpy') else np.array(all_preds)
+    targets = all_targets.numpy() if hasattr(all_targets, 'numpy') else np.array(all_targets)
+
+    f1_weighted  = f1_score(targets, preds, average='weighted', zero_division=0) * 100
+    f1_macro     = f1_score(targets, preds, average='macro',    zero_division=0) * 100
+    uar          = recall_score(targets, preds, average='macro', zero_division=0) * 100
+    per_class_f1 = f1_score(targets, preds, average=None,       zero_division=0) * 100
+
+    lines = ['  Per-class F1:']
+    for i, f1 in enumerate(per_class_f1):
+        label = class_names[i] if class_names and i < len(class_names) else str(i)
+        count = int((targets == i).sum())
+        lines.append(f'    {i} ({label:>10s}): F1={f1:5.1f}%  ({count} samples)')
+
+    return {
+        'f1_weighted':  f1_weighted,
+        'f1_macro':     f1_macro,
+        'uar':          uar,
+        'per_class_f1': per_class_f1,
+        'per_class_str': '\n'.join(lines),
+    }
 
 
 def save_checkpoint(state, is_best, opt, fold):

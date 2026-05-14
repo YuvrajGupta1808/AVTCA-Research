@@ -4,7 +4,7 @@ This code is based on https://github.com/okankop/Efficient-3DCNNs
 import torch
 from torch.autograd import Variable
 import time
-from utils import AverageMeter, calculate_accuracy
+from utils import AverageMeter, calculate_accuracy, compute_epoch_metrics
 
 # Class label lookup keyed by dataset name. Falls back to "class N" for unknown datasets.
 _CLASS_NAMES = {
@@ -92,7 +92,14 @@ def val_epoch_multimodal(epoch, data_loader, model, criterion, opt, logger, moda
     n_classes   = outputs.shape[1]
     class_names = _CLASS_NAMES.get(opt.dataset, [])
 
-    print(f'Epoch {epoch} val summary — loss: {losses.avg:.4f}  prec@1: {top1.avg:.4f}  prec@5: {top5.avg:.4f}')
+    metrics = compute_epoch_metrics(all_preds, all_targets, class_names=class_names)
+
+    print(
+        f'Epoch {epoch} val summary — loss: {losses.avg:.4f}  '
+        f'acc: {top1.avg:.2f}%  F1-weighted: {metrics["f1_weighted"]:.2f}%  '
+        f'F1-macro: {metrics["f1_macro"]:.2f}%  UAR: {metrics["uar"]:.2f}%'
+    )
+    print(metrics['per_class_str'])
     print('  Per-class accuracy:')
     for c in range(n_classes):
         mask = all_targets == c
@@ -104,7 +111,10 @@ def val_epoch_multimodal(epoch, data_loader, model, criterion, opt, logger, moda
     logger.log({'epoch': epoch,
                 'loss': losses.avg.item(),
                 'prec1': top1.avg.item(),
-                'prec5': top5.avg.item()})
+                'prec5': top5.avg.item(),
+                'f1_weighted': metrics['f1_weighted'],
+                'f1_macro': metrics['f1_macro'],
+                'uar': metrics['uar']})
 
     return losses.avg.item(), top1.avg.item()
 

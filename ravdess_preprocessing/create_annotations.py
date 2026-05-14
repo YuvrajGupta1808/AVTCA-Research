@@ -40,7 +40,7 @@ def main():
                 if not video.endswith('.npy') or 'croppad' not in video:
                     continue
                 label = str(int(video.split('-')[2]))
-                audio = '03' + video.split('_face')[0][2:] + '_croppad.wav'
+                audio = video.split('_face')[0] + '_croppad.wav'
 
                 if i in train_ids:
                     split = 'training'
