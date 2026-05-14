@@ -35,7 +35,7 @@ def parse_opts():
     
     parser.add_argument('--begin_epoch', default=1, type=int, help='Training begins at this epoch. Previous trained model indicated by resume_path is loaded.')
     parser.add_argument('--resume_path', default='', type=str, help='Save data (.pth) of previous training')
-    parser.add_argument('--pretrain_path', default="EfficientFace_Trained_on_AffectNet7.pth", type=str, help='Pretrained model (.pth), efficientface')
+    parser.add_argument('--pretrain_path', default="pretrained/EfficientFace_Trained_on_AffectNet7.pth", type=str, help='Pretrained model (.pth), efficientface')
     parser.add_argument('--no_train', action='store_true', help='If true, training is not performed.')
     parser.set_defaults(no_train=False)
     parser.add_argument('--no_val', action='store_true', help='If true, validation is not performed.')

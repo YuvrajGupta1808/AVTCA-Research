@@ -82,7 +82,7 @@ Step 4: step2 + step3          ← added together
 The Inverted Residual processes the raw unguided feature map. Attention sees the output only after transformation is done.
 
 **The difference and why it matters**
-Attention is meant to guide what gets processed deeply. When it runs after, it is reweighting features that have already been transformed by the Inverted Residual — doing a different job than what was designed. The pretrained EfficientFace weights loaded from `EfficientFace_Trained_on_AffectNet7.pth` were trained with the original EfficientFace ordering. Loading those weights into this inverted structure means the pretrained knowledge does not transfer correctly.
+Attention is meant to guide what gets processed deeply. When it runs after, it is reweighting features that have already been transformed by the Inverted Residual — doing a different job than what was designed. The pretrained EfficientFace weights loaded from `pretrained/EfficientFace_Trained_on_AffectNet7.pth` were trained with the original EfficientFace ordering. Loading those weights into this inverted structure means the pretrained knowledge does not transfer correctly.
 
 ---
 
