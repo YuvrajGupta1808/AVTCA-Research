@@ -18,7 +18,7 @@ pip install facenet-pytorch soundfile
 ### Data Preprocessing (run in order)
 ```bash
 # 1. Unzip downloaded RAVDESS actor zip files into RAVDESS/
-python unzip.py --data_root RAVDESS --delete_zip
+python helpers/unzip.py --data_root RAVDESS --delete_zip
 
 # 2. Crop/pad audio files to 3.6s (produces *_croppad.wav per actor)
 python ravdess_preprocessing/extract_audios.py --data_root RAVDESS
@@ -35,7 +35,7 @@ python ravdess_preprocessing/create_annotations.py --data_root RAVDESS --annotat
 python main.py \
   --data_root /path/to/RAVDESS \
   --annotation_path ravdess_preprocessing/annotations.txt \
-  --result_path results \
+  --result_path results/spec_01_baseline \
   --fusion it \
   --n_epochs 50 \
   --batch_size 8
@@ -46,7 +46,7 @@ The dataset root can also be set via `RAVDESS_ROOT` environment variable instead
 ### Resume / Test
 ```bash
 # Resume from checkpoint
-python main.py --resume_path results/RAVDESS_multimodalcnn_15_best0.pth [other opts]
+python main.py --resume_path results/spec_01_baseline/RAVDESS_multimodalcnn_15_best0.pth [other opts]
 
 # Run test set evaluation only
 python main.py --no_train --test --test_subset test [other opts]
@@ -107,4 +107,4 @@ During training, inputs are augmented by stacking clean and degraded versions:
 Fields: `video_path;audio_path;label(1-8);split(training|validation|testing)`
 
 ### Pretrained Weights
-`EfficientFace_Trained_on_AffectNet7.pth` (included in repo) initializes the visual backbone. Controlled by `--pretrain_path` (set to `None` to train from scratch).
+`pretrained/EfficientFace_Trained_on_AffectNet7.pth` (included in repo) initializes the visual backbone. Controlled by `--pretrain_path` (set to `None` to train from scratch).
