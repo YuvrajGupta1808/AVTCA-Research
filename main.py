@@ -130,9 +130,11 @@ if __name__ == '__main__':
                 pin_memory=True)
         
             val_logger = Logger(
-                    os.path.join(opt.result_path, 'val'+str(fold)+'.log'), ['epoch', 'loss', 'prec1', 'prec5'])
+                    os.path.join(opt.result_path, 'val'+str(fold)+'.log'),
+                    ['epoch', 'loss', 'prec1', 'prec5', 'f1_weighted', 'f1_macro', 'uar'])
             test_logger = Logger(
-                    os.path.join(opt.result_path, 'test'+str(fold)+'.log'), ['epoch', 'loss', 'prec1', 'prec5'])
+                    os.path.join(opt.result_path, 'test'+str(fold)+'.log'),
+                    ['epoch', 'loss', 'prec1', 'prec5', 'f1_weighted', 'f1_macro', 'uar'])
 
             
         best_prec1 = 0
@@ -180,7 +182,8 @@ if __name__ == '__main__':
         if opt.test:
 
             test_logger = Logger(
-                    os.path.join(opt.result_path, 'test'+str(fold)+'.log'), ['epoch', 'loss', 'prec1', 'prec5'])
+                    os.path.join(opt.result_path, 'test'+str(fold)+'.log'),
+                    ['epoch', 'loss', 'prec1', 'prec5', 'f1_weighted', 'f1_macro', 'uar'])
 
             video_transform = transforms.Compose([
                 transforms.ToTensor(opt.video_norm_value)])

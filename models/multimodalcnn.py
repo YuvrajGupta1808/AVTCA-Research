@@ -109,9 +109,12 @@ def init_feature_extractor(model, path):
     checkpoint = torch.load(path, map_location=torch.device('cpu'))
     pre_trained_dict = checkpoint['state_dict']
     pre_trained_dict = {key.replace("module.", ""): value for key, value in pre_trained_dict.items()}
-    print('Initializing efficientnet...')
-    model.load_state_dict(pre_trained_dict, strict=False)
-    print('Loaded efficientnet checkpoint...')
+    model_dict = model.state_dict()
+    compatible = {k: v for k, v in pre_trained_dict.items()
+                  if k in model_dict and model_dict[k].shape == v.shape}
+    model_dict.update(compatible)
+    model.load_state_dict(model_dict)
+    print(f'Initializing efficientnet... loaded {len(compatible)}/{len(pre_trained_dict)} pretrained layers')
 
     
 def get_model(num_classes, task, seq_length):
@@ -254,14 +257,13 @@ class MultiModalCNN(nn.Module):
         x_audio  = x_audio.permute(2, 0, 1)
         x_visual = x_visual.permute(2, 0, 1)
 
-        x_audio_attention,  _ = self.audioAttention( x_audio,  x_audio,  x_audio)
-        x_visual_attention, _ = self.visualAttention(x_visual, x_visual, x_visual)
+        # SELF ATTENTION: q from own modality, k=v from other (cross-modal per diagram)
+        x_audio_attention,  _ = self.audioAttention( x_audio,  x_visual, x_visual)
+        x_visual_attention, _ = self.visualAttention(x_visual, x_audio,  x_audio)
 
-        x_audio_attention  = x_audio_attention.permute(1, 2, 0)
-        x_visual_attention = x_visual_attention.permute(1, 2, 0)
-
-        x_audio_ca  = x_audio_attention.permute(0, 2, 1)
-        x_visual_ca = x_visual_attention.permute(0, 2, 1)
+        # Residual (red "+" in diagram) + (T,B,C) → (B,T,C) in one permute
+        x_audio_ca  = (x_audio  + x_audio_attention).permute(1, 0, 2)
+        x_visual_ca = (x_visual + x_visual_attention).permute(1, 0, 2)
 
         x_audio_final  = self.audioCrossAttention( xk=x_visual_ca, xq=x_audio_ca)
         x_visual_final = self.visualCrossAttention(xk=x_audio_ca,  xq=x_visual_ca)
