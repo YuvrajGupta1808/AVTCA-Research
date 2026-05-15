@@ -1,6 +1,8 @@
 import os
 import sys
 import glob
+import json
+import shutil
 import subprocess
 import tempfile
 from types import SimpleNamespace
@@ -11,6 +13,7 @@ import librosa
 import torch
 import torch.nn.functional as F
 from PIL import Image
+from scipy.fftpack import dct
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, REPO_ROOT)
@@ -21,15 +24,65 @@ EMOTION_LABELS = ['neutral', 'calm', 'happy', 'sad', 'angry', 'fearful', 'disgus
 SAMPLE_RATE = 22050
 TARGET_SAMPLES = int(SAMPLE_RATE * 3.6)  # 79,380
 N_FRAMES = 15
+N_MELS = 64
+N_MFCC = 10
+
+
+def _load_run_metadata(run_dir):
+    opts_files = sorted(glob.glob(os.path.join(run_dir, "opts*.json")))
+    if not opts_files:
+        return {}
+    try:
+        with open(opts_files[-1], "r", encoding="utf-8") as f:
+            return json.load(f)
+    except (OSError, json.JSONDecodeError):
+        return {}
 
 
 def discover_checkpoints(repo_root):
-    """Return {display_name: absolute_path} for all .pth files under results*/ dirs."""
+    """Return discovered checkpoints and saved run metadata under results*/."""
     result = {}
-    for path in sorted(glob.glob(os.path.join(repo_root, 'results*', '*.pth'))):
-        parts = path.split(os.sep)
-        key = os.path.join(parts[-2], parts[-1])
-        result[key] = path
+    pattern = os.path.join(repo_root, "results*", "*", "*.pth")
+    preferred_names = [
+        "RAVDESS_multimodalcnn_15_best0.pth",
+        "model.pth",
+        "RAVDESS_multimodalcnn_15_checkpoint0.pth",
+    ]
+
+    by_run = {}
+    for path in sorted(glob.glob(pattern)):
+        run_dir = os.path.dirname(path)
+        by_run.setdefault(run_dir, []).append(path)
+
+    for run_dir, paths in sorted(by_run.items()):
+        metadata = _load_run_metadata(run_dir)
+        chosen = None
+        for preferred in preferred_names:
+            chosen = next((p for p in paths if os.path.basename(p) == preferred), None)
+            if chosen:
+                break
+        if chosen is None:
+            chosen = paths[0]
+
+        run_name = os.path.basename(run_dir)
+        display = run_name
+        audio_feature = _infer_audio_feature(run_name, metadata)
+        if metadata:
+            num_heads = metadata.get("num_heads")
+            fusion = metadata.get("fusion")
+            lr = metadata.get("learning_rate")
+            if num_heads is not None and fusion is not None and lr is not None:
+                display = (
+                    f"{run_name}  |  feature={audio_feature}  "
+                    f"heads={num_heads}  fusion={fusion}  lr={lr}"
+                )
+
+        result[display] = {
+            "path": chosen,
+            "run_dir": run_dir,
+            "metadata": metadata,
+            "audio_feature": audio_feature,
+        }
     return result
 
 
@@ -62,13 +115,29 @@ def load_model(pth_path, num_heads, fusion, device):
     return model
 
 
-def preprocess_audio(video_path):
-    """Extract mono audio from video via ffmpeg, crop/pad to 3.6 s, return MFCC tensor (1, 10, T)."""
+def _infer_audio_feature(run_name, metadata):
+    feature = metadata.get("audio_feature") if metadata else None
+    if isinstance(feature, str) and feature.strip():
+        return feature.strip().lower()
+
+    lowered = run_name.lower()
+    if "mfcc" in lowered:
+        return "mfcc"
+    if "mcc" in lowered:
+        return "mcc"
+    if "mel" in lowered:
+        return "mel"
+    return "mel"
+
+
+def preprocess_audio(video_path, feature_type="mel"):
+    """Extract mono audio and return audio tensor (1, F, T) for the chosen feature."""
+    ffmpeg_exe = _resolve_ffmpeg()
     with tempfile.NamedTemporaryFile(suffix='.wav', delete=False) as f:
         tmp_wav = f.name
     try:
         subprocess.run(
-            ['ffmpeg', '-y', '-i', video_path, '-ac', '1', '-ar', str(SAMPLE_RATE), tmp_wav],
+            [ffmpeg_exe, '-y', '-i', video_path, '-ac', '1', '-ar', str(SAMPLE_RATE), tmp_wav],
             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True,
         )
         audio, _ = librosa.load(tmp_wav, sr=SAMPLE_RATE)
@@ -86,8 +155,53 @@ def preprocess_audio(video_path):
         excess = len(audio) - TARGET_SAMPLES
         audio = audio[excess // 2: len(audio) - (excess - excess // 2)]
 
-    mfcc = librosa.feature.mfcc(y=audio, sr=SAMPLE_RATE, n_mfcc=10)  # (10, T)
-    return torch.tensor(mfcc, dtype=torch.float32).unsqueeze(0)       # (1, 10, T)
+    feature_type = (feature_type or "mel").lower()
+
+    if feature_type == "mfcc":
+        mfcc = librosa.feature.mfcc(
+            y=audio,
+            sr=SAMPLE_RATE,
+            n_mfcc=N_MFCC,
+            n_fft=1024,
+            hop_length=512,
+        )
+        return torch.tensor(mfcc.astype(np.float32), dtype=torch.float32).unsqueeze(0)
+
+    if feature_type == "mcc":
+        mel = librosa.feature.melspectrogram(
+            y=audio,
+            sr=SAMPLE_RATE,
+            n_mels=N_MELS,
+            n_fft=1024,
+            hop_length=512,
+        )
+        log_mel = librosa.power_to_db(mel, ref=np.max)
+        mcc = dct(log_mel, type=2, axis=0, norm="ortho")[:N_MFCC]
+        return torch.tensor(mcc.astype(np.float32), dtype=torch.float32).unsqueeze(0)
+
+    mel = librosa.feature.melspectrogram(
+        y=audio,
+        sr=SAMPLE_RATE,
+        n_mels=N_MELS,
+        n_fft=1024,
+        hop_length=512,
+    )
+    mel_db = librosa.power_to_db(mel, ref=np.max)
+    mel_db = (mel_db + 40) / 40
+    return torch.tensor(mel_db.astype(np.float32), dtype=torch.float32).unsqueeze(0)
+
+
+def _resolve_ffmpeg():
+    """Return an ffmpeg executable path that works inside the current env."""
+    ffmpeg_exe = shutil.which("ffmpeg")
+    if ffmpeg_exe:
+        return ffmpeg_exe
+
+    try:
+        import imageio_ffmpeg
+        return imageio_ffmpeg.get_ffmpeg_exe()
+    except Exception as exc:
+        raise FileNotFoundError("ffmpeg executable not available") from exc
 
 
 def preprocess_video(video_path):
@@ -106,10 +220,11 @@ def preprocess_video(video_path):
     cap = cv2.VideoCapture(video_path)
     raw_frames = []
     while True:
-        ok, frame = cap.read()
+        ok, frame_bgr = cap.read()
         if not ok:
             break
-        raw_frames.append(frame)  # keep BGR — matches how .npy training data was saved and loaded by PIL
+        frame_rgb = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2RGB)
+        raw_frames.append(frame_rgb)
     cap.release()
 
     if not raw_frames:
@@ -145,12 +260,7 @@ def _extract_face(frame_rgb, mtcnn):
 
 
 def predict(model, audio_tensor, video_tensor, device):
-    """Run a single-sample forward pass.
-
-    audio_tensor : (1, 10, T)
-    video_tensor : (3, 15, 224, 224)
-    Returns      : dict {emotion_label: probability}
-    """
+    """Run a single-sample forward pass."""
     audio = audio_tensor.to(device)
     # Replicate the permute + reshape from validation.py
     video = video_tensor.unsqueeze(0).to(device)          # (1, 3, 15, 224, 224)
