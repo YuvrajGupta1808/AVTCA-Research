@@ -1,11 +1,7 @@
-'''
-This code is based on https://github.com/okankop/Efficient-3DCNNs
-'''
 import os
 import torch
-from torch.autograd import Variable
 import time
-from utils import AverageMeter, calculate_accuracy,calculate_accuracy1
+from src.utils import AverageMeter, calculate_accuracy, calculate_accuracy1
 
 def _grad_norm(model):
     total = 0.0
@@ -65,15 +61,14 @@ def train_epoch_multimodal(epoch, data_loader, model, criterion, optimizer, opt,
 
         visual_inputs = visual_inputs.permute(0,2,1,3,4)
         visual_inputs = visual_inputs.reshape(visual_inputs.shape[0]*visual_inputs.shape[1], visual_inputs.shape[2], visual_inputs.shape[3], visual_inputs.shape[4])
-        
-        audio_inputs = Variable(audio_inputs)
-        visual_inputs = Variable(visual_inputs)
+
+        audio_inputs  = audio_inputs.to(opt.device)
+        visual_inputs = visual_inputs.to(opt.device)
 
         if i == 0 and epoch == 1:
             print(f'  [shape] audio={tuple(audio_inputs.shape)}  '
                   f'visual={tuple(visual_inputs.shape)}  targets={tuple(targets.shape)}')
 
-        targets = Variable(targets)
         outputs = model(audio_inputs, visual_inputs)
         loss = criterion(outputs, targets)
 
@@ -141,8 +136,8 @@ def train_epoch(epoch, data_loader, model, criterion, optimizer, opt,
                 epoch_logger, batch_logger):
     print('train at epoch {}'.format(epoch))
     
-    if opt.model == 'multimodalcnn':
-        train_epoch_multimodal(epoch,  data_loader, model, criterion, optimizer, opt, epoch_logger, batch_logger)
+    if opt.model == 'multimodal_cnn':
+        train_epoch_multimodal(epoch, data_loader, model, criterion, optimizer, opt, epoch_logger, batch_logger)
         model_path = os.path.join(opt.result_path, 'model.pth')
         torch.save(obj=model.state_dict(), f=model_path)
         print('Saved model weights to {}'.format(model_path))

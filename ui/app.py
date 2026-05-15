@@ -46,7 +46,7 @@ with st.sidebar:
     fusion_index = fusion_options.index(saved_fusion) if saved_fusion in fusion_options else 0
     fusion = st.selectbox("Fusion type", fusion_options, index=fusion_index)
 
-    audio_feature_options = ["mel", "mfcc", "mcc"]
+    audio_feature_options = ["mel", "mfcc"]
     feature_index = (
         audio_feature_options.index(saved_audio_feature)
         if saved_audio_feature in audio_feature_options else 0
@@ -81,7 +81,7 @@ with st.sidebar:
             with st.spinner("Loading model weights…"):
                 try:
                     model = load_model(pth_path, num_heads, fusion, device)
-                    st.session_state.model  = model
+                    st.session_state.model = model
                     st.session_state.device = device
                     st.success(f"Model ready on **{device}**")
                 except Exception as exc:

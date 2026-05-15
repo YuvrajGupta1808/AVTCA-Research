@@ -3,13 +3,13 @@ This code is based on https://github.com/okankop/Efficient-3DCNNs
 '''
 import csv
 import math
+import os
 import random
+import shutil
+import numpy as np
 import torch
 from torch import nn
 import torch.nn.functional as F
-import shutil
-import numpy as np
-import sklearn
 from sklearn.metrics import accuracy_score, classification_report, confusion_matrix, f1_score
 
 
@@ -42,7 +42,7 @@ class Logger(object):
         self.logger.writerow(header)
         self.header = header
 
-    def __del(self):
+    def __del__(self):
         self.log_file.close()
 
     def log(self, values):
@@ -82,14 +82,12 @@ def calculate_accuracy(output, target, topk=(1,), binary=False):
     """Computes the precision@k for the specified values of k"""
     
     maxk = max(topk)
-    #print('target', target, 'output', output)    
     if maxk > output.size(1):
         maxk = output.size(1)
     batch_size = target.size(0)
     
     _, pred = output.topk(maxk, 1, True, True)
     pred = pred.t()
-    #print('Target: ', target, 'Pred: ', pred)
     correct = pred.eq(target.view(1, -1).expand_as(pred))
     
     res = []
@@ -99,11 +97,8 @@ def calculate_accuracy(output, target, topk=(1,), binary=False):
         correct_k = correct[:k].reshape(-1).float().sum(0)
         res.append(correct_k.mul_(100.0 / batch_size))
     if binary:
-        #print(list(target.cpu().numpy()),  list(pred[0].cpu().numpy()))
-        f1 = sklearn.metrics.f1_score(list(target.cpu().numpy()),  list(pred[0].cpu().numpy()))
-        #print('F1: ', f1)
-        return res, f1*100
-    #print(res)
+        f1_val = f1_score(list(target.cpu().numpy()), list(pred[0].cpu().numpy()))
+        return res, f1_val * 100
     return res
 
 def calculate_accuracy1(output, target, binary=False):
@@ -122,11 +117,6 @@ def calculate_accuracy1(output, target, binary=False):
     # Calculate accuracy
     accuracy = accuracy_score(target_np, pred_labels)
     
-    if binary:
-        # For binary classification, you might want to calculate additional metrics like F1 score
-        # This is just an example, adjust according to your needs
-        f1 = accuracy_score(target_np, pred_labels, average='binary')
-        return accuracy, f1
     return accuracy
 
 
@@ -225,10 +215,12 @@ def print_classification_summary(targets, predictions, opt, prefix='validation')
     print(confusion_matrix(targets, predictions, labels=labels))
 
 
-def save_checkpoint(state, is_best, opt, fold):
-    torch.save(state, '%s/%s_checkpoint'% (opt.result_path, opt.store_name)+str(fold)+'.pth')
+def save_checkpoint(state, is_best, opt):
+    ckpt_path = os.path.join(opt.result_path, '{}_checkpoint.pth'.format(opt.store_name))
+    best_path = os.path.join(opt.result_path, '{}_best.pth'.format(opt.store_name))
+    torch.save(state, ckpt_path)
     if is_best:
-        shutil.copyfile('%s/%s_checkpoint' % (opt.result_path, opt.store_name)+str(fold)+'.pth','%s/%s_best' % (opt.result_path, opt.store_name)+str(fold)+'.pth')
+        shutil.copyfile(ckpt_path, best_path)
 
 
 def adjust_learning_rate(optimizer, epoch, opt):
@@ -236,4 +228,3 @@ def adjust_learning_rate(optimizer, epoch, opt):
     lr_new = opt.learning_rate * (0.1 ** (sum(epoch >= np.array(opt.lr_steps))))
     for param_group in optimizer.param_groups:
         param_group['lr'] = lr_new
-        #param_group['lr'] = opt.learning_rate

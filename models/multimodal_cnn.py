@@ -1,13 +1,8 @@
-# -*- coding: utf-8 -*-
-"""
-Parts of this code are based on https://github.com/zengqunzhao/EfficientFace/blob/master/models/EfficientFace.py
-"""
-
 import torch
 import torch.nn as nn
 from models.modulator import Modulator
-from models.efficientface import LocalFeatureExtractor, InvertedResidual
-from models.transformer_timm import AttentionBlock, Attention
+from models.efficient_face import LocalFeatureExtractor, InvertedResidual
+from models.transformer import AttentionBlock, Attention
 from torch.nn import MultiheadAttention
 
 def conv1d_block(in_channels, out_channels, kernel_size=3, stride=1, padding='same'):
@@ -114,11 +109,6 @@ def init_feature_extractor(model, path):
     print('Loaded efficientnet checkpoint...')
 
     
-def get_model(num_classes, task, seq_length):
-    model = EfficientFaceTemporal([4, 8, 4], [29, 116, 232, 464, 1024], num_classes, task, seq_length)
-    return model  
-
-
 def conv2d_block_audio(in_channels, out_channels, kernel_size=3, padding=1):
     return nn.Sequential(
         nn.Conv2d(in_channels, out_channels, kernel_size=kernel_size, padding=padding),
@@ -127,7 +117,7 @@ def conv2d_block_audio(in_channels, out_channels, kernel_size=3, padding=1):
         nn.MaxPool2d(2, 2),
     )
 
-def conv1d_block_audio(in_channels, out_channels, kernel_size=3, stride=1, padding='same'):
+def conv1d_block_audio(in_channels, out_channels, kernel_size=3, stride=1):
     return nn.Sequential(
         nn.Conv1d(in_channels, out_channels, kernel_size=kernel_size, stride=stride, padding='same'),
         nn.BatchNorm1d(out_channels),

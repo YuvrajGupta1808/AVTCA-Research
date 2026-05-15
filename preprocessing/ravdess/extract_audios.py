@@ -11,7 +11,7 @@ def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument(
         '--data_root',
-        default=os.environ.get('RAVDESS_ROOT', 'RAVDESS'),
+        default=os.environ.get('RAVDESS_ROOT', 'datasets/RAVDESS'),
         help='Directory containing ACTORxx folders',
     )
     parser.add_argument('--target_time', default=3.6, type=float, help='Target clip duration in seconds')

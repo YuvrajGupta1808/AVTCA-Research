@@ -1,22 +1,10 @@
 """
-Standalone inference script — computes all metrics for an existing AVTCA checkpoint.
-No training code is modified; this only reads the checkpoint and runs forward passes.
+Computes all metrics for an existing AVTCA checkpoint.
 
 Usage:
-  # Run 1, test split
-  python helpers/compute_test_metrics.py \
-      --checkpoint results/spec_01_baseline/RAVDESS_multimodalcnn_15_best0.pth \
-      --result_path results/spec_01_baseline --num_heads 1 --test_subset test
-
-  # Run 1, val split (retrospective F1 at best epoch)
-  python helpers/compute_test_metrics.py \
-      --checkpoint results/spec_01_baseline/RAVDESS_multimodalcnn_15_best0.pth \
-      --result_path results/spec_01_baseline --num_heads 1 --test_subset val
-
-  # Run 2, test split (num_heads=4)
-  python helpers/compute_test_metrics.py \
-      --checkpoint results/spec_02_retrain_h4_e70/RAVDESS_multimodalcnn_15_best0.pth \
-      --result_path results/spec_02_retrain_h4_e70 --num_heads 4 --test_subset test
+  python src/evaluate.py \
+      --checkpoint results/mel_h8_lr001_e75/RAVDESS_multimodal_cnn_15_best.pth \
+      --result_path results/mel_h8_lr001_e75 --num_heads 8 --test_subset test
 """
 
 import argparse
@@ -31,15 +19,14 @@ if PROJECT_ROOT not in sys.path:
 import torch
 import numpy as np
 from torch import nn
-from torch.autograd import Variable
 from sklearn.metrics import (
     f1_score, precision_score, recall_score,
     classification_report, accuracy_score,
 )
 
-import transforms
-from model import generate_model
-from dataset import get_test_set
+from src import transforms
+from src.model import generate_model
+from src.dataset import get_test_set
 
 CLASS_NAMES = ['neutral', 'calm', 'happy', 'sad', 'angry', 'fearful', 'disgust', 'surprised']
 
@@ -49,11 +36,11 @@ def parse_args():
     parser.add_argument('--checkpoint',      required=True, type=str)
     parser.add_argument('--result_path',     default='results', type=str)
     parser.add_argument('--test_subset',     default='test', choices=['test', 'val'])
-    parser.add_argument('--annotation_path', default='ravdess_preprocessing/annotations_runtime.txt', type=str)
+    parser.add_argument('--annotation_path', default='preprocessing/ravdess/annotations.txt', type=str)
     parser.add_argument('--data_root',       default='', type=str)
     parser.add_argument('--dataset',         default='RAVDESS', type=str)
     parser.add_argument('--n_classes',       default=8, type=int)
-    parser.add_argument('--num_heads',       default=1, type=int)
+    parser.add_argument('--num_heads',       default=8, type=int)
     parser.add_argument('--fusion',          default='it', type=str)
     parser.add_argument('--sample_duration', default=15, type=int)
     parser.add_argument('--sample_size',     default=224, type=int)
@@ -61,17 +48,16 @@ def parse_args():
     parser.add_argument('--n_threads',       default=4, type=int)
     parser.add_argument('--video_norm_value',default=255, type=int)
     parser.add_argument('--pretrain_path',   default='None', type=str)
-    parser.add_argument('--model',           default='multimodalcnn', type=str)
+    parser.add_argument('--model',           default='multimodal_cnn', type=str)
+    parser.add_argument('--audio_features',  default='mel', type=str, choices=['mfcc', 'mel'])
     parser.add_argument('--device',          default='cuda', type=str)
     parser.add_argument('--mask',            default='softhard', type=str)
     parser.add_argument('--manual_seed',     default=1, type=int)
-    # opts.py fields required by generate_model / dataset internals
     parser.add_argument('--store_name',      default='model', type=str)
     return parser.parse_args()
 
 
 def topk_accuracy(outputs_np, targets_np, k):
-    """Top-k accuracy from numpy arrays of raw logits and integer labels."""
     topk_preds = np.argsort(outputs_np, axis=1)[:, -k:]
     correct = [targets_np[i] in topk_preds[i] for i in range(len(targets_np))]
     return float(np.mean(correct)) * 100
@@ -119,8 +105,10 @@ def run():
             inputs_visual = inputs_visual.reshape(
                 inputs_visual.shape[0] * inputs_visual.shape[1],
                 inputs_visual.shape[2], inputs_visual.shape[3], inputs_visual.shape[4])
-            targets = targets.to(opt.device)
-            outputs = model(Variable(inputs_audio), Variable(inputs_visual))
+            inputs_audio  = inputs_audio.to(opt.device)
+            inputs_visual = inputs_visual.to(opt.device)
+            targets       = targets.to(opt.device)
+            outputs = model(inputs_audio, inputs_visual)
             loss = criterion(outputs, targets)
             total_loss += loss.item()
             n_batches += 1
@@ -142,12 +130,8 @@ def run():
     f1_weighted   = f1_score(all_targets_np, all_preds_np, average='weighted', zero_division=0)
     prec_weighted = precision_score(all_targets_np, all_preds_np, average='weighted', zero_division=0)
     rec_weighted  = recall_score(all_targets_np, all_preds_np,  average='weighted', zero_division=0)
-    report_str    = classification_report(
-        all_targets_np, all_preds_np,
-        target_names=CLASS_NAMES, zero_division=0)
-    report_dict   = classification_report(
-        all_targets_np, all_preds_np,
-        target_names=CLASS_NAMES, zero_division=0, output_dict=True)
+    report_str    = classification_report(all_targets_np, all_preds_np, target_names=CLASS_NAMES, zero_division=0)
+    report_dict   = classification_report(all_targets_np, all_preds_np, target_names=CLASS_NAMES, zero_division=0, output_dict=True)
 
     per_class_acc = {}
     for c, name in enumerate(CLASS_NAMES):

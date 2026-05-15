@@ -10,8 +10,6 @@ device = torch.device('cuda') if torch.cuda.is_available() else 'cpu'
 
 
 mtcnn = MTCNN(image_size=(720, 1280), device=device)
-
-#mtcnn.to(device)
 save_frames = 15
 input_fps = 30
 
@@ -25,7 +23,7 @@ def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument(
         '--data_root',
-        default=os.environ.get('RAVDESS_ROOT', 'RAVDESS'),
+        default=os.environ.get('RAVDESS_ROOT', 'datasets/RAVDESS'),
         help='Directory containing ACTORxx folders',
     )
     return parser.parse_args()
@@ -35,7 +33,6 @@ args = parse_args()
 root = os.path.abspath(os.path.expanduser(args.data_root))
 
 select_distributed = lambda m, n: [i*n//m + n//(2*m) for i in range(m)]
-n_processed = 0
 for sess in tqdm(sorted(os.listdir(root))):   
     for filename in os.listdir(os.path.join(root, sess)):
            
@@ -51,12 +48,12 @@ for sess in tqdm(sorted(os.listdir(root))):
                 framen += 1
             cap = cv2.VideoCapture(os.path.join(root, sess, filename))
 
-            if save_length*input_fps > framen:                    
-                skip_begin = int((framen - (save_length*input_fps)) // 2)
+            if save_length * input_fps < framen:
+                skip_begin = int((framen - (save_length * input_fps)) // 2)
                 for i in range(skip_begin):
-                    _, im = cap.read() 
-                    
-            framen = int(save_length*input_fps)    
+                    _, im = cap.read()
+                framen = int(save_length * input_fps)
+
             frames_to_select = select_distributed(save_frames,framen)
             save_fps = save_frames // (framen // input_fps) 
             if save_avi:
@@ -78,25 +75,22 @@ for sess in tqdm(sorted(os.listdir(root))):
                     frame_ctr += 1
 
                 try:
-                    gray = cv2.cvtColor(im, cv2.COLOR_BGR2GRAY)
-                except:
-                    failed_videos.append((sess, i))
+                    cv2.cvtColor(im, cv2.COLOR_BGR2GRAY)
+                except Exception:
+                    failed_videos.append((sess, filename))
                     break
-	    
+
                 temp = im[:,:,-1]
                 im_rgb = im.copy()
                 im_rgb[:,:,-1] = im_rgb[:,:,0]
                 im_rgb[:,:,0] = temp
-                im_rgb = torch.tensor(im_rgb)
-                im_rgb = im_rgb.to(device)
+                im_rgb = torch.tensor(im_rgb).to(device)
 
                 bbox = mtcnn.detect(im_rgb)
                 if bbox[0] is not None:
-                    bbox = bbox[0][0]
-                    bbox = [round(x) for x in bbox]
-                    x1, y1, x2, y2 = bbox
-                im = im[y1:y2, x1:x2, :]
-                im = cv2.resize(im, (224,224))
+                    x1, y1, x2, y2 = [round(x) for x in bbox[0][0]]
+                    im = im[y1:y2, x1:x2, :]
+                im = cv2.resize(im, (224, 224))
                 if save_avi:
                     out.write(im)
                 numpy_video.append(im)
@@ -111,7 +105,6 @@ for sess in tqdm(sorted(os.listdir(root))):
             if len(numpy_video) != 15:
                 print('Error', sess, filename)    
                             
-    n_processed += 1      
-    with open('processed.txt', 'a') as f:
+    with open('preprocessing/ravdess/processed.txt', 'a') as f:
         f.write(sess + '\n')
     print(failed_videos)

@@ -24,7 +24,7 @@ def main() -> None:
     parser.add_argument(
         "--data_root",
         type=Path,
-        default=Path("CMU-MOSEI"),
+        default=Path("datasets/CMU-MOSEI"),
         help="Directory where the MOSEI files should be downloaded.",
     )
     args = parser.parse_args()

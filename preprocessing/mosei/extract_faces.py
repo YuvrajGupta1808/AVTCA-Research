@@ -61,7 +61,7 @@ def main() -> None:
     parser.add_argument(
         "--segment_dir",
         type=Path,
-        default=Path("CMU-MOSEI/raw_segments"),
+        default=Path("datasets/CMU-MOSEI/raw_segments"),
     )
     args = parser.parse_args()
 
