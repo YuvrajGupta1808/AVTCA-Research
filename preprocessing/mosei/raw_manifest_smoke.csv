@@ -1,0 +1,4 @@
+clip_path,split,video_id,start,end,sentiment,happy,sad,angry,fear,disgust,surprise
+/home/922933190/AVTCA-Research/CMU-MOSEI/raw_segments_smoke/train/FLyWn2DCci4_26.102_35.393.mp4,train,FLyWn2DCci4,26.102,35.393,0.333333,1.000000,0.000000,0.000000,0.000000,0.000000,0.000000
+/home/922933190/AVTCA-Research/CMU-MOSEI/raw_segments_smoke/test/pIaEcqnzI-s_14.099_19.709.mp4,test,pIaEcqnzI-s,14.099,19.709,0.333333,0.000000,0.000000,0.000000,0.000000,0.000000,0.000000
+/home/922933190/AVTCA-Research/CMU-MOSEI/raw_segments_smoke/train/m7SJs73SF8w_11.376_17.015.mp4,train,m7SJs73SF8w,11.376,17.015,0.000000,0.000000,0.333333,0.000000,0.000000,0.000000,0.000000
