@@ -13,12 +13,10 @@ import librosa
 import torch
 import torch.nn.functional as F
 from PIL import Image
-from scipy.fftpack import dct
-
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, REPO_ROOT)
 
-from model import generate_model
+from src.model import generate_model
 
 EMOTION_LABELS = ['neutral', 'calm', 'happy', 'sad', 'angry', 'fearful', 'disgust', 'surprised']
 SAMPLE_RATE = 22050
@@ -44,9 +42,9 @@ def discover_checkpoints(repo_root):
     result = {}
     pattern = os.path.join(repo_root, "results*", "*", "*.pth")
     preferred_names = [
-        "RAVDESS_multimodalcnn_15_best0.pth",
+        "RAVDESS_multimodal_cnn_15_best.pth",
         "model.pth",
-        "RAVDESS_multimodalcnn_15_checkpoint0.pth",
+        "RAVDESS_multimodal_cnn_15_checkpoint.pth",
     ]
 
     by_run = {}
@@ -95,7 +93,7 @@ def load_model(pth_path, num_heads, fusion, device):
     single-sample inference), then moves the bare model to the target device.
     """
     opt = SimpleNamespace(
-        model='multimodalcnn',
+        model='multimodal_cnn',
         n_classes=8,
         fusion=fusion,
         sample_duration=N_FRAMES,
@@ -123,8 +121,6 @@ def _infer_audio_feature(run_name, metadata):
     lowered = run_name.lower()
     if "mfcc" in lowered:
         return "mfcc"
-    if "mcc" in lowered:
-        return "mcc"
     if "mel" in lowered:
         return "mel"
     return "mel"
@@ -166,18 +162,6 @@ def preprocess_audio(video_path, feature_type="mel"):
             hop_length=512,
         )
         return torch.tensor(mfcc.astype(np.float32), dtype=torch.float32).unsqueeze(0)
-
-    if feature_type == "mcc":
-        mel = librosa.feature.melspectrogram(
-            y=audio,
-            sr=SAMPLE_RATE,
-            n_mels=N_MELS,
-            n_fft=1024,
-            hop_length=512,
-        )
-        log_mel = librosa.power_to_db(mel, ref=np.max)
-        mcc = dct(log_mel, type=2, axis=0, norm="ortho")[:N_MFCC]
-        return torch.tensor(mcc.astype(np.float32), dtype=torch.float32).unsqueeze(0)
 
     mel = librosa.feature.melspectrogram(
         y=audio,

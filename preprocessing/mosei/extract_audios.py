@@ -21,7 +21,7 @@ def main() -> None:
     parser.add_argument(
         "--segment_dir",
         type=Path,
-        default=Path("CMU-MOSEI/raw_segments"),
+        default=Path("datasets/CMU-MOSEI/raw_segments"),
     )
     parser.add_argument("--sample_rate", type=int, default=22050)
     args = parser.parse_args()

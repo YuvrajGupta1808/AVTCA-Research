@@ -83,7 +83,6 @@ class ToTensor(object):
         # put it from HWC to CHW format
         # yikes, this transpose takes 80% of the loading time/CPU
         img = img.transpose(0, 1).transpose(0, 2).contiguous()
-        #print(img.size(), img.float().div(self.norm_value)) 
         if isinstance(img, torch.ByteTensor):
             return img.float().div(self.norm_value)
         else:
@@ -129,6 +128,9 @@ class CenterCrop(object):
 class RandomHorizontalFlip(object):
     """Horizontally flip the given PIL.Image randomly with a probability of 0.5."""
 
+    def __init__(self):
+        self.p = 0
+
     def __call__(self, img):
         """
         Args:
@@ -148,6 +150,7 @@ class RandomRotate(object):
 
     def __init__(self):
         self.interpolation = Image.BILINEAR
+        self.rotate_angle = 0
 
     def __call__(self, img):
         im_size = img.size

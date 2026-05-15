@@ -80,28 +80,25 @@ class Attention(nn.Module):
         self.attn_drop = nn.Dropout(attn_drop)
         self.proj = nn.Linear(out_dim, out_dim)
         self.proj_drop = nn.Dropout(proj_drop)
-        self.qkmatrix = None
 
     def forward(self, x, x_q):
         B, Nk, Ck = x.shape
         B, Nq, Cq = x_q.shape
         q = self.q(x_q).reshape(B, Nq, 1, self.num_heads, -1).permute(2, 0, 3, 1, 4)
         kv = self.kv(x).reshape(B, Nk, 2, self.num_heads, -1).permute(2, 0, 3, 1, 4)
-        k, v = kv[0], kv[1]   # make torchscript happy (cannot use tensor as tuple)
+        k, v = kv[0], kv[1]
         q = q.squeeze(0)
 
         attn = (q @ k.transpose(-2, -1)) * self.scale
-       
         attn = attn.softmax(dim=-1)
-        
-        self.qkmatrix = attn
+        attn_weights = attn
         attn = self.attn_drop(attn)
 
         x = (attn @ v).transpose(1, 2).reshape(B, Nq, -1)
         x = self.proj(x)
         x = self.proj_drop(x)
 
-        return x, self.qkmatrix
+        return x, attn_weights
 
 
 class AttentionBlock(nn.Module):
@@ -123,48 +120,5 @@ class AttentionBlock(nn.Module):
         
         x, a = self.attn(self.norm1_k(xk), self.norm1_q(xq))
         x = self.drop_path(x)
-        x = x +  self.drop_path(self.mlp(self.norm2(x)))
+        x = x + self.drop_path(self.mlp(self.norm2(x)))
         return x
-
-# class FinalAttention(nn.Module):
-    
-#     def __init__(self, num_filters, in_channels=128, kernel_size=1):
-#         super().__init__()
-#         self.conv1_g = nn.Conv1d(in_channels=in_channels, out_channels=num_filters, kernel_size=kernel_size)
-#         self.conv1_s = nn.Conv1d(in_channels=in_channels, out_channels=num_filters, kernel_size=kernel_size)
-#         self.conv2 = nn.Conv2d(num_filters, num_filters, kernel_size=1, padding=0)
-#         self.relu = nn.ReLU()
-#         self.sigmoid = nn.Sigmoid()
-
-#     def forward(self, g, s):
-#         # Apply conv and bn to g and s
-#         Wg = self.conv1_g(g)
-#         Ws = self.conv1_s(s)
-
-#         # Sum and relu activation
-#         out = self.relu(Wg + Ws)
-
-#         # Another conv layer and sigmoid activation
-#         out = self.sigmoid(self.conv2(out))
-
-#         # Element-wise multiplication
-#         return out * s
-
-# x_audio = torch.randn((32, 128, 144))
-# x_visual = torch.randn((32, 128, 15))
-
-# # print(x_audio.shape)
-
-# x_audio_shape = x_audio.shape
-# x_visual_shape = x_visual.shape
-
-# # Instantiate the attention module
-# attention_module = FinalAttention(num_filters=128)
-
-# # Pass the tensors through the attention module
-# x_audio_attended = attention_module(x_audio, x_audio)
-# x_visual_attended = attention_module(x_visual, x_visual)
-
-
-# print(f"x_audio_attended shape: {x_audio_attended.shape}")
-# print(f"x_visual_attended shape: {x_visual_attended.shape}")

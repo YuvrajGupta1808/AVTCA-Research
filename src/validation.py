@@ -1,10 +1,6 @@
-'''
-This code is based on https://github.com/okankop/Efficient-3DCNNs
-'''
 import torch
-from torch.autograd import Variable
 import time
-from utils import AverageMeter, calculate_accuracy
+from src.utils import AverageMeter, calculate_accuracy
 
 # Class label lookup keyed by dataset name. Falls back to "class N" for unknown datasets.
 _CLASS_NAMES = {
@@ -60,12 +56,11 @@ def val_epoch_multimodal(epoch, data_loader, model, criterion, opt, logger, moda
         inputs_visual = inputs_visual.reshape(inputs_visual.shape[0] * inputs_visual.shape[1],
                                               inputs_visual.shape[2], inputs_visual.shape[3], inputs_visual.shape[4])
 
-        targets = targets.to(opt.device)
+        inputs_audio  = inputs_audio.to(opt.device)
+        inputs_visual = inputs_visual.to(opt.device)
+        targets       = targets.to(opt.device)
         with torch.no_grad():
-            inputs_visual = Variable(inputs_visual)
-            inputs_audio  = Variable(inputs_audio)
-            targets       = Variable(targets)
-        outputs = model(inputs_audio, inputs_visual)
+            outputs = model(inputs_audio, inputs_visual)
         loss = criterion(outputs, targets)
         all_preds.append(outputs.data.argmax(dim=1).cpu())
         all_targets.append(targets.data.cpu())
@@ -109,5 +104,4 @@ def val_epoch_multimodal(epoch, data_loader, model, criterion, opt, logger, moda
     return losses.avg.item(), top1.avg.item()
 
 def val_epoch(epoch, data_loader, model, criterion, opt, logger, modality='both', dist=None):
-    if opt.model == 'multimodalcnn':
-        return val_epoch_multimodal(epoch, data_loader, model, criterion, opt, logger, modality, dist=dist)
+    return val_epoch_multimodal(epoch, data_loader, model, criterion, opt, logger, modality, dist=dist)

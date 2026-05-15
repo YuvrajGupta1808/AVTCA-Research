@@ -60,8 +60,11 @@ def load_audio(audiofile, sr):
     return audios, sr
 
 def get_mfccs(y, sr):
-    mfcc = librosa.feature.mfcc(y=y, sr=sr, n_mfcc=10)
-    return mfcc
+    return librosa.feature.mfcc(y=y, sr=sr, n_mfcc=10)
+
+def get_mel(y, sr, n_mels=64):
+    mel = librosa.feature.melspectrogram(y=y, sr=sr, n_mels=n_mels)
+    return librosa.power_to_db(mel, ref=np.max)
 
 def _normalize_path(path):
     return path.strip().replace('\\', '/')
@@ -93,14 +96,18 @@ def _is_ravdess_root(path):
 
 def _candidate_roots(annotation_path, data_root):
     annotation_dir = os.path.dirname(os.path.abspath(annotation_path))
-    repo_root = os.path.dirname(annotation_dir)
+    # annotation is at <project>/preprocessing/ravdess/annotations.txt
+    # so go up two levels to reach project root
+    preprocessing_dir = os.path.dirname(annotation_dir)
+    project_root = os.path.dirname(preprocessing_dir)
 
     candidates = []
     for candidate in [
         data_root,
         os.environ.get('RAVDESS_ROOT'),
+        os.path.join(project_root, 'datasets', 'RAVDESS'),
+        os.path.join(project_root, 'RAVDESS'),
         os.path.join(annotation_dir, 'RAVDESS'),
-        os.path.join(repo_root, 'RAVDESS'),
         os.path.expanduser('~/RAVDESS'),
         '/scratch/RAVDESS',
         '/data/RAVDESS',
@@ -186,17 +193,21 @@ def make_dataset(subset, annotation_path, data_root=''):
        
 
 class RAVDESS(data.Dataset):
-    def __init__(self,                 
+    def __init__(self,
                  annotation_path,
                  subset,
                  spatial_transform=None,
-                 get_loader=get_default_video_loader, data_type = 'audiovisual', audio_transform=None,
-                 data_root=''):
+                 get_loader=get_default_video_loader,
+                 data_type='audiovisual',
+                 audio_transform=None,
+                 data_root='',
+                 audio_features='mfcc'):
         self.data = make_dataset(subset, annotation_path, data_root=data_root)
         self.spatial_transform = spatial_transform
-        self.audio_transform=audio_transform
+        self.audio_transform = audio_transform
         self.loader = get_loader()
-        self.data_type = data_type 
+        self.data_type = data_type
+        self.audio_features = audio_features
 
     def __getitem__(self, index):
         target = self.data[index]['label']
@@ -222,8 +233,10 @@ class RAVDESS(data.Dataset):
                  self.audio_transform.randomize_parameters()
                  y = self.audio_transform(y)     
                  
-            mfcc = get_mfccs(y, sr)            
-            audio_features = mfcc 
+            if self.audio_features == 'mel':
+                audio_features = get_mel(y, sr, n_mels=64)
+            else:
+                audio_features = get_mfccs(y, sr)
 
             if self.data_type == 'audio':
                 return audio_features, target

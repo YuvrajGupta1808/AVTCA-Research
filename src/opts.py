@@ -8,14 +8,15 @@ import argparse
 
 def parse_opts():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--annotation_path', default='ravdess_preprocessing/annotations.txt', type=str, help='Annotation file path')
+    parser.add_argument('--annotation_path', default='preprocessing/ravdess/annotations.txt', type=str, help='Annotation file path')
     parser.add_argument('--data_root', default='', type=str, help='Root directory containing the preprocessed RAVDESS ACTOR folders')
     parser.add_argument('--result_path', default='results', type=str, help='Result directory path')
     parser.add_argument('--store_name', default='model', type=str, help='Name to store checkpoints')
     parser.add_argument('--dataset', default='RAVDESS', type=str, help='Used dataset. Currently supporting Ravdess')
     parser.add_argument('--n_classes', default=8, type=int, help='Number of classes')
     
-    parser.add_argument('--model', default='multimodalcnn', type=str, help='')
+    parser.add_argument('--model', default='multimodal_cnn', type=str, help='Model architecture: multimodal_cnn | token_fusion')
+    parser.add_argument('--audio_features', default='mel', type=str, choices=['mfcc', 'mel'], help='Audio feature type. mel=64-channel mel spectrogram (best), mfcc=10-channel MFCC')
     parser.add_argument('--num_heads', default=1, type=int, help='number of heads, in the paper 1 or 4')
     
     parser.add_argument('--device', default='cuda', type=str, help='Specify the device to run. Defaults to cuda, fallsback to cpu')
@@ -26,7 +27,7 @@ def parse_opts():
     
     parser.add_argument('--learning_rate', default=0.06, type=float, help='Initial learning rate (divided by 10 while training by lr scheduler)')
     parser.add_argument('--momentum', default=0.9, type=float, help='Momentum')
-    parser.add_argument('--lr_steps', default=[40, 55, 65, 70, 200, 250], type=float, nargs="+", metavar='LRSteps', help='epochs to decay learning rate by 10')
+    parser.add_argument('--lr_steps', default=[40, 55, 65, 70, 200, 250], type=int, nargs="+", metavar='LRSteps', help='epochs to decay learning rate by 10')
     parser.add_argument('--dampening', default=0.9, type=float, help='dampening of SGD')
     parser.add_argument('--weight_decay', default=1e-3, type=float, help='Weight Decay')
     parser.add_argument('--lr_patience', default=10, type=int, help='Patience of LR scheduler. See documentation of ReduceLROnPlateau.')
