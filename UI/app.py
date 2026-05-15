@@ -22,17 +22,44 @@ with st.sidebar:
     known = discover_checkpoints(REPO_ROOT)
     if known:
         choice = st.selectbox("Available checkpoints", ["— select —"] + list(known.keys()))
-        auto_path = known.get(choice, "")
+        selected = known.get(choice)
+        auto_path = selected["path"] if selected else ""
+        selected_meta = selected.get("metadata", {}) if selected else {}
+        saved_audio_feature = selected.get("audio_feature", "mel") if selected else "mel"
     else:
         st.info("No checkpoints found under results*/ directories.")
         auto_path = ""
+        selected_meta = {}
+        saved_audio_feature = "mel"
 
     custom_path = st.text_input("Or enter custom .pth path")
     pth_path = custom_path.strip() or auto_path
 
     st.divider()
-    num_heads = st.selectbox("num_heads", [1, 2, 4, 8])
-    fusion    = st.selectbox("Fusion type", ["it", "ia", "lt"])
+    head_options = [1, 2, 4, 8]
+    saved_heads = selected_meta.get("num_heads", 1)
+    head_index = head_options.index(saved_heads) if saved_heads in head_options else 0
+    num_heads = st.selectbox("num_heads", head_options, index=head_index)
+
+    fusion_options = ["it", "ia", "lt"]
+    saved_fusion = selected_meta.get("fusion", "it")
+    fusion_index = fusion_options.index(saved_fusion) if saved_fusion in fusion_options else 0
+    fusion = st.selectbox("Fusion type", fusion_options, index=fusion_index)
+
+    audio_feature_options = ["mel", "mfcc", "mcc"]
+    feature_index = (
+        audio_feature_options.index(saved_audio_feature)
+        if saved_audio_feature in audio_feature_options else 0
+    )
+    audio_feature = st.selectbox("Audio feature", audio_feature_options, index=feature_index)
+
+    if selected_meta:
+        st.caption(
+            "Recommended config from saved run: "
+            f"`audio_feature={saved_audio_feature}` · "
+            f"`num_heads={selected_meta.get('num_heads', '?')}` · "
+            f"`fusion={selected_meta.get('fusion', '?')}`"
+        )
 
     if torch.cuda.is_available():
         default_device = "cuda"
@@ -82,8 +109,8 @@ if uploaded:
 
             try:
                 with st.status("Analysing video…", expanded=True) as status:
-                    st.write("Extracting audio and computing MFCCs…")
-                    audio = preprocess_audio(video_path)
+                    st.write(f"Extracting audio and computing {audio_feature.upper()} features…")
+                    audio = preprocess_audio(video_path, feature_type=audio_feature)
 
                     st.write("Detecting faces and sampling frames…")
                     video = preprocess_video(video_path)
