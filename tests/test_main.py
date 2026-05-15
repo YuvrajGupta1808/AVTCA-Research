@@ -2,30 +2,37 @@ import os
 import sys
 import unittest
 from unittest.mock import patch, MagicMock
-
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-class TestStartup(unittest.TestCase):
-    @patch('main.generate_model')
-    @patch('main.get_training_set', return_value=[])
-    @patch('main.get_validation_set', return_value=[])
-    @patch('torch.utils.data.DataLoader')
-    @patch('torch.load')
-    @patch('sys.argv', ['main.py', '--no_train', '--no_val', '--n_epochs', '1'])
-    def test_clean_startup(self, mock_load, mock_dl, mock_get_val, mock_get_train, mock_gen_model):
-        
-        mock_model = MagicMock()
-        mock_gen_model.return_value = (mock_model, [])
-        
-        import main # executes the main block if we mock __name__ or we just import and run
-        
-        # Test that without resume_path, torch.load is NOT called on results/model.pth
-        with patch('main.__name__', '__main__'):
-            # The __main__ block will execute parsing args and then run
-            # but wait, the module level might have already run. 
-            pass
-            
-        mock_load.assert_not_called()
+
+class TestOpts(unittest.TestCase):
+    """Smoke test: opts parse without errors and key values are set."""
+
+    def test_parse_does_not_crash(self):
+        from src.opts import parse_opts
+        with patch('sys.argv', ['main.py', '--n_epochs', '1', '--no_train', '--no_val']):
+            opt = parse_opts()
+            self.assertEqual(opt.n_epochs, 1)
+            self.assertFalse(opt.no_train is None)
+
+
+class TestModelFactory(unittest.TestCase):
+    """Smoke test: generate_model builds without errors for multimodal_cnn."""
+
+    def test_generate_model_cpu(self):
+        from src.model import generate_model
+        opt = MagicMock()
+        opt.model = 'multimodal_cnn'
+        opt.n_classes = 8
+        opt.fusion = 'it'
+        opt.sample_duration = 15
+        opt.pretrain_path = 'None'
+        opt.num_heads = 1
+        opt.device = 'cpu'
+        model, params = generate_model(opt)
+        self.assertIsNotNone(model)
+        self.assertIsNotNone(params)
+
 
 if __name__ == '__main__':
     unittest.main()

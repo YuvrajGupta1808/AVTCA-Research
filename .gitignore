@@ -1,13 +1,35 @@
-RAVDESS/
-CMU-MOSEI/
-mosei_preprocessing/annotations.txt
-mosei_preprocessing/__pycache__/
+# Python
 __pycache__/
-datasets/__pycache__/
-models/__pycache__/
+**/__pycache__/
+*.py[cod]
+*.pyo
+
+# Dataset raw data (large — stored locally, not in repo)
+datasets/RAVDESS/
+datasets/CMU-MOSEI/
+
+# Preprocessed artifacts inside dataset folders
+datasets/**/*.npy
+datasets/**/*.wav
+datasets/**/*_croppad.*
+datasets/**/*_facecroppad.*
+
+# Training outputs
 results/
-results_retrain_h4_e70/
-*.pyc
+results*/
+
+# Pretrained weights (large binary files)
+pretrained/*.pth
+
+# Generated annotation runtime file
+preprocessing/ravdess/annotations_runtime.txt
+preprocessing/ravdess/processed.txt
+
+# Claude Code local settings
 .claude/
-processed.txt
-ravdess_preprocessing/annotations_runtime.txt
+
+# OS / editor
+.DS_Store
+.env
+*.swp
+*.swo
