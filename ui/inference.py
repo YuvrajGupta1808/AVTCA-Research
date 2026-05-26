@@ -16,7 +16,8 @@ from PIL import Image
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, REPO_ROOT)
 
-from src.model import generate_model
+from src.engine.checkpointing import load_state_dict_flexible
+from src.models.factory import generate_model
 
 EMOTION_LABELS = ['neutral', 'calm', 'happy', 'sad', 'angry', 'fearful', 'disgust', 'surprised']
 SAMPLE_RATE = 22050
@@ -24,6 +25,8 @@ TARGET_SAMPLES = int(SAMPLE_RATE * 3.6)  # 79,380
 N_FRAMES = 15
 N_MELS = 64
 N_MFCC = 10
+FACE_PAD_RATIO = 0.18
+DETECT_PAD_RATIO = 0.15
 
 
 def _load_run_metadata(run_dir):
@@ -104,11 +107,7 @@ def load_model(pth_path, num_heads, fusion, device):
     model, _ = generate_model(opt)
     model = model.to(device)
 
-    raw = torch.load(pth_path, map_location=device)
-    state_dict = raw.get('state_dict', raw) if isinstance(raw, dict) else raw
-    # Strip DataParallel 'module.' prefix so we can load into the bare model
-    state_dict = {(k[7:] if k.startswith('module.') else k): v for k, v in state_dict.items()}
-    model.load_state_dict(state_dict)
+    load_state_dict_flexible(model, pth_path, map_location=device)
     model.eval()
     return model
 
@@ -197,7 +196,7 @@ def preprocess_video(video_path):
     try:
         from facenet_pytorch import MTCNN as _MTCNN
         mtcnn_device = 'cuda' if torch.cuda.is_available() else 'cpu'
-        mtcnn = _MTCNN(keep_all=False, device=mtcnn_device)
+        mtcnn = _MTCNN(keep_all=True, device=mtcnn_device)
     except ImportError:
         mtcnn = None  # fall back to full-frame resize
 
@@ -217,30 +216,113 @@ def preprocess_video(video_path):
     indices = np.linspace(0, len(raw_frames) - 1, N_FRAMES, dtype=int)
     sampled = [raw_frames[i] for i in indices]
 
-    face_tensors = [_extract_face(frame, mtcnn) for frame in sampled]
+    tracker = {'last_box': None}
+    face_tensors = [_extract_face(frame, mtcnn, tracker) for frame in sampled]
     stacked = torch.stack(face_tensors, dim=0)  # (15, 3, 224, 224) [T, C, H, W]
     return stacked.permute(1, 0, 2, 3)          # (3, 15, 224, 224) [C, T, H, W]
 
 
-def _extract_face(frame_rgb, mtcnn):
+def _extract_face(frame_rgb, mtcnn, tracker=None):
     """Detect and crop face from an RGB numpy frame. Returns (3, 224, 224) in [0, 1].
 
     Falls back to a full-frame resize if MTCNN is unavailable or detects nothing.
     """
-    if mtcnn is not None:
-        boxes, _ = mtcnn.detect(Image.fromarray(frame_rgb))
-        if boxes is not None and len(boxes) > 0:
-            x1, y1, x2, y2 = [int(round(c)) for c in boxes[0]]
-            h, w = frame_rgb.shape[:2]
-            x1, y1 = max(0, x1), max(0, y1)
-            x2, y2 = min(w, x2), min(h, y2)
-            if x2 > x1 and y2 > y1:
-                face = cv2.resize(frame_rgb[y1:y2, x1:x2], (224, 224))
-                return torch.tensor(face, dtype=torch.float32).permute(2, 0, 1) / 255.0
+    tracker = tracker or {}
+    box = _detect_face_box(frame_rgb, mtcnn, tracker.get('last_box'))
+    if box is not None:
+        tracker['last_box'] = box
+        face = _crop_face(frame_rgb, box)
+        return torch.tensor(face, dtype=torch.float32).permute(2, 0, 1) / 255.0
+
+    if tracker.get('last_box') is not None:
+        face = _crop_face(frame_rgb, tracker['last_box'])
+        return torch.tensor(face, dtype=torch.float32).permute(2, 0, 1) / 255.0
 
     # No face found — resize full frame so the model still gets visual signal
     resized = cv2.resize(frame_rgb, (224, 224))
     return torch.tensor(resized, dtype=torch.float32).permute(2, 0, 1) / 255.0
+
+
+def _detect_face_box(frame_rgb, mtcnn, previous_box=None):
+    if mtcnn is None:
+        return None
+
+    padded_frame, pad_x, pad_y = _pad_frame_for_detection(frame_rgb)
+    boxes, probs = mtcnn.detect(Image.fromarray(padded_frame))
+    if boxes is None or len(boxes) == 0:
+        return None
+
+    frame_h, frame_w = frame_rgb.shape[:2]
+    candidates = []
+    for idx, box in enumerate(boxes):
+        prob = float(probs[idx]) if probs is not None else 1.0
+        if prob < 0.85:
+            continue
+        x1, y1, x2, y2 = [float(coord) for coord in box]
+        x1 -= pad_x
+        x2 -= pad_x
+        y1 -= pad_y
+        y2 -= pad_y
+        x1 = max(0.0, min(frame_w, x1))
+        x2 = max(0.0, min(frame_w, x2))
+        y1 = max(0.0, min(frame_h, y1))
+        y2 = max(0.0, min(frame_h, y2))
+        if x2 - x1 < 8 or y2 - y1 < 8:
+            continue
+        candidates.append((x1, y1, x2, y2, prob))
+
+    if not candidates:
+        return None
+
+    best = max(candidates, key=lambda candidate: _box_score(candidate, previous_box))
+    return tuple(int(round(value)) for value in best[:4])
+
+
+def _pad_frame_for_detection(frame_rgb):
+    height, width = frame_rgb.shape[:2]
+    pad_y = max(16, int(round(height * DETECT_PAD_RATIO)))
+    pad_x = max(16, int(round(width * DETECT_PAD_RATIO)))
+    padded = cv2.copyMakeBorder(
+        frame_rgb,
+        pad_y,
+        pad_y,
+        pad_x,
+        pad_x,
+        borderType=cv2.BORDER_REFLECT_101,
+    )
+    return padded, pad_x, pad_y
+
+
+def _box_score(candidate, previous_box):
+    x1, y1, x2, y2, prob = candidate
+    area = max(1.0, (x2 - x1) * (y2 - y1))
+    score = prob * area
+    if previous_box is None:
+        return score
+
+    px1, py1, px2, py2 = previous_box
+    prev_cx = (px1 + px2) / 2.0
+    prev_cy = (py1 + py2) / 2.0
+    cur_cx = (x1 + x2) / 2.0
+    cur_cy = (y1 + y2) / 2.0
+    distance = np.hypot(cur_cx - prev_cx, cur_cy - prev_cy)
+    return score - (distance * 250.0)
+
+
+def _crop_face(frame_rgb, box):
+    x1, y1, x2, y2 = box
+    height, width = frame_rgb.shape[:2]
+    box_w = max(1, x2 - x1)
+    box_h = max(1, y2 - y1)
+    pad_x = int(round(box_w * FACE_PAD_RATIO))
+    pad_y = int(round(box_h * FACE_PAD_RATIO))
+
+    x1 = max(0, x1 - pad_x)
+    y1 = max(0, y1 - pad_y)
+    x2 = min(width, x2 + pad_x)
+    y2 = min(height, y2 + pad_y)
+    face = frame_rgb[y1:y2, x1:x2]
+    return cv2.resize(face, (224, 224))
 
 
 def predict(model, audio_tensor, video_tensor, device):
