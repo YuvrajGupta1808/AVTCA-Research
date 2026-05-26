@@ -1,7 +1,7 @@
 import os
 import torch
 import time
-from src.utils import AverageMeter, calculate_accuracy, calculate_accuracy1
+from src.utils.common import AverageMeter, calculate_accuracy
 
 def _grad_norm(model):
     total = 0.0
@@ -76,7 +76,6 @@ def train_epoch_multimodal(epoch, data_loader, model, criterion, optimizer, opt,
         prec1, prec5 = calculate_accuracy(outputs.data, targets.data, topk=(1,5))
         top1.update(prec1, audio_inputs.size(0))
         top5.update(prec5, audio_inputs.size(0))
-        acc=calculate_accuracy1(outputs.data, targets.data, binary=False)
         optimizer.zero_grad()
         loss.backward()
         gnorm = _grad_norm(model)
@@ -93,7 +92,6 @@ def train_epoch_multimodal(epoch, data_loader, model, criterion, optimizer, opt,
             'prec1': top1.val.item(),
             'prec5': top5.val.item(),
             'lr': optimizer.param_groups[0]['lr'],
-            'accuracy': acc
         })
         if i % 10 == 0:
             mem_str = ''
@@ -119,8 +117,10 @@ def train_epoch_multimodal(epoch, data_loader, model, criterion, optimizer, opt,
                       lr=optimizer.param_groups[0]['lr'],
                       gnorm=gnorm,
                       mem=mem_str))
-    print(f'Epoch {epoch} summary — loss: {losses.avg:.4f}  prec@1: {top1.avg:.4f}  '
-          f'prec@5: {top5.avg:.4f}  acc: {acc:.4f}  lr: {optimizer.param_groups[0]["lr"]:.6f}')
+    print(
+        f'Epoch {epoch} summary — loss: {losses.avg:.4f}  prec@1: {top1.avg:.4f}  '
+        f'prec@5: {top5.avg:.4f}  lr: {optimizer.param_groups[0]["lr"]:.6f}'
+    )
 
     epoch_logger.log({
         'epoch': epoch,
@@ -128,18 +128,14 @@ def train_epoch_multimodal(epoch, data_loader, model, criterion, optimizer, opt,
         'prec1': top1.avg.item(),
         'prec5': top5.avg.item(),
         'lr': optimizer.param_groups[0]['lr'],
-        'accuracy': acc
     })
 
  
 def train_epoch(epoch, data_loader, model, criterion, optimizer, opt,
                 epoch_logger, batch_logger):
-    print('train at epoch {}'.format(epoch))
-    
     if opt.model == 'multimodal_cnn':
         train_epoch_multimodal(epoch, data_loader, model, criterion, optimizer, opt, epoch_logger, batch_logger)
         model_path = os.path.join(opt.result_path, 'model.pth')
         torch.save(obj=model.state_dict(), f=model_path)
         print('Saved model weights to {}'.format(model_path))
         return
-    
