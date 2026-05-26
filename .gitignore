@@ -7,6 +7,8 @@ __pycache__/
 # Dataset raw data (large — stored locally, not in repo)
 datasets/RAVDESS/
 datasets/CMU-MOSEI/
+datasets/CREMAD/
+
 
 # Preprocessed artifacts inside dataset folders
 datasets/**/*.npy
@@ -27,6 +29,8 @@ preprocessing/ravdess/processed.txt
 
 # Claude Code local settings
 .claude/
+.cursor/
+.vscode/
 
 # OS / editor
 .DS_Store
