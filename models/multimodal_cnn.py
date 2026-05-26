@@ -5,6 +5,18 @@ from models.efficient_face import LocalFeatureExtractor, InvertedResidual
 from models.transformer import AttentionBlock, Attention
 from torch.nn import MultiheadAttention
 
+
+class AttentionPool(nn.Module):
+    """Learned weighted sum over a temporal sequence — preserves which time steps matter."""
+    def __init__(self, dim):
+        super().__init__()
+        self.proj = nn.Linear(dim, 1)
+
+    def forward(self, x):
+        # x: (B, T, dim)
+        weights = torch.softmax(self.proj(x), dim=1)   # (B, T, 1)
+        return (weights * x).sum(dim=1)                # (B, dim)
+
 def conv1d_block(in_channels, out_channels, kernel_size=3, stride=1, padding='same'):
     return nn.Sequential(nn.Conv1d(in_channels, out_channels, kernel_size=kernel_size,stride=stride, padding=padding),nn.BatchNorm1d(out_channels),
                                    nn.ReLU(inplace=True)) 
@@ -104,8 +116,14 @@ def init_feature_extractor(model, path):
     checkpoint = torch.load(path, map_location=torch.device('cpu'))
     pre_trained_dict = checkpoint['state_dict']
     pre_trained_dict = {key.replace("module.", ""): value for key, value in pre_trained_dict.items()}
-    print('Initializing efficientnet...')
-    model.load_state_dict(pre_trained_dict, strict=False)
+    # Load only weights whose shapes match — newer PyTorch raises on shape mismatch even with strict=False
+    model_dict = model.state_dict()
+    compatible = {k: v for k, v in pre_trained_dict.items()
+                  if k in model_dict and model_dict[k].shape == v.shape}
+    skipped = len([k for k in pre_trained_dict if k in model_dict and model_dict[k].shape != pre_trained_dict[k].shape])
+    model_dict.update(compatible)
+    print(f'Initializing efficientnet... loaded {len(compatible)} layers, skipped {skipped} shape-mismatched')
+    model.load_state_dict(model_dict)
     print('Loaded efficientnet checkpoint...')
 
     
@@ -187,10 +205,15 @@ class MultiModalCNN(nn.Module):
                 self.va = AttentionBlock(in_dim_k=input_dim_audio, in_dim_q=input_dim_video, out_dim=e_dim, num_heads=num_heads)
             elif fusion == 'it':
                 input_dim_video = input_dim_video // 2
+                # Subsample audio to match video's temporal length before cross-attention
+                self.audio_temporal_pool = nn.AdaptiveAvgPool1d(seq_length)
                 self.av1 = AttentionBlock(in_dim_k=input_dim_video, in_dim_q=input_dim_audio, out_dim=input_dim_audio, num_heads=num_heads)
                 self.va1 = AttentionBlock(in_dim_k=input_dim_audio, in_dim_q=input_dim_video, out_dim=input_dim_video, num_heads=num_heads)
                 self.audioCrossAttention  = AttentionBlock(in_dim_k=e_dim, in_dim_q=e_dim, out_dim=e_dim, num_heads=num_heads)
                 self.visualCrossAttention = AttentionBlock(in_dim_k=e_dim, in_dim_q=e_dim, out_dim=e_dim, num_heads=num_heads)
+                self.attn_dropout = nn.Dropout(0.1)
+                self.attn_pool_audio = AttentionPool(e_dim)
+                self.attn_pool_video = AttentionPool(e_dim)
         
         elif fusion in ['ia']:
             input_dim_video = input_dim_video // 2
@@ -226,6 +249,16 @@ class MultiModalCNN(nn.Module):
         x_visual = self.visual_model.forward_features(x_visual)
         x_visual = self.visual_model.forward_stage1(x_visual)
 
+        # Align audio temporal dimension to video (fixes ~11× mismatch at cross-attention)
+        x_audio = self.audio_temporal_pool(x_audio)
+
+        # Modality dropout — forces each encoder to be independently capable
+        if self.training:
+            audio_mask  = (torch.rand(x_audio.size(0),  1, 1, device=x_audio.device)  > 0.15).float()
+            visual_mask = (torch.rand(x_visual.size(0), 1, 1, device=x_visual.device) > 0.15).float()
+            x_audio  = x_audio  * audio_mask
+            x_visual = x_visual * visual_mask
+
         proj_x_a = x_audio.permute(0, 2, 1)
         proj_x_v = x_visual.permute(0, 2, 1)
 
@@ -241,23 +274,27 @@ class MultiModalCNN(nn.Module):
         x_audio  = self.audio_model.forward_stage2(x_audio)
         x_visual = self.visual_model.forward_stage2(x_visual)
 
+        # (T, B, C) format required by PyTorch MultiheadAttention
         x_audio  = x_audio.permute(2, 0, 1)
         x_visual = x_visual.permute(2, 0, 1)
 
-        x_audio_attention,  _ = self.audioAttention( x_audio,  x_audio,  x_audio)
-        x_visual_attention, _ = self.visualAttention(x_visual, x_visual, x_visual)
+        # Cross-modal attention: audio queries video, video queries audio
+        x_audio_attention,  _ = self.audioAttention( x_audio,  x_visual, x_visual)
+        x_visual_attention, _ = self.visualAttention(x_visual, x_audio,  x_audio)
 
-        x_audio_attention  = x_audio_attention.permute(1, 2, 0)
-        x_visual_attention = x_visual_attention.permute(1, 2, 0)
+        # Residual + dropout
+        x_audio  = x_audio  + self.attn_dropout(x_audio_attention)
+        x_visual = x_visual + self.attn_dropout(x_visual_attention)
 
-        x_audio_ca  = x_audio_attention.permute(0, 2, 1)
-        x_visual_ca = x_visual_attention.permute(0, 2, 1)
+        x_audio_ca  = x_audio.permute(1, 0, 2)   # (B, T, C)
+        x_visual_ca = x_visual.permute(1, 0, 2)
 
         x_audio_final  = self.audioCrossAttention( xk=x_visual_ca, xq=x_audio_ca)
         x_visual_final = self.visualCrossAttention(xk=x_audio_ca,  xq=x_visual_ca)
 
-        audio_pooled = x_audio_final.max(dim=1).values
-        video_pooled = x_visual_final.max(dim=1).values
+        # Learned attention pooling over temporal dimension
+        audio_pooled = self.attn_pool_audio(x_audio_final)
+        video_pooled = self.attn_pool_video(x_visual_final)
 
         x  = torch.cat((audio_pooled, video_pooled), dim=-1)
         x1 = self.classifier_1(x)

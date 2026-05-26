@@ -10,6 +10,28 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from inference import discover_checkpoints, load_model, preprocess_audio, preprocess_video, predict
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+DEFAULT_CHECKPOINT = os.environ.get("AVTCA_DEFAULT_CHECKPOINT", "").strip()
+AUTOLOAD_MODEL = os.environ.get("AVTCA_AUTOLOAD_MODEL", "").strip().lower() in {
+    "1",
+    "true",
+    "yes",
+}
+
+
+def try_load_model(pth_path, num_heads, fusion, device):
+    if not pth_path:
+        st.error("Select or enter a checkpoint path.")
+        return False
+    if not os.path.isfile(pth_path):
+        st.error(f"File not found:\n`{pth_path}`")
+        return False
+
+    with st.spinner("Loading model weights…"):
+        model = load_model(pth_path, num_heads, fusion, device)
+        st.session_state.model = model
+        st.session_state.device = device
+        st.session_state.loaded_checkpoint = pth_path
+    return True
 
 st.set_page_config(page_title="AVTCA Emotion Recognizer", layout="wide")
 st.title("AVTCA Emotion Recognition")
@@ -21,7 +43,15 @@ with st.sidebar:
 
     known = discover_checkpoints(REPO_ROOT)
     if known:
-        choice = st.selectbox("Available checkpoints", ["— select —"] + list(known.keys()))
+        options = ["— select —"] + list(known.keys())
+        default_choice_index = 0
+        if DEFAULT_CHECKPOINT:
+            normalized_default = os.path.abspath(DEFAULT_CHECKPOINT)
+            for idx, key in enumerate(options[1:], start=1):
+                if os.path.abspath(known[key]["path"]) == normalized_default:
+                    default_choice_index = idx
+                    break
+        choice = st.selectbox("Available checkpoints", options, index=default_choice_index)
         selected = known.get(choice)
         auto_path = selected["path"] if selected else ""
         selected_meta = selected.get("metadata", {}) if selected else {}
@@ -33,7 +63,7 @@ with st.sidebar:
         saved_audio_feature = "mel"
 
     custom_path = st.text_input("Or enter custom .pth path")
-    pth_path = custom_path.strip() or auto_path
+    pth_path = custom_path.strip() or DEFAULT_CHECKPOINT or auto_path
 
     st.divider()
     head_options = [1, 2, 4, 8]
@@ -73,22 +103,30 @@ with st.sidebar:
 
     st.divider()
     if st.button("Load Model", type="primary"):
-        if not pth_path:
-            st.error("Select or enter a checkpoint path.")
-        elif not os.path.isfile(pth_path):
-            st.error(f"File not found:\n`{pth_path}`")
-        else:
-            with st.spinner("Loading model weights…"):
-                try:
-                    model = load_model(pth_path, num_heads, fusion, device)
-                    st.session_state.model = model
-                    st.session_state.device = device
-                    st.success(f"Model ready on **{device}**")
-                except Exception as exc:
-                    st.error(f"Load failed: {exc}")
+        try:
+            if try_load_model(pth_path, num_heads, fusion, device):
+                st.success(f"Model ready on **{device}**")
+        except Exception as exc:
+            st.error(f"Load failed: {exc}")
+
+    should_autoload = (
+        AUTOLOAD_MODEL and
+        "model" not in st.session_state and
+        st.session_state.get("autoload_attempted") != pth_path
+    )
+    if should_autoload:
+        st.session_state.autoload_attempted = pth_path
+        try:
+            if try_load_model(pth_path, num_heads, fusion, device):
+                st.success(f"Auto-loaded model on **{device}**")
+        except Exception as exc:
+            st.error(f"Auto-load failed: {exc}")
 
     if "model" in st.session_state:
-        st.caption(f"Active · device: `{st.session_state.device}`")
+        st.caption(
+            f"Active · device: `{st.session_state.device}` · "
+            f"checkpoint: `{st.session_state.get('loaded_checkpoint', pth_path)}`"
+        )
 
 
 # ── Main area: upload + predict ───────────────────────────────────────────────
