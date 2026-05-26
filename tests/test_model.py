@@ -5,7 +5,7 @@ import unittest
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from models.multimodal_cnn import MultiModalCNN
-from src.utils import classification_metrics_from_lists
+from src.utils.common import classification_metrics_from_lists
 
 
 class TestMultiModalCNN(unittest.TestCase):
