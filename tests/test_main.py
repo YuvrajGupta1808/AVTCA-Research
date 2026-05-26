@@ -9,7 +9,7 @@ class TestOpts(unittest.TestCase):
     """Smoke test: opts parse without errors and key values are set."""
 
     def test_parse_does_not_crash(self):
-        from src.opts import parse_opts
+        from src.config.opts import parse_opts
         with patch('sys.argv', ['main.py', '--n_epochs', '1', '--no_train', '--no_val']):
             opt = parse_opts()
             self.assertEqual(opt.n_epochs, 1)
@@ -20,7 +20,7 @@ class TestModelFactory(unittest.TestCase):
     """Smoke test: generate_model builds without errors for multimodal_cnn."""
 
     def test_generate_model_cpu(self):
-        from src.model import generate_model
+        from src.models.factory import generate_model
         opt = MagicMock()
         opt.model = 'multimodal_cnn'
         opt.n_classes = 8
