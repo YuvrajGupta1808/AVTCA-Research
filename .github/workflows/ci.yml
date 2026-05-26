@@ -43,20 +43,20 @@ jobs:
           from models.multimodal_cnn import MultiModalCNN
           from models.transformer import AttentionBlock, Attention
           from models.efficient_face import LocalFeatureExtractor, InvertedResidual
-          from src.opts import parse_opts
-          from src.model import generate_model
-          from src.dataset import DATASET_REGISTRY
-          from src.utils import AverageMeter, Logger, calculate_accuracy
-          from src import transforms
+          from src.config.opts import parse_opts
+          from src.models.factory import generate_model
+          from src.data.dataset import DATASET_REGISTRY
+          from src.utils.common import AverageMeter, Logger, calculate_accuracy
+          from src.data import transforms
           print('All imports OK')
           "
 
-      - name: Check dataset registry (RAVDESS only)
+      - name: Check dataset registry
         run: |
           python -c "
           import sys; sys.path.insert(0, '.')
-          from src.dataset import DATASET_REGISTRY
-          assert set(DATASET_REGISTRY.keys()) == {'RAVDESS'}, f'Unexpected: {set(DATASET_REGISTRY.keys())}'
+          from src.data.dataset import DATASET_REGISTRY
+          assert set(DATASET_REGISTRY.keys()) == {'RAVDESS', 'CREMAD'}, f'Unexpected: {set(DATASET_REGISTRY.keys())}'
           print('Dataset registry OK')
           "
 
