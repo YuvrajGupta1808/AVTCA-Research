@@ -36,6 +36,68 @@ class TestMultiModalCNN(unittest.TestCase):
             output = model(audio_x, visual_x)
         self.assertEqual(output.shape, (2, 8))
 
+    def test_audio_channel_attention_forward_smoke(self):
+        model = MultiModalCNN(
+            num_classes=8,
+            fusion='it',
+            seq_length=15,
+            pretr_ef='None',
+            num_heads=4,
+            audio_channel_attention=True,
+        )
+        model.eval()
+        audio_x = torch.randn(2, 64, 157)
+        visual_x = torch.randn(2, 3, 15, 224, 224)
+        visual_x = visual_x.permute(0, 2, 1, 3, 4).contiguous().view(2 * 15, 3, 224, 224)
+        with torch.no_grad():
+            output = model(audio_x, visual_x)
+        self.assertEqual(output.shape, (2, 8))
+
+    def test_attention_local_visual_backbone_forward_smoke(self):
+        model = MultiModalCNN(
+            num_classes=8,
+            fusion='it',
+            seq_length=15,
+            pretr_ef='None',
+            num_heads=4,
+            visual_backbone='attention_local',
+        )
+        model.eval()
+        audio_x = torch.randn(2, 64, 157)
+        visual_x = torch.randn(2, 3, 15, 224, 224)
+        visual_x = visual_x.permute(0, 2, 1, 3, 4).contiguous().view(2 * 15, 3, 224, 224)
+        with torch.no_grad():
+            output = model(audio_x, visual_x)
+        self.assertEqual(output.shape, (2, 8))
+
+    def test_attention_local_stride_conv_pooling_forward_smoke(self):
+        model = MultiModalCNN(
+            num_classes=8,
+            fusion='it',
+            seq_length=15,
+            pretr_ef='None',
+            num_heads=4,
+            visual_backbone='attention_local',
+            visual_stem_pooling='stride_conv',
+        )
+        model.eval()
+        audio_x = torch.randn(2, 64, 157)
+        visual_x = torch.randn(2, 3, 15, 224, 224)
+        visual_x = visual_x.permute(0, 2, 1, 3, 4).contiguous().view(2 * 15, 3, 224, 224)
+        with torch.no_grad():
+            output = model(audio_x, visual_x)
+        self.assertEqual(output.shape, (2, 8))
+
+    def test_unknown_visual_backbone_rejected(self):
+        with self.assertRaises(ValueError):
+            MultiModalCNN(
+                num_classes=8,
+                fusion='it',
+                seq_length=15,
+                pretr_ef='None',
+                visual_backbone='unknown',
+            )
+
 
 class TestMetrics(unittest.TestCase):
     def test_classification_metrics(self):

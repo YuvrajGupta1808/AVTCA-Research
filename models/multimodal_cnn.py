@@ -1,6 +1,6 @@
 import torch
 import torch.nn as nn
-from models.modulator import Modulator
+from models.modulator import Channel, Spatial, Modulator
 from models.efficient_face import LocalFeatureExtractor, InvertedResidual
 from models.transformer import AttentionBlock, Attention
 from torch.nn import MultiheadAttention
@@ -16,6 +16,23 @@ class AttentionPool(nn.Module):
         # x: (B, T, dim)
         weights = torch.softmax(self.proj(x), dim=1)   # (B, T, 1)
         return (weights * x).sum(dim=1)                # (B, dim)
+
+
+class TemporalChannelGate(nn.Module):
+    """Squeeze-and-excitation gate for temporal feature maps."""
+    def __init__(self, channels, reduction=4):
+        super().__init__()
+        hidden = max(channels // reduction, 1)
+        self.gate = nn.Sequential(
+            nn.AdaptiveAvgPool1d(1),
+            nn.Conv1d(channels, hidden, kernel_size=1),
+            nn.ReLU(inplace=True),
+            nn.Conv1d(hidden, channels, kernel_size=1),
+            nn.Sigmoid(),
+        )
+
+    def forward(self, x):
+        return x * self.gate(x)
 
 def conv1d_block(in_channels, out_channels, kernel_size=3, stride=1, padding='same'):
     return nn.Sequential(nn.Conv1d(in_channels, out_channels, kernel_size=kernel_size,stride=stride, padding=padding),nn.BatchNorm1d(out_channels),
@@ -110,6 +127,128 @@ class EfficientFaceTemporal(nn.Module):
         
       
 
+class AttentionLocalVisualTemporal(nn.Module):
+    """Diagram-style visual branch with explicit channel, spatial, and local paths.
+
+    This keeps the same public interface as EfficientFaceTemporal so the rest of
+    the audiovisual fusion stack can switch visual extractors without changes.
+    """
+
+    def __init__(
+        self,
+        stages_repeats,
+        stages_out_channels,
+        num_classes=7,
+        im_per_sample=25,
+        stem_pooling='maxpool',
+    ):
+        super(AttentionLocalVisualTemporal, self).__init__()
+
+        if len(stages_repeats) != 3:
+            raise ValueError('expected stages_repeats as list of 3 positive ints')
+        if len(stages_out_channels) != 5:
+            raise ValueError('expected stages_out_channels as list of 5 positive ints')
+        if stem_pooling not in ['maxpool', 'stride_conv']:
+            raise ValueError('expected stem_pooling to be maxpool or stride_conv')
+
+        input_channels = 3
+        stem_channels = stages_out_channels[0]
+        local_channels = stages_out_channels[1]
+        self.stem_pooling = stem_pooling
+
+        self.conv1 = nn.Sequential(
+            nn.Conv2d(input_channels, stem_channels, 3, 2, 1, bias=False),
+            nn.BatchNorm2d(stem_channels),
+            nn.ReLU(inplace=True),
+        )
+        if stem_pooling == 'maxpool':
+            self.stem_pool = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
+        else:
+            self.stem_pool = nn.Sequential(
+                nn.Conv2d(stem_channels, stem_channels, 3, 2, 1, bias=False),
+                nn.BatchNorm2d(stem_channels),
+                nn.ReLU(inplace=True),
+            )
+
+        self.channel_att = Channel(stem_channels)
+        self.spatial_att = Spatial(stem_channels)
+        self.local = LocalFeatureExtractor(stem_channels, local_channels, 1)
+
+        # Smaller than EfficientFace stage2, but still produces the same feature
+        # shape as the local branch so both paths can be fused by addition.
+        attention_blocks = [InvertedResidual(stem_channels, local_channels, 2)]
+        for _ in range(max(stages_repeats[0] - 1, 0)):
+            attention_blocks.append(InvertedResidual(local_channels, local_channels, 1))
+        self.attention_reduce = nn.Sequential(*attention_blocks)
+
+        input_channels = local_channels
+        for name, repeats, output_channels in zip(
+            ['stage3', 'stage4'],
+            stages_repeats[1:],
+            stages_out_channels[2:4],
+        ):
+            seq = [InvertedResidual(input_channels, output_channels, 2)]
+            for _ in range(repeats - 1):
+                seq.append(InvertedResidual(output_channels, output_channels, 1))
+            setattr(self, name, nn.Sequential(*seq))
+            input_channels = output_channels
+
+        output_channels = stages_out_channels[-1]
+        self.conv5 = nn.Sequential(
+            nn.Conv2d(input_channels, output_channels, 1, 1, 0, bias=False),
+            nn.BatchNorm2d(output_channels),
+            nn.ReLU(inplace=True),
+        )
+
+        self.conv1d_0 = conv1d_block(output_channels, 64)
+        self.conv1d_1 = conv1d_block(64, 64)
+        self.conv1d_2 = conv1d_block(64, 128)
+        self.conv1d_3 = conv1d_block(128, 128)
+        self.classifier_1 = nn.Sequential(nn.Linear(128, num_classes))
+        self.im_per_sample = im_per_sample
+
+    def forward_features(self, x):
+        x = self.conv1(x)
+        x = self.stem_pool(x)
+
+        channel_map = self.channel_att(x)
+        spatial_map = self.spatial_att(x)
+        attended = torch.sigmoid(channel_map * spatial_map) * x
+
+        x = self.attention_reduce(attended) + self.local(x)
+        x = self.stage3(x)
+        x = self.stage4(x)
+        x = self.conv5(x)
+        x = x.mean([2, 3])
+        return x
+
+    def forward_stage1(self, x):
+        assert x.shape[0] % self.im_per_sample == 0, "Batch size is not a multiple of sequence length."
+        n_samples = x.shape[0] // self.im_per_sample
+        x = x.view(n_samples, self.im_per_sample, x.shape[1])
+        x = x.permute(0, 2, 1)
+        x = self.conv1d_0(x)
+        x = self.conv1d_1(x)
+        return x
+
+    def forward_stage2(self, x):
+        x = self.conv1d_2(x)
+        x = self.conv1d_3(x)
+        return x
+
+    def forward_classifier(self, x):
+        x = x.mean([-1])
+        x1 = self.classifier_1(x)
+        return x1
+
+    def forward(self, x):
+        x = self.forward_features(x)
+        x = self.forward_stage1(x)
+        x = self.forward_stage2(x)
+        x = self.forward_classifier(x)
+        return x
+
+
 def init_feature_extractor(model, path):
     if path == 'None' or path is None:
         return
@@ -185,12 +324,38 @@ class AudioCNNPool(nn.Module):
 
 
 class MultiModalCNN(nn.Module):
-    def __init__(self, num_classes=8, fusion='it', seq_length=15, pretr_ef='None', num_heads=1):
+    def __init__(
+        self,
+        num_classes=8,
+        fusion='it',
+        seq_length=15,
+        pretr_ef='None',
+        num_heads=1,
+        audio_channel_attention=False,
+        visual_backbone='efficientface',
+        visual_stem_pooling='maxpool',
+    ):
         super(MultiModalCNN, self).__init__()
         assert fusion in ['ia', 'it', 'lt'], f'Unsupported fusion method: {fusion}'
 
         self.audio_model = AudioCNNPool(num_classes=num_classes)
-        self.visual_model = EfficientFaceTemporal([4, 8, 4], [29, 116, 232, 464, 1024], num_classes, seq_length)
+        self.visual_backbone = visual_backbone
+        if visual_backbone == 'efficientface':
+            self.visual_model = EfficientFaceTemporal([4, 8, 4], [29, 116, 232, 464, 1024], num_classes, seq_length)
+        elif visual_backbone == 'attention_local':
+            self.visual_model = AttentionLocalVisualTemporal(
+                [2, 4, 2],
+                [29, 116, 232, 464, 1024],
+                num_classes,
+                seq_length,
+                stem_pooling=visual_stem_pooling,
+            )
+        else:
+            raise ValueError(
+                'Unsupported visual_backbone "{}". Expected efficientface or attention_local.'.format(
+                    visual_backbone
+                )
+            )
 
         init_feature_extractor(self.visual_model, pretr_ef)
                            
@@ -198,6 +363,8 @@ class MultiModalCNN(nn.Module):
         input_dim_video = 128
         input_dim_audio = 128
         self.fusion=fusion
+        self.audio_channel_attention = audio_channel_attention
+        self.audio_feature_gate = TemporalChannelGate(e_dim) if audio_channel_attention else nn.Identity()
 
         if fusion in ['lt', 'it']:
             if fusion  == 'lt':
@@ -272,6 +439,7 @@ class MultiModalCNN(nn.Module):
         x_visual = h_va + x_visual
 
         x_audio  = self.audio_model.forward_stage2(x_audio)
+        x_audio  = self.audio_feature_gate(x_audio)
         x_visual = self.visual_model.forward_stage2(x_visual)
 
         # (T, B, C) format required by PyTorch MultiheadAttention
@@ -318,6 +486,7 @@ class MultiModalCNN(nn.Module):
         x_visual = x_visual + h_va
 
         x_audio  = self.audio_model.forward_stage2(x_audio)
+        x_audio  = self.audio_feature_gate(x_audio)
         x_visual = self.visual_model.forward_stage2(x_visual)
 
         audio_pooled = x_audio.max(dim=-1).values
@@ -330,6 +499,7 @@ class MultiModalCNN(nn.Module):
     def forward_transformer(self, x_audio, x_visual):
         x_audio = self.audio_model.forward_stage1(x_audio)
         proj_x_a = self.audio_model.forward_stage2(x_audio)
+        proj_x_a = self.audio_feature_gate(proj_x_a)
        
         x_visual = self.visual_model.forward_features(x_visual) 
         x_visual = self.visual_model.forward_stage1(x_visual)

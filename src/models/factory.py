@@ -14,6 +14,9 @@ def generate_model(opt):
         seq_length=opt.sample_duration,
         pretr_ef=opt.pretrain_path,
         num_heads=opt.num_heads,
+        audio_channel_attention=getattr(opt, 'audio_channel_attention', False),
+        visual_backbone=getattr(opt, 'visual_backbone', 'efficientface'),
+        visual_stem_pooling=getattr(opt, 'visual_stem_pooling', 'maxpool'),
     )
 
     if opt.device != 'cpu':
