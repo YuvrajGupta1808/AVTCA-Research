@@ -161,3 +161,58 @@ class RandomRotate(object):
     def randomize_parameters(self):
         self.rotate_angle = random.randint(-10, 10)
 
+
+class SpecAugment(object):
+    """Time/frequency masking for 2D audio features.
+
+    The RAVDESS audio features are log-mel or MFCC arrays shaped
+    (frequency, time). Masking random bands makes the audio encoder less
+    dependent on narrow frequency bins or exact time positions.
+    """
+
+    def __init__(
+        self,
+        time_masks=2,
+        freq_masks=2,
+        time_mask_width=20,
+        freq_mask_width=8,
+        fill='mean',
+    ):
+        self.time_masks = max(0, int(time_masks))
+        self.freq_masks = max(0, int(freq_masks))
+        self.time_mask_width = max(0, int(time_mask_width))
+        self.freq_mask_width = max(0, int(freq_mask_width))
+        self.fill = fill
+
+    def __call__(self, feature):
+        augmented = np.array(feature, copy=True)
+        if augmented.ndim != 2:
+            return augmented
+
+        n_freq, n_time = augmented.shape
+        if n_freq == 0 or n_time == 0:
+            return augmented
+
+        if self.fill == 'mean':
+            fill_value = float(augmented.mean())
+        else:
+            fill_value = 0.0
+
+        for _ in range(self.freq_masks):
+            width = random.randint(0, min(self.freq_mask_width, n_freq))
+            if width == 0:
+                continue
+            start = random.randint(0, n_freq - width)
+            augmented[start:start + width, :] = fill_value
+
+        for _ in range(self.time_masks):
+            width = random.randint(0, min(self.time_mask_width, n_time))
+            if width == 0:
+                continue
+            start = random.randint(0, n_time - width)
+            augmented[:, start:start + width] = fill_value
+
+        return augmented.astype(np.float32, copy=False)
+
+    def randomize_parameters(self):
+        pass
