@@ -19,6 +19,7 @@ datasets/**/*_facecroppad.*
 # Training outputs
 results/
 results*/
+papers/
 
 # Pretrained weights (large binary files)
 pretrained/*.pth
