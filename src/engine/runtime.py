@@ -24,9 +24,28 @@ CONFIG_IDENTITY_KEYS = [
     'learning_rate',
     'batch_size',
     'pretrain_path',
+    'visual_backbone',
+    'visual_stem_pooling',
     'fusion',
     'mask',
+    'spec_augment',
+    'spec_time_masks',
+    'spec_freq_masks',
+    'spec_time_mask_width',
+    'spec_freq_mask_width',
+    'audio_channel_attention',
 ]
+
+CONFIG_IDENTITY_DEFAULTS = {
+    'spec_augment': False,
+    'spec_time_masks': 2,
+    'spec_freq_masks': 2,
+    'spec_time_mask_width': 20,
+    'spec_freq_mask_width': 8,
+    'audio_channel_attention': False,
+    'visual_backbone': 'efficientface',
+    'visual_stem_pooling': 'maxpool',
+}
 
 
 def _load_json(path):
@@ -44,7 +63,14 @@ def list_result_configs(result_path):
 
 
 def _identity_tuple(config):
-    return tuple((key, config.get(key)) for key in CONFIG_IDENTITY_KEYS)
+    return tuple((key, _identity_value(config, key)) for key in CONFIG_IDENTITY_KEYS)
+
+
+def _identity_value(config, key):
+    value = config.get(key)
+    if value is None and key in CONFIG_IDENTITY_DEFAULTS:
+        return CONFIG_IDENTITY_DEFAULTS[key]
+    return value
 
 
 def describe_config_conflicts(configs):
@@ -53,9 +79,9 @@ def describe_config_conflicts(configs):
 
     differing = {}
     for key in CONFIG_IDENTITY_KEYS:
-        values = {json.dumps(config.get(key), sort_keys=True) for config in configs}
+        values = {json.dumps(_identity_value(config, key), sort_keys=True) for config in configs}
         if len(values) > 1:
-            differing[key] = [config.get(key) for config in configs]
+            differing[key] = [_identity_value(config, key) for config in configs]
     return differing
 
 
@@ -138,7 +164,12 @@ def print_runtime_summary(opt, model):
 
     print(opt)
     print(f'Conda env: {conda_env}')
-    print(f'Model: {opt.model}  fusion={opt.fusion}  num_heads={opt.num_heads}  seq_len={opt.sample_duration}')
+    visual_backbone = getattr(opt, 'visual_backbone', 'efficientface')
+    print(
+        f'Model: {opt.model}  visual_backbone={visual_backbone}  '
+        f'visual_stem_pooling={getattr(opt, "visual_stem_pooling", "maxpool")}  '
+        f'fusion={opt.fusion}  num_heads={opt.num_heads}  seq_len={opt.sample_duration}'
+    )
     print(f'Params: total={total_params:,}  trainable={trainable_params:,}')
     print(f'Device: {opt.device}')
     if opt.device == 'cuda':
@@ -168,8 +199,23 @@ def _build_video_transform(opt, training):
     return transforms.Compose(transform_steps)
 
 
+def _build_audio_feature_transform(opt, training):
+    if not training or not getattr(opt, 'spec_augment', False):
+        return None
+    return transforms.SpecAugment(
+        time_masks=opt.spec_time_masks,
+        freq_masks=opt.spec_freq_masks,
+        time_mask_width=opt.spec_time_mask_width,
+        freq_mask_width=opt.spec_freq_mask_width,
+    )
+
+
 def build_training_components(opt, parameters):
-    training_data = get_training_set(opt, spatial_transform=_build_video_transform(opt, training=True))
+    training_data = get_training_set(
+        opt,
+        spatial_transform=_build_video_transform(opt, training=True),
+        audio_feature_transform=_build_audio_feature_transform(opt, training=True),
+    )
     train_loader = torch.utils.data.DataLoader(
         training_data,
         batch_size=opt.batch_size,

@@ -7,7 +7,14 @@ import pandas as pd
 import torch
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from inference import discover_checkpoints, load_model, preprocess_audio, preprocess_video, predict
+from inference import (
+    checkpoint_metadata,
+    discover_checkpoints,
+    load_model,
+    predict,
+    preprocess_audio,
+    preprocess_video,
+)
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DEFAULT_CHECKPOINT = os.environ.get("AVTCA_DEFAULT_CHECKPOINT", "").strip()
@@ -27,10 +34,22 @@ def try_load_model(pth_path, num_heads, fusion, device):
         return False
 
     with st.spinner("Loading model weights…"):
-        model = load_model(pth_path, num_heads, fusion, device)
+        metadata_bundle = checkpoint_metadata(pth_path)
+        metadata = metadata_bundle.get("metadata", {})
+        effective_num_heads = metadata.get("num_heads", num_heads)
+        effective_fusion = metadata.get("fusion", fusion)
+
+        model = load_model(
+            pth_path,
+            effective_num_heads,
+            effective_fusion,
+            device,
+            metadata=metadata,
+        )
         st.session_state.model = model
         st.session_state.device = device
         st.session_state.loaded_checkpoint = pth_path
+        st.session_state.loaded_metadata = metadata
     return True
 
 st.set_page_config(page_title="AVTCA Emotion Recognizer", layout="wide")
@@ -107,6 +126,8 @@ with st.sidebar:
             if try_load_model(pth_path, num_heads, fusion, device):
                 st.success(f"Model ready on **{device}**")
         except Exception as exc:
+            st.session_state.pop("model", None)
+            st.session_state.pop("device", None)
             st.error(f"Load failed: {exc}")
 
     should_autoload = (
@@ -120,6 +141,8 @@ with st.sidebar:
             if try_load_model(pth_path, num_heads, fusion, device):
                 st.success(f"Auto-loaded model on **{device}**")
         except Exception as exc:
+            st.session_state.pop("model", None)
+            st.session_state.pop("device", None)
             st.error(f"Auto-load failed: {exc}")
 
     if "model" in st.session_state:

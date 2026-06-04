@@ -17,6 +17,14 @@ def parse_opts():
     
     parser.add_argument('--model', default='multimodal_cnn', type=str, help='Model architecture: multimodal_cnn | token_fusion')
     parser.add_argument('--audio_features', default='mel', type=str, choices=['mfcc', 'mel'], help='Audio feature type. mel=64-channel mel spectrogram (best), mfcc=10-channel MFCC')
+    parser.add_argument('--spec_augment', action='store_true', help='Apply SpecAugment-style time/frequency masking to training audio features')
+    parser.set_defaults(spec_augment=False)
+    parser.add_argument('--spec_time_masks', default=2, type=int, help='Number of SpecAugment time masks per training sample')
+    parser.add_argument('--spec_freq_masks', default=2, type=int, help='Number of SpecAugment frequency masks per training sample')
+    parser.add_argument('--spec_time_mask_width', default=20, type=int, help='Maximum SpecAugment time-mask width in feature frames')
+    parser.add_argument('--spec_freq_mask_width', default=8, type=int, help='Maximum SpecAugment frequency-mask width in mel/MFCC bins')
+    parser.add_argument('--audio_channel_attention', action='store_true', help='Apply a lightweight channel-attention gate after the audio stage-2 encoder')
+    parser.set_defaults(audio_channel_attention=False)
     parser.add_argument('--num_heads', default=1, type=int, help='number of heads, in the paper 1 or 4')
     
     parser.add_argument('--device', default='cuda', type=str, help='Specify the device to run. Defaults to cuda, fallsback to cpu')
@@ -37,6 +45,18 @@ def parse_opts():
     parser.add_argument('--begin_epoch', default=1, type=int, help='Training begins at this epoch. Previous trained model indicated by resume_path is loaded.')
     parser.add_argument('--resume_path', default='', type=str, help='Save data (.pth) of previous training')
     parser.add_argument('--pretrain_path', default="pretrained/EfficientFace_Trained_on_AffectNet7.pth", type=str, help='Pretrained model (.pth), efficientface')
+    parser.add_argument(
+        '--visual_backbone',
+        default='efficientface',
+        choices=['efficientface', 'attention_local'],
+        help='Visual feature extractor: efficientface keeps the existing path; attention_local uses the explicit channel/spatial/local branch',
+    )
+    parser.add_argument(
+        '--visual_stem_pooling',
+        default='maxpool',
+        choices=['maxpool', 'stride_conv'],
+        help='Downsampling method after the first visual conv in the attention_local backbone',
+    )
     parser.add_argument('--checkpoint_path', default='', type=str, help='Explicit checkpoint to evaluate during test-only flows.')
     parser.add_argument('--no_train', action='store_true', help='If true, training is not performed.')
     parser.set_defaults(no_train=False)

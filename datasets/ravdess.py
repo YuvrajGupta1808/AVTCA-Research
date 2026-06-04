@@ -200,11 +200,13 @@ class RAVDESS(data.Dataset):
                  get_loader=get_default_video_loader,
                  data_type='audiovisual',
                  audio_transform=None,
+                 audio_feature_transform=None,
                  data_root='',
                  audio_features='mfcc'):
         self.data = make_dataset(subset, annotation_path, data_root=data_root)
         self.spatial_transform = spatial_transform
         self.audio_transform = audio_transform
+        self.audio_feature_transform = audio_feature_transform
         self.loader = get_loader()
         self.data_type = data_type
         self.audio_features = audio_features
@@ -237,6 +239,10 @@ class RAVDESS(data.Dataset):
                 audio_features = get_mel(y, sr, n_mels=64)
             else:
                 audio_features = get_mfccs(y, sr)
+
+            if self.audio_feature_transform is not None:
+                self.audio_feature_transform.randomize_parameters()
+                audio_features = self.audio_feature_transform(audio_features)
 
             if self.data_type == 'audio':
                 return audio_features, target
