@@ -27,6 +27,12 @@ class TestRunConfig(unittest.TestCase):
                 'pretrain_path': 'pretrained.pth',
                 'fusion': 'it',
                 'mask': 'softhard',
+                'spec_augment': False,
+                'spec_time_masks': 2,
+                'spec_freq_masks': 2,
+                'spec_time_mask_width': 20,
+                'spec_freq_mask_width': 8,
+                'audio_channel_attention': False,
             }
             second = dict(first)
             second['mask'] = 'nodropout'
