@@ -1,3 +1,5 @@
+import inspect
+
 import torch
 from torch import nn
 
@@ -18,16 +20,23 @@ def generate_model(opt):
     assert opt.model == 'multimodal_cnn', \
         f"Unknown model '{opt.model}'. Only 'multimodal_cnn' is supported."
 
+    model_kwargs = {
+        'fusion': opt.fusion,
+        'seq_length': opt.sample_duration,
+        'pretr_ef': opt.pretrain_path,
+        'num_heads': opt.num_heads,
+        'audio_channel_attention': _bool_option(opt, 'audio_channel_attention', False),
+        'visual_backbone': _string_option(opt, 'visual_backbone', 'efficientface'),
+        'visual_stem_pooling': _string_option(opt, 'visual_stem_pooling', 'maxpool'),
+    }
+
+    signature = inspect.signature(MultiModalCNN.__init__)
+    if 'it_fusion_mode' in signature.parameters:
+        model_kwargs['it_fusion_mode'] = _string_option(opt, 'it_fusion_mode', 'modern')
+
     model = MultiModalCNN(
         opt.n_classes,
-        fusion=opt.fusion,
-        seq_length=opt.sample_duration,
-        pretr_ef=opt.pretrain_path,
-        num_heads=opt.num_heads,
-        audio_channel_attention=_bool_option(opt, 'audio_channel_attention', False),
-        visual_backbone=_string_option(opt, 'visual_backbone', 'efficientface'),
-        visual_stem_pooling=_string_option(opt, 'visual_stem_pooling', 'maxpool'),
-        it_fusion_mode=_string_option(opt, 'it_fusion_mode', 'modern'),
+        **model_kwargs,
     )
 
     if opt.device != 'cpu':

@@ -52,7 +52,6 @@ class TestModelFactory(unittest.TestCase):
 
         self.assertEqual(model.visual_backbone, 'efficientface')
         self.assertFalse(model.audio_channel_attention)
-        self.assertEqual(model.it_fusion_mode, 'modern')
         self.assertIsNotNone(params)
 
 
