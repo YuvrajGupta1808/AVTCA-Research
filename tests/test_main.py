@@ -33,6 +33,28 @@ class TestModelFactory(unittest.TestCase):
         self.assertIsNotNone(model)
         self.assertIsNotNone(params)
 
+    def test_generate_model_cpu_ignores_non_primitive_optional_values(self):
+        from src.models.factory import generate_model
+        opt = MagicMock()
+        opt.model = 'multimodal_cnn'
+        opt.n_classes = 8
+        opt.fusion = 'it'
+        opt.sample_duration = 15
+        opt.pretrain_path = 'None'
+        opt.num_heads = 1
+        opt.device = 'cpu'
+        opt.visual_backbone = MagicMock()
+        opt.visual_stem_pooling = MagicMock()
+        opt.audio_channel_attention = MagicMock()
+        opt.it_fusion_mode = MagicMock()
+
+        model, params = generate_model(opt)
+
+        self.assertEqual(model.visual_backbone, 'efficientface')
+        self.assertFalse(model.audio_channel_attention)
+        self.assertEqual(model.it_fusion_mode, 'modern')
+        self.assertIsNotNone(params)
+
 
 if __name__ == '__main__':
     unittest.main()
