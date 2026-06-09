@@ -334,12 +334,15 @@ class MultiModalCNN(nn.Module):
         audio_channel_attention=False,
         visual_backbone='efficientface',
         visual_stem_pooling='maxpool',
+        it_fusion_mode='modern',
     ):
         super(MultiModalCNN, self).__init__()
         assert fusion in ['ia', 'it', 'lt'], f'Unsupported fusion method: {fusion}'
+        assert it_fusion_mode in ['modern', 'legacy'], f'Unsupported it_fusion_mode: {it_fusion_mode}'
 
         self.audio_model = AudioCNNPool(num_classes=num_classes)
         self.visual_backbone = visual_backbone
+        self.it_fusion_mode = it_fusion_mode
         if visual_backbone == 'efficientface':
             self.visual_model = EfficientFaceTemporal([4, 8, 4], [29, 116, 232, 464, 1024], num_classes, seq_length)
         elif visual_backbone == 'attention_local':
@@ -378,9 +381,10 @@ class MultiModalCNN(nn.Module):
                 self.va1 = AttentionBlock(in_dim_k=input_dim_audio, in_dim_q=input_dim_video, out_dim=input_dim_video, num_heads=num_heads)
                 self.audioCrossAttention  = AttentionBlock(in_dim_k=e_dim, in_dim_q=e_dim, out_dim=e_dim, num_heads=num_heads)
                 self.visualCrossAttention = AttentionBlock(in_dim_k=e_dim, in_dim_q=e_dim, out_dim=e_dim, num_heads=num_heads)
-                self.attn_dropout = nn.Dropout(0.1)
-                self.attn_pool_audio = AttentionPool(e_dim)
-                self.attn_pool_video = AttentionPool(e_dim)
+                if it_fusion_mode == 'modern':
+                    self.attn_dropout = nn.Dropout(0.1)
+                    self.attn_pool_audio = AttentionPool(e_dim)
+                    self.attn_pool_video = AttentionPool(e_dim)
         
         elif fusion in ['ia']:
             input_dim_video = input_dim_video // 2
@@ -412,6 +416,9 @@ class MultiModalCNN(nn.Module):
  
         
     def forward_feature_3(self, x_audio, x_visual):
+        if self.it_fusion_mode == 'legacy':
+            return self.forward_feature_3_legacy(x_audio, x_visual)
+
         x_audio = self.audio_model.forward_stage1(x_audio)
         x_visual = self.visual_model.forward_features(x_visual)
         x_visual = self.visual_model.forward_stage1(x_visual)
@@ -465,6 +472,49 @@ class MultiModalCNN(nn.Module):
         video_pooled = self.attn_pool_video(x_visual_final)
 
         x  = torch.cat((audio_pooled, video_pooled), dim=-1)
+        x1 = self.classifier_1(x)
+        return x1
+
+    def forward_feature_3_legacy(self, x_audio, x_visual):
+        x_audio = self.audio_model.forward_stage1(x_audio)
+        x_visual = self.visual_model.forward_features(x_visual)
+        x_visual = self.visual_model.forward_stage1(x_visual)
+
+        proj_x_a = x_audio.permute(0, 2, 1)
+        proj_x_v = x_visual.permute(0, 2, 1)
+
+        h_av = self.av1(proj_x_v, proj_x_a)
+        h_va = self.va1(proj_x_a, proj_x_v)
+
+        h_av = h_av.permute(0, 2, 1)
+        h_va = h_va.permute(0, 2, 1)
+
+        x_audio = h_av + x_audio
+        x_visual = h_va + x_visual
+
+        x_audio = self.audio_model.forward_stage2(x_audio)
+        x_audio = self.audio_feature_gate(x_audio)
+        x_visual = self.visual_model.forward_stage2(x_visual)
+
+        x_audio = x_audio.permute(2, 0, 1)
+        x_visual = x_visual.permute(2, 0, 1)
+
+        x_audio_attention, _ = self.audioAttention(x_audio, x_audio, x_audio)
+        x_visual_attention, _ = self.visualAttention(x_visual, x_visual, x_visual)
+
+        x_audio_attention = x_audio_attention.permute(1, 2, 0)
+        x_visual_attention = x_visual_attention.permute(1, 2, 0)
+
+        x_audio_ca = x_audio_attention.permute(0, 2, 1)
+        x_visual_ca = x_visual_attention.permute(0, 2, 1)
+
+        x_audio_final = self.audioCrossAttention(xk=x_visual_ca, xq=x_audio_ca)
+        x_visual_final = self.visualCrossAttention(xk=x_audio_ca, xq=x_visual_ca)
+
+        audio_pooled = x_audio_final.max(dim=1).values
+        video_pooled = x_visual_final.max(dim=1).values
+
+        x = torch.cat((audio_pooled, video_pooled), dim=-1)
         x1 = self.classifier_1(x)
         return x1
     

@@ -129,6 +129,15 @@ def _infer_visual_backbone_from_checkpoint(pth_path):
     return None
 
 
+def _infer_it_fusion_mode_from_checkpoint(pth_path, fusion):
+    if fusion != 'it':
+        return 'modern'
+    keys = _checkpoint_state_keys(pth_path)
+    if not any(key.startswith('attn_pool_audio.') or key.startswith('attn_pool_video.') for key in keys):
+        return 'legacy'
+    return 'modern'
+
+
 def _metadata_value(metadata, key, default):
     value = metadata.get(key, default) if metadata else default
     return value if value not in [None, ""] else default
@@ -149,6 +158,11 @@ def load_model(pth_path, num_heads, fusion, device, metadata=None):
         _infer_visual_backbone_from_checkpoint(pth_path) or 'efficientface',
     )
     visual_stem_pooling = _metadata_value(metadata, 'visual_stem_pooling', 'maxpool')
+    it_fusion_mode = _metadata_value(
+        metadata,
+        'it_fusion_mode',
+        _infer_it_fusion_mode_from_checkpoint(pth_path, fusion),
+    )
     opt = SimpleNamespace(
         model='multimodal_cnn',
         n_classes=8,
@@ -160,6 +174,7 @@ def load_model(pth_path, num_heads, fusion, device, metadata=None):
         audio_channel_attention=bool(metadata.get('audio_channel_attention', False)),
         visual_backbone=visual_backbone,
         visual_stem_pooling=visual_stem_pooling,
+        it_fusion_mode=it_fusion_mode,
     )
     model, _ = generate_model(opt)
     model = model.to(device)
@@ -182,23 +197,30 @@ def _infer_audio_feature(run_name, metadata):
     return "mel"
 
 
-def preprocess_audio(video_path, feature_type="mel"):
+def preprocess_audio(video_path, feature_type="mel", source_name=None):
     """Extract mono audio and return audio tensor (1, F, T) for the chosen feature."""
-    ffmpeg_exe = _resolve_ffmpeg()
-    with tempfile.NamedTemporaryFile(suffix='.wav', delete=False) as f:
-        tmp_wav = f.name
-    try:
-        subprocess.run(
-            [ffmpeg_exe, '-y', '-i', video_path, '-ac', '1', '-ar', str(SAMPLE_RATE), tmp_wav],
-            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True,
-        )
-        audio, _ = librosa.load(tmp_wav, sr=SAMPLE_RATE)
-    except subprocess.CalledProcessError:
-        # Video has no audio track — use silence
-        audio = np.zeros(TARGET_SAMPLES, dtype=np.float32)
-    finally:
-        if os.path.exists(tmp_wav):
-            os.unlink(tmp_wav)
+    precomputed_audio = (
+        _find_annotated_ravdess_audio_asset(source_name or video_path)
+        or _find_precomputed_ravdess_asset(source_name or video_path, "_croppad.wav")
+    )
+    if precomputed_audio:
+        audio, _ = librosa.load(precomputed_audio, sr=SAMPLE_RATE)
+    else:
+        ffmpeg_exe = _resolve_ffmpeg()
+        with tempfile.NamedTemporaryFile(suffix='.wav', delete=False) as f:
+            tmp_wav = f.name
+        try:
+            subprocess.run(
+                [ffmpeg_exe, '-y', '-i', video_path, '-ac', '1', '-ar', str(SAMPLE_RATE), tmp_wav],
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True,
+            )
+            audio, _ = librosa.load(tmp_wav, sr=SAMPLE_RATE)
+        except subprocess.CalledProcessError:
+            # Video has no audio track — use silence
+            audio = np.zeros(TARGET_SAMPLES, dtype=np.float32)
+        finally:
+            if os.path.exists(tmp_wav):
+                os.unlink(tmp_wav)
 
     # Crop or pad to exactly 3.6 s (mirrors datasets/ravdess.py: load_audio)
     if len(audio) < TARGET_SAMPLES:
@@ -214,8 +236,6 @@ def preprocess_audio(video_path, feature_type="mel"):
             y=audio,
             sr=SAMPLE_RATE,
             n_mfcc=N_MFCC,
-            n_fft=1024,
-            hop_length=512,
         )
         return torch.tensor(mfcc.astype(np.float32), dtype=torch.float32).unsqueeze(0)
 
@@ -223,8 +243,6 @@ def preprocess_audio(video_path, feature_type="mel"):
         y=audio,
         sr=SAMPLE_RATE,
         n_mels=N_MELS,
-        n_fft=1024,
-        hop_length=512,
     )
     mel_db = librosa.power_to_db(mel, ref=np.max)
     return torch.tensor(mel_db.astype(np.float32), dtype=torch.float32).unsqueeze(0)
@@ -243,15 +261,20 @@ def _resolve_ffmpeg():
         raise FileNotFoundError("ffmpeg executable not available") from exc
 
 
-def preprocess_video(video_path):
-    """Build v3-faithful video input for RAVDESS-style inference.
+def preprocess_video(video_path, source_name=None):
+    """Build dataset-faithful video input for RAVDESS-style inference.
 
     This mirrors the original preprocessing flow more closely:
+    - use precomputed RAVDESS face crops when the uploaded filename is known
     - center-crop the clip to ~3.6 seconds
     - pick 15 distributed frames from that window
     - detect/crop one face per selected frame with MTCNN
-    - fall back to full-frame resize if detection fails
+    - keep OpenCV BGR channel order, matching the saved training arrays
     """
+    precomputed_video = _find_precomputed_ravdess_asset(source_name or video_path, "_facecroppad.npy")
+    if precomputed_video:
+        return _video_tensor_from_bgr_frames(np.load(precomputed_video))
+
     try:
         from facenet_pytorch import MTCNN as _MTCNN
         mtcnn_device = 'cuda' if torch.cuda.is_available() else 'cpu'
@@ -266,8 +289,7 @@ def preprocess_video(video_path):
         ok, frame_bgr = cap.read()
         if not ok:
             break
-        frame_rgb = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2RGB)
-        raw_frames.append(frame_rgb)
+        raw_frames.append(frame_bgr)
     cap.release()
 
     if not raw_frames:
@@ -293,22 +315,121 @@ def _select_distributed_indices(n_samples, n_frames):
     return [min(n_frames - 1, (i * n_frames) // n_samples + n_frames // (2 * n_samples)) for i in range(n_samples)]
 
 
-def _extract_face_v3(frame_rgb, mtcnn):
+def _extract_face_v3(frame_bgr, mtcnn):
     """Match the original facecroppad extraction as closely as practical."""
     if mtcnn is not None:
+        frame_rgb = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2RGB)
         boxes, _ = mtcnn.detect(torch.tensor(frame_rgb))
         if boxes is not None and len(boxes) > 0:
             x1, y1, x2, y2 = [int(round(coord)) for coord in boxes[0]]
-            h, w = frame_rgb.shape[:2]
+            h, w = frame_bgr.shape[:2]
             x1 = max(0, min(w, x1))
             x2 = max(0, min(w, x2))
             y1 = max(0, min(h, y1))
             y2 = max(0, min(h, y2))
             if x2 > x1 and y2 > y1:
-                frame_rgb = frame_rgb[y1:y2, x1:x2, :]
+                frame_bgr = frame_bgr[y1:y2, x1:x2, :]
 
-    resized = cv2.resize(frame_rgb, (224, 224))
+    resized = cv2.resize(frame_bgr, (224, 224))
     return torch.tensor(resized, dtype=torch.float32).permute(2, 0, 1) / 255.0
+
+
+def _video_tensor_from_bgr_frames(frames):
+    frames = _normalize_frame_count(np.asarray(frames))
+    tensors = [
+        torch.tensor(frame, dtype=torch.float32).permute(2, 0, 1) / 255.0
+        for frame in frames
+    ]
+    stacked = torch.stack(tensors, dim=0)
+    return stacked.permute(1, 0, 2, 3)
+
+
+def _normalize_frame_count(frames):
+    if frames.ndim != 4 or frames.shape[-1] != 3:
+        raise ValueError(f"Expected video frames shaped (T, H, W, 3), got {frames.shape}")
+    if len(frames) == N_FRAMES:
+        return frames
+    if len(frames) == 0:
+        return np.zeros((N_FRAMES, 224, 224, 3), dtype=np.uint8)
+    if len(frames) > N_FRAMES:
+        indices = np.linspace(0, len(frames) - 1, num=N_FRAMES, dtype=int)
+        return frames[indices]
+    padding = np.zeros((N_FRAMES - len(frames), frames.shape[1], frames.shape[2], 3), dtype=frames.dtype)
+    return np.concatenate([frames, padding], axis=0)
+
+
+def _find_precomputed_ravdess_asset(source_name, suffix):
+    if not source_name:
+        return None
+    stem = os.path.splitext(os.path.basename(source_name))[0]
+    stem = stem.replace("_facecroppad", "").replace("_croppad", "")
+    if not stem:
+        return None
+
+    actor_id = stem.split("-")[-1]
+    actor_dir = f"ACTOR{actor_id}" if actor_id.isdigit() else ""
+    roots = [
+        os.path.join(REPO_ROOT, "datasets", "RAVDESS"),
+        os.path.join(REPO_ROOT, "RAVDESS"),
+    ]
+    for root in roots:
+        if actor_dir:
+            candidate = os.path.join(root, actor_dir, f"{stem}{suffix}")
+            if os.path.isfile(candidate):
+                return candidate
+        matches = glob.glob(os.path.join(root, "ACTOR*", f"{stem}{suffix}"))
+        if matches:
+            return sorted(matches)[0]
+    return None
+
+
+def _find_annotated_ravdess_audio_asset(source_name):
+    if not source_name:
+        return None
+    source_stem = os.path.splitext(os.path.basename(source_name))[0]
+    source_stem = source_stem.replace("_facecroppad", "").replace("_croppad", "")
+    annotation_path = os.path.join(REPO_ROOT, "preprocessing", "ravdess", "annotations.txt")
+    if not os.path.isfile(annotation_path):
+        return None
+
+    try:
+        with open(annotation_path, "r", encoding="utf-8") as handle:
+            lines = handle.readlines()
+    except OSError:
+        return None
+
+    for line in lines:
+        parts = line.strip().split(";")
+        if len(parts) < 2:
+            continue
+        video_ref, audio_ref = parts[0], parts[1]
+        video_stem = os.path.splitext(os.path.basename(video_ref))[0]
+        video_stem = video_stem.replace("_facecroppad", "").replace("_croppad", "")
+        if video_stem == source_stem:
+            return _resolve_ravdess_asset_reference(audio_ref)
+    return None
+
+
+def _resolve_ravdess_asset_reference(asset_ref):
+    if os.path.isfile(asset_ref):
+        return asset_ref
+
+    basename = os.path.basename(asset_ref)
+    normalized = asset_ref.strip().replace("\\", "/")
+    actor_dir = next((part for part in normalized.split("/") if part.upper().startswith("ACTOR")), "")
+    roots = [
+        os.path.join(REPO_ROOT, "datasets", "RAVDESS"),
+        os.path.join(REPO_ROOT, "RAVDESS"),
+    ]
+    for root in roots:
+        if actor_dir:
+            candidate = os.path.join(root, actor_dir, basename)
+            if os.path.isfile(candidate):
+                return candidate
+        matches = glob.glob(os.path.join(root, "ACTOR*", basename))
+        if matches:
+            return sorted(matches)[0]
+    return None
 
 
 def predict(model, audio_tensor, video_tensor, device):

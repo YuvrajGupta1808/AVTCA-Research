@@ -171,10 +171,14 @@ if uploaded:
             try:
                 with st.status("Analysing video…", expanded=True) as status:
                     st.write(f"Extracting audio and computing {audio_feature.upper()} features…")
-                    audio = preprocess_audio(video_path, feature_type=audio_feature)
+                    audio = preprocess_audio(
+                        video_path,
+                        feature_type=audio_feature,
+                        source_name=uploaded.name,
+                    )
 
                     st.write("Detecting faces and sampling frames…")
-                    video = preprocess_video(video_path)
+                    video = preprocess_video(video_path, source_name=uploaded.name)
 
                     st.write("Running the model…")
                     probs = predict(

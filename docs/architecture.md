@@ -1,295 +1,165 @@
-# Architecture — AVTCA-Research
+# Current Architecture: RAVDESS Best Verified Model
 
-> This file is the single source of truth for all architecture diagrams.
-> Updated whenever any module, data flow, input, output, or component changes.
-> Current project phase: **Pivoting from RAVDESS emotion detection → Classroom engagement detection.**
+This file documents the best verified RAVDESS architecture and the V4 visual-backbone experiment.
 
----
+## Best Checkpoint
 
-## Current Status
-
-| Component | Status |
+| Item | Value |
 |---|---|
-| RAVDESS emotion model (8-class) | ✅ Baseline 71.25% — **v2 runs (ep 3): h8=78.3%, h4=79.6% — 4 runs active with nohup, 2 per GPU at ~4GB each** |
-| CREMA-D preprocessing pipeline | ✅ Done — `preprocessing/cremad/` (extract_audios, extract_faces, create_annotations) |
-| CREMA-D dataset class + registry | ✅ Done — `datasets/cremad.py`, registered as `'CREMAD'` in `src/dataset.py` |
-| Engagement model (5-class + confusion) | 🔴 In design — architecture planned, **design gaps identified (see below)**, not yet implemented |
-| OpenFace feature pipeline | 🔴 Not started |
-| Zoom tile extractor | 🔴 Not started |
-| Dual audio path (prosody encoder) | 🔴 Not started — **ProsodyEncoder design revised to FiLM conditioning (see Architecture 2 notes)** |
-| Audio temporal subsampling (AdaptiveAvgPool1d) for modality parity | ✅ Implemented — `models/multimodal_cnn.py` `forward_feature_3` |
-| Modality dropout (train-time, p=0.15) | ✅ Implemented — `models/multimodal_cnn.py` `forward_feature_3` |
-| Cross-modal fix in audioAttention/visualAttention | ✅ Implemented — was still self-attention; now cross-modal |
-| Attention output dropout (p=0.1) + residual connections | ✅ Implemented — after MultiheadAttention in `forward_feature_3` |
-| Attention pooling replacing MaxPool | ✅ Implemented — `AttentionPool` class, replaces `.max(dim=1).values` |
-| Role conditioning in forward pass | 🔴 Not started — **critical gap; gaze is behaviorally inverted by speaker/listener role** |
+| Result folder | `results/v3_01_baseline_mel_h4` |
+| Checkpoint | `RAVDESS_multimodal_cnn_15_best.pth` |
+| Model path | `MultiModalCNN.forward_feature_3` in `models/multimodal_cnn.py` |
+| Dataset | RAVDESS, 8 emotion classes |
+| Audio feature | Mel spectrogram |
+| Fusion | `it` |
+| Attention heads | 4 |
+| SpecAugment | Off |
+| Audio channel gate | Off |
+| Best validation accuracy | 82.9167% at epoch 40 |
+| Test accuracy | 81.8750% on 480 held-out test samples |
 
----
+This remains the best overall model after the V4 `attention_local` experiments. The V4 branch reduced final training accuracy, but it did not beat this checkpoint on validation or held-out test accuracy.
 
-## Dataset Integration: CREMA-D
+## Best V4 Attention-Local Checkpoint
 
-**91 actors**, 7,442 clips, **6 emotion classes**: anger, disgust, fear, happy, neutral, sad.
+| Item | Value |
+|---|---|
+| Result folder | `results/v4_05_attention_local_pretrain_h4_lr001` |
+| Checkpoint | `RAVDESS_multimodal_cnn_15_best.pth` |
+| Visual backbone | `AttentionLocalVisualTemporal` via `--visual_backbone attention_local` |
+| Pretrain | Compatible partial load from `pretrained/EfficientFace_Trained_on_AffectNet7.pth` |
+| Best validation accuracy | 79.7917% |
+| Test accuracy | 79.7917% on 480 held-out test samples |
+| Final train accuracy | 93.8151% |
 
-File layout expected under `datasets/CREMAD/` (video-only — no `AudioWAV/` needed):
-```
-datasets/CREMAD/
-  VideoFlash/   1001_IEO_ANG_HI.flv              (source FLV — download only this directory)
-                1001_IEO_ANG_HI_facecroppad.npy  (15 × 224 × 224 × 3, produced by extract_faces.py)
-                1001_IEO_ANG_HI_croppad.wav      (3.6 s audio, extracted from FLV by extract_audios.py)
-```
+V4 is useful as an overfitting study: it lowers train accuracy compared with EfficientFace, but it also lowers test accuracy. Therefore the production/best-model diagram below still uses the V3 EfficientFace baseline.
 
-Audio is extracted directly from FLV via librosa/ffmpeg — `AudioWAV/` is not downloaded or used.
-
-**Label map** (integer in annotations file; 0-indexed in model):
-
-| Code | Emotion | Label |
-|---|---|---|
-| ANG | Anger | 1 |
-| DIS | Disgust | 2 |
-| FEA | Fear | 3 |
-| HAP | Happy | 4 |
-| NEU | Neutral | 5 |
-| SAD | Sad | 6 |
-
-**Actor split** (sorted by actor ID, deterministic):
-
-| Split | Actor count | Actor IDs |
-|---|---|---|
-| Test | 13 | indices 0–12 |
-| Val | 13 | indices 13–25 |
-| Train | 65 | indices 26–90 |
-
-**Preprocessing run order** (once `VideoFlash/` is populated):
-```bash
-python preprocessing/cremad/extract_audios.py --data_root datasets/CREMAD
-python preprocessing/cremad/extract_faces.py --data_root datasets/CREMAD
-python preprocessing/cremad/create_annotations.py --data_root datasets/CREMAD
-```
-
-> **Download blocked:** GitHub LFS budget for `CheyneyComputerScience/CREMA-D` is exhausted — FLV binaries cannot be fetched via `git clone`/`git lfs pull`. Use Kaggle (`ejlok1/cremad`) or the CMU HTTP mirror to populate `VideoFlash/` before running these scripts. If `AudioWAV/`-only is chosen instead, the preprocessing scripts must be reverted to the dual-directory layout.
-
-**Key difference from RAVDESS:** all files live in a single flat directory (`VideoFlash/`) rather than per-actor subdirectories. The `CREMAD` dataset class and path resolver handle this transparently.
-
----
-
-## Architecture 1: Original AVT-CA (RAVDESS Emotion Detection)
-
-> Status: **Implemented and working.** Do not modify this diagram unless the RAVDESS code changes.
-> Best checkpoint: `results/mel_h8_lr001_e75/RAVDESS_multimodal_cnn_15_best.pth`
+## Architecture Diagram
 
 ```mermaid
-graph TD
+flowchart TD
 
-    %% ── INPUTS ──────────────────────────────────────────────────────────────
-    A([INPUT AUDIO\n10-ch MFCC × T])
-    V([INPUT VIDEO\n15 frames × 3 × 224 × 224])
+    RAW["RAVDESS audiovisual sample"] --> PRE["Dataset loader + transforms"]
 
-    %% ── AUDIO STAGE 1 ───────────────────────────────────────────────────────
-    A  --> A1["Conv2D 1→64 · BN · ReLU · MaxPool2D\n→ 64 × 5 × T/2"]
-    A1 --> A2["Conv2D 64→128 · BN · ReLU · MaxPool2D\n+ mean over freq dim\n→ 128 × T/4"]
+    PRE --> VID["Video input<br/>15 face frames, 3 x 224 x 224"]
+    PRE --> AUD["Audio input<br/>3.6 sec waveform to 64-bin mel spectrogram"]
 
-    %% ── VIDEO BACKBONE ──────────────────────────────────────────────────────
-    V  --> V1["Conv2D 3→29 stride=2 · BN · ReLU · MaxPool\n→ 29 × 56 × 56"]
-    V1 --> VMOD["Modulator\nChannel Attention × Spatial Attention\n→ 29 × 56 × 56"]
-    V1 --> VLOC["LocalFeatureExtractor  29→116 stride=2\n→ 116 × 28 × 28"]
-    VMOD --> VSTG2["stage2: 4 × InvertedResidual  29→116\n→ 116 × 28 × 28"]
-    VSTG2 --> VADD((" + "))
-    VLOC  --> VADD
-    VADD  --> VSTG3["stage3: 8 × InvertedResidual  116→232"]
-    VSTG3 --> VSTG4["stage4: 4 × InvertedResidual  232→464"]
-    VSTG4 --> VC5["Conv2D 464→1024 · BN · ReLU · GlobalAvgPool\n→ 1024-dim per frame"]
+    VID --> VF["EfficientFace forward_features<br/>2D visual frame encoder"]
+    VF --> VS1["Visual stage 1<br/>Conv1D 1024 to 64 to 64"]
 
-    %% ── VIDEO STAGE 1 (temporal) ────────────────────────────────────────────
-    VC5 --> VT1["Conv1D 1024→64 · BN · ReLU\nConv1D 64→64   · BN · ReLU\n→ 64 × 15"]
+    AUD --> AS1["Audio stage 1<br/>Conv2D 1 to 64 to 128<br/>frequency mean to temporal tokens"]
+    AS1 --> ALIGN["AdaptiveAvgPool1d<br/>align audio length to 15 video steps"]
 
-    %% ── INTERMEDIATE TRANSFORMER BLOCK ──────────────────────────────────────
-    A2  --> AV1["av1 · AttentionBlock\nq = audio 128-dim\nk,v = video 64-dim\n→ 128 × T_a"]
-    VT1 --> AV1
-    VT1 --> VA1["va1 · AttentionBlock\nq = video 64-dim\nk,v = audio 128-dim\n→ 64 × 15"]
-    A2  --> VA1
+    ALIGN --> AV1["av1 AttentionBlock<br/>audio query over visual keys/values"]
+    VS1 --> AV1
+    VS1 --> VA1["va1 AttentionBlock<br/>visual query over audio keys/values"]
+    ALIGN --> VA1
 
-    AV1 --> AR1((" + "))
-    A2  --> AR1
-    VA1 --> VR1((" + "))
-    VT1 --> VR1
+    AV1 --> ARES1["Audio residual add"]
+    ALIGN --> ARES1
+    VA1 --> VRES1["Visual residual add"]
+    VS1 --> VRES1
 
-    %% ── STAGE 2 ─────────────────────────────────────────────────────────────
-    AR1 --> AS2["Conv1D 128→256 · BN · ReLU · MaxPool\nConv1D 256→128 · BN · ReLU · MaxPool\n→ 128 × T_a'"]
-    VR1 --> VS2["Conv1D 64→128 · BN · ReLU\nConv1D 128→128 · BN · ReLU\n→ 128 × 15"]
+    ARES1 --> AS2["Audio stage 2<br/>Conv1D 128 to 256 to 128"]
+    VRES1 --> VS2["Visual stage 2<br/>Conv1D 64 to 128 to 128"]
 
-    %% ── SELF-ATTENTION (cross-modal) ────────────────────────────────────────
-    AS2 --> AATTN["audioAttention · MultiheadAttention 128-dim\nq = audio,  k = v = video\n→ T_a' × B × 128"]
-    VS2 --> AATTN
-    VS2 --> VATTN["visualAttention · MultiheadAttention 128-dim\nq = video,  k = v = audio\n→ 15 × B × 128"]
-    AS2 --> VATTN
+    AS2 --> MHA_A["audioAttention<br/>query audio, key/value visual"]
+    VS2 --> MHA_A
+    VS2 --> MHA_V["visualAttention<br/>query visual, key/value audio"]
+    AS2 --> MHA_V
 
-    AATTN --> AR2((" + "))
-    AS2   --> AR2
-    VATTN --> VR2((" + "))
-    VS2   --> VR2
+    MHA_A --> ARES2["Audio residual + attention dropout"]
+    AS2 --> ARES2
+    MHA_V --> VRES2["Visual residual + attention dropout"]
+    VS2 --> VRES2
 
-    %% ── FINAL CROSS-ATTENTION ────────────────────────────────────────────────
-    AR2 --> ACA["audioCrossAttention · AttentionBlock\nq = audio,  k = v = video\n→ B × T_a' × 128"]
-    VR2 --> ACA
-    VR2 --> VCA["visualCrossAttention · AttentionBlock\nq = video,  k = v = audio\n→ B × 15 × 128"]
-    AR2 --> VCA
+    ARES2 --> FCA["audioCrossAttention<br/>audio query over visual"]
+    VRES2 --> FCA
+    VRES2 --> FCV["visualCrossAttention<br/>visual query over audio"]
+    ARES2 --> FCV
 
-    %% ── POOLING & CLASSIFICATION ─────────────────────────────────────────────
-    ACA --> APOOL["MaxPool over T  →  B × 128"]
-    VCA --> VPOOL["MaxPool over T  →  B × 128"]
-    APOOL --> CAT["Concat  →  B × 256"]
-    VPOOL --> CAT
-    CAT --> CLS["Linear 256 → 8"]
-    CLS --> OUT([PREDICTED EMOTION\n8 classes])
+    FCA --> AP["Audio attention pooling"]
+    FCV --> VP["Visual attention pooling"]
+    AP --> CAT["Concatenate pooled audio + visual features"]
+    VP --> CAT
+    CAT --> CLS["Linear classifier<br/>256 to 8"]
+    CLS --> OUT["Emotion prediction<br/>neutral, calm, happy, sad,<br/>angry, fearful, disgust, surprised"]
 ```
 
----
+## Code Mapping
 
-## Architecture 2: AVT-CA-Engagement (Classroom Engagement Detection)
+| Diagram section | Code location |
+|---|---|
+| RAVDESS loader, train/val/test split | `datasets/ravdess.py` |
+| Video frame loading and transforms | `datasets/ravdess.py`, `src/data/transforms.py` |
+| Audio crop/pad and mel extraction | `datasets/ravdess.py` |
+| EfficientFace visual encoder | `models/multimodal_cnn.py`, `models/efficient_face.py`, `models/modulator.py` |
+| V4 attention-local visual encoder | `AttentionLocalVisualTemporal` in `models/multimodal_cnn.py` |
+| Audio CNN stages | `AudioCNNPool` in `models/multimodal_cnn.py` |
+| Audio temporal alignment | `self.audio_temporal_pool` in `MultiModalCNN.__init__` |
+| Intermediate `av1` / `va1` attention | `forward_feature_3` in `models/multimodal_cnn.py` |
+| Cross-modal `audioAttention` / `visualAttention` | `forward_feature_3` in `models/multimodal_cnn.py` |
+| Final `audioCrossAttention` / `visualCrossAttention` | `forward_feature_3` in `models/multimodal_cnn.py` |
+| Attention pooling | `AttentionPool` in `models/multimodal_cnn.py` |
+| 8-class classifier | `classifier_1` in `models/multimodal_cnn.py` |
 
-> Status: **Planned — not yet implemented.** See `docs/plan.md` Section 4 for full rationale.
-> Target: 5-level engagement scale + binary confusion flag, per student per 10-second window.
-> Input source: Zoom gallery view recording + per-participant audio tracks.
+## Paper Mapping
 
-### Key differences from Architecture 1
-
-| Dimension | Architecture 1 (RAVDESS) | Architecture 2 (Engagement) |
+| Architecture section | Paper/source | What was taken |
 |---|---|---|
-| Video input | Raw face frames (15 × 224×224 RGB) | OpenFace 2.2 feature vectors (T × 35: 17 AUs + 6 pose + 6 gaze + 2 EAR) |
-| Audio input | MFCC/mel spectrogram only | Mel spectrogram (existing CNN path) + prosodic features (FiLM conditioning, not a sequence token) |
-| Output | Single head → 8 emotion classes | Dual heads: engagement (5-class ordinal, CORN loss) + confusion (binary, BCE) |
-| Loss | Cross-entropy | CORN loss (ordinal) + BCE (confusion): `λ1·L_corn + λ2·L_bce` |
-| Temporal window | Fixed dataset clips | Sliding 10s window, 5s overlap, over live Zoom stream |
-| Video backbone | EfficientFaceTemporal (heavy CNN) | OpenFaceEncoder: Linear(35→128) + LayerNorm + PositionalEncoding (lightweight) |
-| Role conditioning | None | `role_embedding(is_speaking)` added to video tokens before first attention block |
-| Temporal aggregation | MaxPool (peak only) | Learned attention pooling (weighted sum over T) |
-| Cross-attention stages | 3 | **1 at pilot scale (<5K clips); scale to 2 at Phase 1 scale** |
-| Attention dropout | None | Dropout(0.1–0.2) on attention output before residual add |
+| Overall two-stream audio/video design | AVTCA | Separate audio and visual encoders before fusion. |
+| Bidirectional cross-modal agreement | AVTCA | Audio attends to visual tokens and visual attends to audio tokens. |
+| Intermediate and final cross-attention blocks | AVTCA | The `av1` / `va1` stage and final `audioCrossAttention` / `visualCrossAttention` stage. |
+| EfficientFace visual backbone with channel/spatial/local feature refinement | AVTCA / EfficientFace components used by the AVTCA implementation | Face-frame feature extraction before temporal modeling. |
+| Audio CNN over mel features | AVTCA-style audio branch | Spectrogram-like audio features encoded with convolutional layers. |
+| Residual paths around attention | Transformer/AVTCA design pattern | Preserve unimodal information while adding cross-modal information. |
+| Adaptive audio-video temporal alignment | Codebase fix, not directly copied from a paper | Aligns audio tokens to the 15-frame visual sequence before intermediate attention. |
+| Cross-modal MHA in `audioAttention` / `visualAttention` | Codebase correction of the intended AVTCA behavior | Uses audio as query over visual and visual as query over audio, instead of self-attention. |
+| Attention pooling | Codebase improvement over the original max-pooling implementation | Learns which time steps matter instead of taking only the max activation. |
+| SpecAugment | SpecAugment paper, tested as an ablation only | Training-time audio augmentation; not part of the winning architecture. |
+| TemporalChannelGate | Squeeze-and-excitation / AVTCA channel-attention idea, tested as an ablation only | Optional audio channel recalibration; not part of the winning architecture. |
+| Attention-local visual backbone | Codebase V4 experiment inspired by channel/spatial/local visual processing | Lighter visual extractor intended to reduce EfficientFace memorization; did not beat the V3 baseline. |
 
-### Why OpenFace features replace raw frames
+## V3 Test Result Summary
 
-Neural Computing and Applications (Springer, 2025) tested on DAiSEE:
-- XGBoost + 17 AUs = **82.9%** accuracy
-- EfficientNet end-to-end = **47.2%** accuracy
+| Run | Best validation | Test top-1 |
+|---|---:|---:|
+| `v3_01_baseline_mel_h4` | 82.9167% | 81.8750% |
+| `v3_02_specaugment_mel_h4` | 80.0000% | 79.3750% |
+| `v3_03_audio_channel_gate_mel_h4` | 81.6667% | 76.8750% |
+| `v3_04_specaugment_audio_gate_mel_h4` | 81.6667% | 68.9583% |
 
-On small datasets (pilot phase: ~1,500 clips), structured AU features generalize far better than learned CNN features. Raw frame path can be reintroduced once dataset reaches 5,000+ clips.
+Conclusion: the best current architecture is the baseline mel + 4-head AVTCA model without SpecAugment and without the audio channel gate.
 
-### Diagram
+## V4 Test Result Summary
+
+| Run | Visual backbone | Pretrain | Learning rate | Best validation | Test top-1 | Final train |
+|---|---|---:|---:|---:|---:|---:|
+| `v4_05_attention_local_pretrain_h4_lr001` | `attention_local` | yes | 0.010 | 79.7917% | 79.7917% | 93.8151% |
+| `v4_06_attention_local_scratch_h4_lr001` | `attention_local` | no | 0.010 | 78.1250% | 73.1250% | 92.5781% |
+| `v4_07_attention_local_scratch_h4_lr005` | `attention_local` | no | 0.005 | 79.3750% | 77.9167% | 90.8984% |
+
+The best V4 run is `v4_05_attention_local_pretrain_h4_lr001`. It reduced the final train accuracy compared with V3, but it was 2.0833 percentage points below `v3_01_baseline_mel_h4` on held-out test accuracy.
+
+## V4 Visual Backbone
+
+`AttentionLocalVisualTemporal` keeps the same interface as `EfficientFaceTemporal`, so the AVTCA fusion path can switch visual extractors using `--visual_backbone attention_local`.
 
 ```mermaid
-graph TD
-
-    %% ── VIDEO INPUT ──────────────────────────────────────────────────────────
-    ZV([ZOOM TILE VIDEO\nper student, 10s clip])
-    ZV --> OF["OpenFace 2.2\n--aus --pose --gaze\n→ CSV: T × 35"]
-    OF --> OFE["OpenFaceEncoder\nLinear 35→128\nLayerNorm\nPositionalEncoding\n→ T × 128"]
-
-    %% ── AUDIO INPUT ──────────────────────────────────────────────────────────
-    ZA([ZOOM AUDIO\nper-participant M4A, 10s clip])
-    ZA --> MEL["librosa mel spectrogram\n128 mel bins · 25fps\n→ 128 × T_a"]
-    ZA --> PRO["ProsodyEncoder\nparselmouth: F0, RMS\nwebrtcvad: VAD flag\npyAudioAnalysis: speech rate, ZCR\n→ T_a × 5 → Dense(32) → 128-dim token"]
-
-    %% ── AUDIO STAGE 1 (existing CNN path) ───────────────────────────────────
-    MEL --> A1["Conv2D 1→64 · BN · ReLU · MaxPool2D\n→ 64 × 5 × T_a/2"]
-    A1  --> A2["Conv2D 64→128 · BN · ReLU · MaxPool2D\n+ mean over freq dim\n→ 128 × T_a/4"]
-
-    %% ── TEMPORAL ALIGNMENT (audio → video resolution) ───────────────────────
-    A2  --> ASUB["AvgPool1D stride=T_a/4÷T_v\n→ 128 × T_v  (matches video time axis)"]
-    PRO --> ACAT
-    ASUB --> ACAT["Concat prosodic token\n→ 128 × T_v + 1 prosodic"]
-
-    %% ── INTERMEDIATE CROSS-ATTENTION ─────────────────────────────────────────
-    ACAT --> AV1["av1 · AttentionBlock\nq=audio · k,v=video\n→ 128 × T_v"]
-    OFE  --> AV1
-    OFE  --> VA1["va1 · AttentionBlock\nq=video · k,v=audio\n→ 128 × T"]
-    ACAT --> VA1
-
-    AV1  --> AR1((" + "))
-    ACAT --> AR1
-    VA1  --> VR1((" + "))
-    OFE  --> VR1
-
-    %% ── STAGE 2 ──────────────────────────────────────────────────────────────
-    AR1 --> AS2["Conv1D 128→256 · BN · ReLU · MaxPool\nConv1D 256→128 · BN · ReLU · MaxPool\n→ 128 × T_a'"]
-    VR1 --> VS2["Conv1D 128→128 · BN · ReLU\nConv1D 128→128 · BN · ReLU\n→ 128 × T'"]
-
-    %% ── SELF-ATTENTION ───────────────────────────────────────────────────────
-    AS2 --> AATTN["audioAttention\nMultiheadAttention 128-dim\nq=audio · k=v=video"]
-    VS2 --> AATTN
-    VS2 --> VATTN["visualAttention\nMultiheadAttention 128-dim\nq=video · k=v=audio"]
-    AS2 --> VATTN
-
-    AATTN --> AR2((" + "))
-    AS2   --> AR2
-    VATTN --> VR2((" + "))
-    VS2   --> VR2
-
-    %% ── FINAL CROSS-ATTENTION ────────────────────────────────────────────────
-    AR2 --> ACA["audioCrossAttention · AttentionBlock\nq=audio · k,v=video\n→ B × T_a' × 128"]
-    VR2 --> ACA
-    VR2 --> VCA["visualCrossAttention · AttentionBlock\nq=video · k,v=audio\n→ B × T' × 128"]
-    AR2 --> VCA
-
-    %% ── POOLING ──────────────────────────────────────────────────────────────
-    ACA --> APOOL["MaxPool over T → B × 128"]
-    VCA --> VPOOL["MaxPool over T → B × 128"]
-    APOOL --> CAT["Concat → B × 256"]
-    VPOOL --> CAT
-
-    %% ── DUAL OUTPUT HEADS ────────────────────────────────────────────────────
-    CAT --> EH["engagement_head\nLinear 256→5 + Softmax"]
-    CAT --> CH["confusion_head\nLinear 256→2 + Softmax"]
-
-    EH --> EO([ENGAGEMENT LEVEL\n1=Disengaged · 2=Distracted\n3=Passive · 4=Engaged · 5=Flow])
-    CH --> CO([CONFUSION FLAG\n0=Not Confused · 1=Confused])
+flowchart TD
+    VIN["Video input<br/>15 face frames, 3 x 224 x 224"] --> STEM["3x3 conv + maxpool"]
+    STEM --> CH["Channel attention"]
+    STEM --> SP["Spatial attention"]
+    STEM --> LOCAL["Local feature extractor"]
+    CH --> MUL["Attention product + sigmoid"]
+    SP --> MUL
+    MUL --> ATT["Attention-filtered features"]
+    ATT --> ADD["Add"]
+    LOCAL --> ADD
+    ADD --> DEEP["Inverted residual visual blocks"]
+    DEEP --> GAP["Global average pool<br/>1024-d frame embedding"]
+    GAP --> TCONV["Temporal Conv1D<br/>15 visual tokens"]
+    TCONV --> FUSION["Existing AVTCA audio-video fusion"]
 ```
 
-### Design Gaps — Must Fix Before Implementation (identified 2026-05-18)
-
-**1. ProsodyEncoder: single token → FiLM conditioning**
-Current diagram shows prosody token concatenated into the temporal sequence. A single 128-dim summary token attends identically at every time step — does not interact correctly with cross-attention.
-Correct implementation:
-```python
-gamma, beta = Linear(128, 128)(prosody_summary).chunk(2, dim=-1)
-audio_features = gamma * audio_features + beta  # scale+shift before attention
-```
-
-**2. Role conditioning must be in the forward pass**
-`is_speaking` flag is in manifest.csv but there is no conditioning path in the architecture. Gaze features are behaviorally inverted by speaker vs listener role (Maran et al. 2021) — training without this produces contradictory supervision.
-Correct implementation (before first AttentionBlock):
-```python
-role_embed = self.role_embedding(is_speaking.long())  # B × 128
-video_features = video_features + role_embed.unsqueeze(1)
-```
-
-**3. MaxPool → attention pooling**
-MaxPool picks the single peak activation and discards all temporal context. Engagement states have temporal signatures (boredom develops over minutes, confusion has AU onset/offset patterns).
-Correct implementation:
-```python
-attn_weights = torch.softmax(self.pool_proj(x), dim=1)  # B × T × 1
-pooled = (attn_weights * x).sum(dim=1)                  # B × 128
-```
-
-**4. Cross-attention stages: 3 → 1 at pilot scale**
-Architecture 2 currently inherits all 3 cross-attention stages from Architecture 1. At pilot scale (<5K clips), this will overfit. Run with 1 cross-attention stage + 1 transformer encoder layer. Add the second stage after Phase 1 data (10K+ clips) is assembled.
-
-**5. CORN loss required for ordinal output**
-Plain `CrossEntropyLoss` on 5-level engagement treats level-3-vs-5 error identically to level-3-vs-4 error. Replace with CORN loss (coral-pytorch library). 5-line change to the output head and loss function. MocoRank (from CMOSE paper) is the stronger option after Phase 1 data enables contrastive pair construction.
-
-### New modules to implement (tracking against plan.md Section 9)
-
-| Module | File | Plan.md item | Status |
-|---|---|---|---|
-| `AttentionPool` class + attention pooling (replace MaxPool) | `models/multimodal_cnn.py` | — | ✅ Done |
-| Audio `AdaptiveAvgPool1d` temporal subsampling | `models/multimodal_cnn.py` | E11 | ✅ Done |
-| Cross-modal fix + residuals + attention dropout | `models/multimodal_cnn.py` | — | ✅ Done |
-| Modality dropout (p=0.15) | `models/multimodal_cnn.py` | E12 | ✅ Done |
-| `OpenFaceEncoder` | `models/multimodal_cnn.py` | E8 | 🔴 Not started |
-| `ProsodyEncoder` (FiLM, not token) | `models/multimodal_cnn.py` | E9 | 🔴 Not started |
-| Role conditioning embedding | `models/multimodal_cnn.py` | — | 🔴 Not started |
-| Dual output heads + CORN loss | `models/multimodal_cnn.py` | E10 | 🔴 Not started |
-| `EngagementDataset` | `datasets/engagement.py` | E6 | 🔴 Not started |
-| New CLI flags | `src/opts.py` | — | 🔴 Not started |
-| OpenFace 2.2 setup | `preprocessing/zoom/` | E7 | 🔴 Not started |
-| `extract_tiles.py` | `preprocessing/zoom/` | E3 | 🔴 Not started |
-| `extract_prosody.py` | `preprocessing/zoom/` | E4 | 🔴 Not started |
+The V4 idea was to force visual learning through explicit channel, spatial, and local-region processing instead of relying entirely on the stronger EfficientFace path. The result suggests that EfficientFace is not the only source of overfitting: the smaller V4 visual branch still overfit, though less severely, and did not improve the final held-out test result.
