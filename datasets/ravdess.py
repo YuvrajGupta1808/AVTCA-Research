@@ -13,6 +13,11 @@ import librosa
 import cv2
 
 
+def _pil_to_tensor(img):
+    array = np.asarray(img, dtype=np.float32) / 255.0
+    return torch.from_numpy(array).permute(2, 0, 1)
+
+
 def video_loader(video_dir_path):
     if video_dir_path.endswith('.npy'):
         video = np.load(video_dir_path)
@@ -221,7 +226,9 @@ class RAVDESS(data.Dataset):
             
             if self.spatial_transform is not None:               
                 self.spatial_transform.randomize_parameters()
-                clip = [self.spatial_transform(img) for img in clip]            
+                clip = [self.spatial_transform(img) for img in clip]
+            else:
+                clip = [_pil_to_tensor(img) for img in clip]
             clip = torch.stack(clip, 0).permute(1, 0, 2, 3) 
             
             if self.data_type == 'video':

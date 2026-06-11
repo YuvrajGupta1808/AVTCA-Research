@@ -30,6 +30,7 @@ AVTCA-Research/
 │
 ├── preprocessing/
 │   ├── ravdess/            # Audio crop/pad, face extraction, annotation generation
+│   ├── daisee/             # Official download + bootstrap preprocessing for DAiSEE
 │   └── mosei/              # CMU-MOSEI preprocessing utilities
 │
 ├── ui/                     # Streamlit inference app
@@ -69,6 +70,12 @@ datasets/RAVDESS/ACTOR01/ ... ACTOR24/
 ```
 The path is auto-detected. No `--data_root` flag needed.
 
+**DAiSEE dataset** — request access on the official IIT Hyderabad page, then use the approved Drive link:
+```bash
+python preprocessing/daisee/download_daisee.py
+```
+This extracts the official archive into `datasets/DAISEE/`.
+
 ---
 
 ## Preprocessing RAVDESS
@@ -87,6 +94,32 @@ python preprocessing/ravdess/create_annotations.py
 ```
 
 Outputs: `*_croppad.wav` and `*_facecroppad.npy` per video, plus `preprocessing/ravdess/annotations.txt`.
+
+## Preprocessing DAiSEE
+
+This is a bootstrap path for the current architecture. It uses the DAiSEE `Engagement` label as a temporary single 4-class target so we can reuse the existing AV pipeline.
+
+```bash
+# 1. Download the official archive after DAiSEE approval
+python preprocessing/daisee/download_daisee.py
+
+# 2. Extract centered 3.6 s audio windows
+python preprocessing/daisee/extract_audios.py --data_root datasets/DAISEE
+
+# 3. Extract 15 face-focused frames per clip
+python preprocessing/daisee/extract_faces.py --data_root datasets/DAISEE
+
+# 4. Create current-pipeline annotations
+python preprocessing/daisee/create_annotations.py --data_root datasets/DAISEE
+```
+
+Outputs: `*_croppad.wav`, `*_facecroppad.npy`, and `preprocessing/daisee/annotations_engagement.txt`.
+
+Initial DAiSEE training target:
+
+- `--dataset DAISEE`
+- `--annotation_path preprocessing/daisee/annotations_engagement.txt`
+- `--n_classes 4`
 
 ---
 
