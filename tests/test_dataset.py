@@ -12,7 +12,7 @@ class TestDatasetRegistry(unittest.TestCase):
         self.assertIn('RAVDESS', DATASET_REGISTRY)
 
     def test_registry_contains_known_datasets(self):
-        self.assertEqual(set(DATASET_REGISTRY.keys()), {'RAVDESS', 'CREMAD'})
+        self.assertEqual(set(DATASET_REGISTRY.keys()), {'RAVDESS', 'CREMAD', 'ENGAGENET'})
 
     def test_test_subset_resolution(self):
         self.assertEqual(resolve_test_subset_name('val'), 'validation')

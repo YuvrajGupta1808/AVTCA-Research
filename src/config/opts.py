@@ -12,8 +12,8 @@ def parse_opts():
     parser.add_argument('--data_root', default='', type=str, help='Root directory containing the preprocessed RAVDESS ACTOR folders')
     parser.add_argument('--result_path', default='results', type=str, help='Result directory path')
     parser.add_argument('--store_name', default='model', type=str, help='Name to store checkpoints')
-    parser.add_argument('--dataset', default='RAVDESS', type=str, help='Used dataset. Currently supporting Ravdess')
-    parser.add_argument('--n_classes', default=8, type=int, help='Number of classes')
+    parser.add_argument('--dataset', default='RAVDESS', type=str, help='Dataset name. Current registry includes RAVDESS, CREMAD, and ENGAGENET.')
+    parser.add_argument('--n_classes', default=8, type=int, help='Number of output classes. Use 4 for the bootstrap ENGAGENET engagement setup.')
     
     parser.add_argument('--model', default='multimodal_cnn', type=str, help='Model architecture: multimodal_cnn | token_fusion')
     parser.add_argument('--audio_features', default='mel', type=str, choices=['mfcc', 'mel'], help='Audio feature type. mel=64-channel mel spectrogram (best), mfcc=10-channel MFCC')

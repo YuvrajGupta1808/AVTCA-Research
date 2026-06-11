@@ -1,9 +1,11 @@
 from datasets.ravdess import RAVDESS
 from datasets.cremad import CREMAD
+from datasets.engagenet import ENGAGENET
 
 DATASET_REGISTRY = {
     'RAVDESS': RAVDESS,
     'CREMAD': CREMAD,
+    'ENGAGENET': ENGAGENET,
 }
 
 TEST_SUBSET_ALIASES = {
