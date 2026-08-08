@@ -1,6 +1,8 @@
 # -*- coding: utf-8 -*-
 """Bootstrap EngageNet dataset loader for the current AVT-CA pipeline."""
 
+import csv
+
 import torch
 import torch.utils.data as data
 
@@ -15,12 +17,14 @@ from datasets.ravdess import (
 
 def make_dataset(subset, annotation_path):
     dataset = []
-    with open(annotation_path, "r") as handle:
-        for line in handle:
-            line = line.strip()
-            if not line:
+    with open(annotation_path, "r", newline="") as handle:
+        reader = csv.reader(handle, delimiter=";")
+        for row in reader:
+            if not row:
                 continue
-            video_path, audio_path, label, split = line.split(";")
+            if len(row) < 4:
+                raise ValueError(f"Malformed EngageNet annotation row: {row}")
+            video_path, audio_path, label, split = row[:4]
             if split != subset:
                 continue
             dataset.append(
@@ -28,6 +32,7 @@ def make_dataset(subset, annotation_path):
                     "video_path": video_path,
                     "audio_path": audio_path,
                     "label": int(label),
+                    "text": row[4] if len(row) > 4 else "",
                 }
             )
     return dataset
@@ -45,15 +50,19 @@ class ENGAGENET(data.Dataset):
         audio_feature_transform=None,
         data_root="",
         audio_features="mfcc",
+        target_frames=None,
+        frame_sampling="uniform",
+        audio_target_secs=None,
     ):
         del data_root
         self.data = make_dataset(subset, annotation_path)
         self.spatial_transform = spatial_transform
         self.audio_transform = audio_transform
         self.audio_feature_transform = audio_feature_transform
-        self.loader = get_loader()
+        self.loader = get_loader(target_frames=target_frames, frame_sampling=frame_sampling)
         self.data_type = data_type
         self.audio_features = audio_features
+        self.audio_target_secs = audio_target_secs
 
     def __getitem__(self, index):
         target = self.data[index]["label"]
@@ -74,7 +83,7 @@ class ENGAGENET(data.Dataset):
 
         if self.data_type == "audio" or self.data_type == "audiovisual":
             path = self.data[index]["audio_path"]
-            y, sr = load_audio(path, sr=22050)
+            y, sr = load_audio(path, sr=22050, target_secs=self.audio_target_secs)
 
             if self.audio_transform is not None:
                 self.audio_transform.randomize_parameters()
@@ -93,7 +102,16 @@ class ENGAGENET(data.Dataset):
                 return audio_features, target
 
         if self.data_type == "audiovisual":
-            return audio_features, clip, target
+            audio_features = torch.as_tensor(audio_features, dtype=torch.float32)
+            clip = torch.as_tensor(clip, dtype=torch.float32).permute(1, 0, 2, 3)
+            return (
+                audio_features,
+                clip,
+                target,
+                int(audio_features.shape[-1]),
+                int(clip.shape[0]),
+                self.data[index].get("text", ""),
+            )
 
     def __len__(self):
         return len(self.data)

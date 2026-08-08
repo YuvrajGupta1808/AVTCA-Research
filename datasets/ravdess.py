@@ -11,6 +11,7 @@ import functools
 import numpy as np
 import librosa
 import cv2
+import torch.nn.functional as F
 
 
 def _pil_to_tensor(img):
@@ -18,11 +19,26 @@ def _pil_to_tensor(img):
     return torch.from_numpy(array).permute(2, 0, 1)
 
 
-def video_loader(video_dir_path):
+def _sample_frame_indices(length, target_frames, sampling='uniform'):
+    if length <= 0:
+        return []
+    if target_frames is None or target_frames <= 0 or length <= target_frames:
+        return list(range(length))
+    if sampling == 'stride':
+        stride = max(int(np.ceil(length / float(target_frames))), 1)
+        indices = list(range(0, length, stride))[:target_frames]
+        if len(indices) < target_frames:
+            indices.extend([length - 1] * (target_frames - len(indices)))
+        return indices
+    return np.linspace(0, length - 1, num=target_frames, dtype=int).tolist()
+
+
+def video_loader(video_dir_path, target_frames=None, frame_sampling='uniform'):
     if video_dir_path.endswith('.npy'):
         video = np.load(video_dir_path)
         video_data = []
-        for i in range(np.shape(video)[0]):
+        indices = _sample_frame_indices(np.shape(video)[0], target_frames, sampling=frame_sampling)
+        for i in indices:
             video_data.append(Image.fromarray(video[i, :, :, :]))
         return video_data
 
@@ -38,30 +54,29 @@ def video_loader(video_dir_path):
             frames.append(frame)
         cap.release()
 
-        target_frames = 15
         if not frames:
-            frames = [np.zeros((224, 224, 3), dtype=np.uint8) for _ in range(target_frames)]
-        elif len(frames) >= target_frames:
-            indices = np.linspace(0, len(frames) - 1, num=target_frames, dtype=int)
-            frames = [frames[idx] for idx in indices]
+            fill = target_frames if target_frames and target_frames > 0 else 1
+            frames = [np.zeros((224, 224, 3), dtype=np.uint8) for _ in range(fill)]
         else:
-            frames.extend([np.zeros((224, 224, 3), dtype=np.uint8) for _ in range(target_frames - len(frames))])
+            indices = _sample_frame_indices(len(frames), target_frames, sampling=frame_sampling)
+            frames = [frames[idx] for idx in indices]
 
         return [Image.fromarray(frame) for frame in frames]
 
     raise ValueError('Unsupported video format: {}'.format(video_dir_path))
 
-def get_default_video_loader():
-    return functools.partial(video_loader)
+def get_default_video_loader(target_frames=None, frame_sampling='uniform'):
+    return functools.partial(video_loader, target_frames=target_frames, frame_sampling=frame_sampling)
 
-def load_audio(audiofile, sr):
+def load_audio(audiofile, sr, target_secs=None):
     audios, sr = librosa.core.load(audiofile, sr=sr)
-    target_length = int(sr * 3.6)
-    if len(audios) < target_length:
-        audios = np.pad(audios, (0, target_length - len(audios)))
-    else:
-        remain = len(audios) - target_length
-        audios = audios[remain // 2:len(audios) - (remain - remain // 2)]
+    if target_secs is not None and target_secs > 0:
+        target_length = int(sr * target_secs)
+        if len(audios) < target_length:
+            audios = np.pad(audios, (0, target_length - len(audios)))
+        else:
+            remain = len(audios) - target_length
+            audios = audios[remain // 2:len(audios) - (remain - remain // 2)]
     return audios, sr
 
 def get_mfccs(y, sr):
@@ -207,14 +222,18 @@ class RAVDESS(data.Dataset):
                  audio_transform=None,
                  audio_feature_transform=None,
                  data_root='',
-                 audio_features='mfcc'):
+                 audio_features='mfcc',
+                 target_frames=15,
+                 frame_sampling='uniform',
+                 audio_target_secs=3.6):
         self.data = make_dataset(subset, annotation_path, data_root=data_root)
         self.spatial_transform = spatial_transform
         self.audio_transform = audio_transform
         self.audio_feature_transform = audio_feature_transform
-        self.loader = get_loader()
+        self.loader = get_loader(target_frames=target_frames, frame_sampling=frame_sampling)
         self.data_type = data_type
         self.audio_features = audio_features
+        self.audio_target_secs = audio_target_secs
 
     def __getitem__(self, index):
         target = self.data[index]['label']
@@ -236,7 +255,7 @@ class RAVDESS(data.Dataset):
             
         if self.data_type == 'audio' or self.data_type == 'audiovisual':
             path = self.data[index]['audio_path']
-            y, sr = load_audio(path, sr=22050) 
+            y, sr = load_audio(path, sr=22050, target_secs=self.audio_target_secs) 
             
             if self.audio_transform is not None:
                  self.audio_transform.randomize_parameters()
@@ -254,7 +273,11 @@ class RAVDESS(data.Dataset):
             if self.data_type == 'audio':
                 return audio_features, target
         if self.data_type == 'audiovisual':
-            return audio_features, clip, target  
+            audio_features = torch.as_tensor(audio_features, dtype=torch.float32)
+            clip = torch.as_tensor(clip, dtype=torch.float32).permute(1, 0, 2, 3)
+            audio_len = int(audio_features.shape[-1])
+            video_len = int(clip.shape[0])
+            return audio_features, clip, target, audio_len, video_len, ''
 
     def __len__(self):
         return len(self.data)

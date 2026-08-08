@@ -17,12 +17,19 @@ PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(_
 if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 
-import torch
-
-from src.engine.checkpointing import load_state_dict_flexible
+from src.engine.checkpointing import load_state_dict_flexible, resolve_checkpoint_file
 from src.engine.evaluation import canonical_evaluate_split
-from src.engine.runtime import build_criterion, load_result_config, print_runtime_summary, resolve_device
+from src.engine.runtime import (
+    CONFIG_IDENTITY_DEFAULTS,
+    build_criterion,
+    load_result_config,
+    print_runtime_summary,
+    resolve_device,
+    restore_criterion_class_weights,
+    validate_run_options,
+)
 from src.models.factory import generate_model
+from src.utils.common import set_random_seed
 
 
 def parse_args():
@@ -45,7 +52,8 @@ def _load_run_config(args):
 
 
 def _build_opt(args, config):
-    merged = dict(config)
+    merged = dict(CONFIG_IDENTITY_DEFAULTS)
+    merged.update(config)
     merged['result_path'] = os.path.abspath(args.result_path)
     merged['checkpoint_path'] = os.path.abspath(args.checkpoint)
     merged['test_subset'] = args.test_subset
@@ -71,7 +79,26 @@ def _build_opt(args, config):
     if missing:
         raise ValueError(f'Run config is missing required fields for canonical evaluation: {missing}')
 
-    return SimpleNamespace(**merged)
+    return validate_run_options(SimpleNamespace(**merged))
+
+
+def resolve_checkpoint_path(checkpoint_path):
+    return resolve_checkpoint_file(
+        checkpoint_path,
+        checkpoint_kind='Evaluation checkpoint',
+        hint='Pass --checkpoint with an existing .pth file.',
+    )
+
+
+def restore_evaluation_criterion_state(criterion, checkpoint_obj, device, n_classes=None):
+    if not isinstance(checkpoint_obj, dict):
+        return False
+    return restore_criterion_class_weights(
+        criterion,
+        checkpoint_obj.get('class_loss_weights'),
+        device,
+        n_classes=n_classes,
+    )
 
 
 def run():
@@ -79,19 +106,22 @@ def run():
     config = _load_run_config(args)
     opt = _build_opt(args, config)
     opt.arch = opt.model
-    torch.manual_seed(opt.manual_seed)
+    set_random_seed(opt.manual_seed)
+    checkpoint_path = resolve_checkpoint_path(args.checkpoint)
+    opt.checkpoint_path = checkpoint_path
 
     print(f'Building model from {config["config_path"]}')
     model, _ = generate_model(opt)
     print_runtime_summary(opt, model)
 
-    checkpoint_path = os.path.abspath(args.checkpoint)
     print(f'Loading checkpoint: {checkpoint_path}')
     checkpoint_obj = load_state_dict_flexible(model, checkpoint_path, map_location=opt.device)
     if isinstance(checkpoint_obj, dict) and 'state_dict' in checkpoint_obj:
         print(f'  Epoch {checkpoint_obj.get("epoch", "?")}  best_prec1={checkpoint_obj.get("best_prec1", "?")}')
 
     criterion = build_criterion(opt)
+    if restore_evaluation_criterion_state(criterion, checkpoint_obj, opt.device, n_classes=opt.n_classes):
+        print('  Restored class loss weights from checkpoint')
     metrics, split_fingerprint, checkpoint_info, artifact_paths = canonical_evaluate_split(
         opt=opt,
         model=model,

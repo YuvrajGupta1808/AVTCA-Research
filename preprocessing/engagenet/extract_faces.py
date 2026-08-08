@@ -23,14 +23,13 @@ RAW_SPLITS = ("Train", "Validation", "Test")
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
     parser.add_argument("--data_root", type=Path, default=Path("datasets/EngageNet"))
-    parser.add_argument("--target_time", default=3.6, type=float)
-    parser.add_argument(
-        "--sampling_strategy",
-        default="center_window",
-        choices=["full_clip", "center_window"],
-        help="center_window matches the current RAVDESS-style 3.6s pipeline; full_clip samples across the whole video.",
-    )
-    parser.add_argument("--save_frames", default=15, type=int)
+    parser.add_argument("--splits", nargs="+", choices=RAW_SPLITS, default=list(RAW_SPLITS))
+    parser.add_argument("--num_shards", type=int, default=1)
+    parser.add_argument("--shard_index", type=int, default=0)
+    parser.add_argument("--max_video_seconds", default=0.0, type=float)
+    parser.add_argument("--max_frames", default=0, type=int)
+    parser.add_argument("--target_fps", default=0.0, type=float)
+    parser.add_argument("--frame_stride", default=1, type=int)
     parser.add_argument("--output_size", default=224, type=int)
     parser.add_argument("--force", action="store_true")
     parser.add_argument("--allow_opencv_fallback", action="store_true")
@@ -38,21 +37,29 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def iter_video_files(data_root: Path) -> list[Path]:
+def iter_video_files(data_root: Path, splits: list[str]) -> list[Path]:
     files: list[Path] = []
-    for split_name in RAW_SPLITS:
+    for split_name in splits:
         split_dir = data_root / split_name
         if split_dir.exists():
             files.extend(sorted(split_dir.rglob("*.mp4")))
     return files
 
 
+def select_shard(files: list[Path], num_shards: int, shard_index: int) -> list[Path]:
+    if num_shards <= 1:
+        return files
+    if shard_index < 0 or shard_index >= num_shards:
+        raise ValueError(f"shard_index must be in [0, {num_shards - 1}], got {shard_index}")
+    return files[shard_index::num_shards]
+
+
 def select_distributed(count: int, total: int) -> list[int]:
     if total <= 0:
         return []
-    if total <= count:
+    if count <= 0 or total <= count:
         return list(range(total))
-    return [i * total // count + total // (2 * count) for i in range(count)]
+    return np.linspace(0, total - 1, num=count, dtype=int).tolist()
 
 
 def crop_face_or_resize(frame_bgr: np.ndarray, detector, output_size: int, device: torch.device, face_cascade) -> np.ndarray:
@@ -83,9 +90,10 @@ def crop_face_or_resize(frame_bgr: np.ndarray, detector, output_size: int, devic
 def extract_clip_faces(
     video_path: Path,
     detector,
-    save_frames: int,
-    target_time: float,
-    sampling_strategy: str,
+    max_frames: int,
+    max_video_seconds: float,
+    target_fps: float,
+    frame_stride: int,
     output_size: int,
     device: torch.device,
     face_cascade,
@@ -96,19 +104,20 @@ def extract_clip_faces(
         fps = 30.0
     frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
 
-    if sampling_strategy == "full_clip":
-        start_frame = 0
-        window_frames = frame_count
-    else:
-        window_frames = max(save_frames, int(round(target_time * fps)))
-        if frame_count > window_frames:
-            start_frame = max(0, (frame_count - window_frames) // 2)
-        else:
-            start_frame = 0
-            window_frames = frame_count
-
-    selected = select_distributed(save_frames, max(window_frames, 1))
-    selected_set = set(start_frame + idx for idx in selected)
+    max_window_frames = frame_count
+    if max_video_seconds and max_video_seconds > 0:
+        max_window_frames = min(frame_count, int(round(max_video_seconds * fps)))
+    start_frame = 0
+    effective_stride = max(int(frame_stride), 1)
+    raw_selected = list(range(start_frame, start_frame + max(max_window_frames, 1), effective_stride))
+    if target_fps and target_fps > 0:
+        effective_stride = max(int(round(fps / target_fps)), 1)
+        raw_selected = list(range(start_frame, start_frame + max(max_window_frames, 1), effective_stride))
+    raw_selected = [idx for idx in raw_selected if idx < frame_count]
+    if max_frames and max_frames > 0:
+        keep_indices = select_distributed(max_frames, len(raw_selected))
+        raw_selected = [raw_selected[idx] for idx in keep_indices]
+    selected_set = set(raw_selected)
     frames: list[np.ndarray] = []
     current = 0
 
@@ -123,11 +132,9 @@ def extract_clip_faces(
     cap.release()
 
     if not frames:
-        frames = [np.zeros((output_size, output_size, 3), dtype=np.uint8) for _ in range(save_frames)]
-    elif len(frames) < save_frames:
-        frames.extend([frames[-1].copy() for _ in range(save_frames - len(frames))])
+        frames = [np.zeros((output_size, output_size, 3), dtype=np.uint8)]
 
-    return np.asarray(frames[:save_frames], dtype=np.uint8)
+    return np.asarray(frames, dtype=np.uint8)
 
 
 def main() -> None:
@@ -143,7 +150,8 @@ def main() -> None:
     cascade_path = Path(cv2.data.haarcascades) / "haarcascade_frontalface_default.xml"
     face_cascade = cv2.CascadeClassifier(str(cascade_path))
 
-    files = iter_video_files(data_root)
+    files = iter_video_files(data_root, args.splits)
+    files = select_shard(files, args.num_shards, args.shard_index)
     if args.limit > 0:
         files = files[:args.limit]
 
@@ -154,9 +162,10 @@ def main() -> None:
         clip = extract_clip_faces(
             video_path,
             detector=detector,
-            save_frames=args.save_frames,
-            target_time=args.target_time,
-            sampling_strategy=args.sampling_strategy,
+            max_frames=args.max_frames,
+            max_video_seconds=args.max_video_seconds,
+            target_fps=args.target_fps,
+            frame_stride=args.frame_stride,
             output_size=args.output_size,
             device=device,
             face_cascade=face_cascade,

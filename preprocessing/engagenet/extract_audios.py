@@ -21,8 +21,8 @@ RAW_SPLITS = ("Train", "Validation", "Test")
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
     parser.add_argument("--data_root", type=Path, default=Path("datasets/EngageNet"))
-    parser.add_argument("--target_time", default=3.6, type=float)
     parser.add_argument("--sample_rate", default=22050, type=int)
+    parser.add_argument("--max_video_seconds", default=0.0, type=float)
     parser.add_argument("--force", action="store_true")
     parser.add_argument("--limit", type=int, default=0)
     return parser.parse_args()
@@ -37,22 +37,21 @@ def iter_video_files(data_root: Path) -> list[Path]:
     return files
 
 
-def crop_or_pad_audio(y: np.ndarray, sr: int, target_time: float) -> np.ndarray:
-    target_length = int(sr * target_time)
-    if len(y) < target_length:
-        return np.pad(y, (0, target_length - len(y)))
-    remain = len(y) - target_length
-    start = remain // 2
-    end = len(y) - (remain - start)
-    return y[start:end]
+def maybe_trim_audio(y: np.ndarray, sr: int, max_video_seconds: float) -> np.ndarray:
+    if max_video_seconds is None or max_video_seconds <= 0:
+        return y
+    target_length = int(sr * max_video_seconds)
+    if len(y) <= target_length:
+        return y
+    return y[:target_length]
 
 
-def write_silence(path: Path, sample_rate: int, target_time: float) -> None:
-    samples = int(sample_rate * target_time)
+def write_silence(path: Path, sample_rate: int, max_video_seconds: float) -> None:
+    samples = int(sample_rate * max_video_seconds) if max_video_seconds and max_video_seconds > 0 else sample_rate
     sf.write(path, np.zeros(samples, dtype=np.float32), sample_rate)
 
 
-def extract_audio(video_path: Path, target_path: Path, sample_rate: int, target_time: float, ffmpeg_exe: str) -> None:
+def extract_audio(video_path: Path, target_path: Path, sample_rate: int, max_video_seconds: float, ffmpeg_exe: str) -> None:
     with tempfile.NamedTemporaryFile(suffix=".wav") as tmp:
         cmd = [
             ffmpeg_exe,
@@ -68,11 +67,11 @@ def extract_audio(video_path: Path, target_path: Path, sample_rate: int, target_
         ]
         completed = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=False)
         if completed.returncode != 0:
-            write_silence(target_path, sample_rate, target_time)
+            write_silence(target_path, sample_rate, max_video_seconds)
             return
 
         y, sr = librosa.core.load(tmp.name, sr=sample_rate)
-        y = crop_or_pad_audio(y, sr, target_time)
+        y = maybe_trim_audio(y, sr, max_video_seconds)
         sf.write(target_path, y, sr)
 
 
@@ -88,7 +87,7 @@ def main() -> None:
         target_path = video_path.with_name(video_path.stem + "_croppad.wav")
         if target_path.exists() and not args.force:
             continue
-        extract_audio(video_path, target_path, args.sample_rate, args.target_time, ffmpeg_exe)
+        extract_audio(video_path, target_path, args.sample_rate, args.max_video_seconds, ffmpeg_exe)
 
 
 if __name__ == "__main__":

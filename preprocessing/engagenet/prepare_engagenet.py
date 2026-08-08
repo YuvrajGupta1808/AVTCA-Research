@@ -27,12 +27,10 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--limit", type=int, default=0)
     parser.add_argument("--force", action="store_true")
     parser.add_argument("--strict", action="store_true")
-    parser.add_argument(
-        "--sampling_strategy",
-        default="center_window",
-        choices=["full_clip", "center_window"],
-        help="How to sample frames for face extraction.",
-    )
+    parser.add_argument("--max_video_seconds", type=float, default=0.0)
+    parser.add_argument("--max_frames", type=int, default=0)
+    parser.add_argument("--target_fps", type=float, default=0.0)
+    parser.add_argument("--frame_stride", type=int, default=1)
     parser.add_argument(
         "--allow_opencv_fallback",
         action="store_true",
@@ -56,8 +54,6 @@ def main() -> None:
         str(root / "extract_faces.py"),
         "--data_root",
         str(args.data_root),
-        "--sampling_strategy",
-        args.sampling_strategy,
     ]
     ann_cmd = [
         sys.executable,
@@ -74,6 +70,15 @@ def main() -> None:
     if args.force:
         audio_cmd.append("--force")
         face_cmd.append("--force")
+    if args.max_video_seconds > 0:
+        audio_cmd.extend(["--max_video_seconds", str(args.max_video_seconds)])
+        face_cmd.extend(["--max_video_seconds", str(args.max_video_seconds)])
+    if args.max_frames > 0:
+        face_cmd.extend(["--max_frames", str(args.max_frames)])
+    if args.target_fps > 0:
+        face_cmd.extend(["--target_fps", str(args.target_fps)])
+    if args.frame_stride > 1:
+        face_cmd.extend(["--frame_stride", str(args.frame_stride)])
     if args.strict:
         ann_cmd.append("--strict")
     if args.allow_opencv_fallback:

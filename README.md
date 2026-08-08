@@ -206,3 +206,5 @@ python -m pytest tests/ -v
 | [docs/plan.md](docs/plan.md) | Known architecture gaps vs paper diagram |
 | [docs/progress.md](docs/progress.md) | Training run history and analysis |
 | [docs/architecture.md](docs/architecture.md) | AVT-CA Mermaid architecture diagram |
+
+These four files are the complete documentation set. Do not add parallel documents — update these in place.

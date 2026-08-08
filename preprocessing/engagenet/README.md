@@ -12,7 +12,14 @@ To stay compatible with the current training pipeline, EngageNet preprocessing p
 
 The annotation file uses the same format as the existing datasets:
 
-`video_path;audio_path;label;split`
+`video_path;audio_path;label;split;chat_text`
+
+The `chat_text` field is optional at read time. Empty strings are kept for clips
+without a student message, and older 4-column annotation files still load.
+
+Chat text is not composed from inline string fragments anymore. It is sampled
+from authored topic banks stored in `preprocessing/engagenet/chat_banks/`,
+with separate short / medium / long entries keyed by engagement label.
 
 ## Label Mapping
 
@@ -47,6 +54,15 @@ python preprocessing/engagenet/extract_faces.py --data_root datasets/EngageNet
 
 # 3. Build the training annotation file.
 python preprocessing/engagenet/create_annotations.py --data_root datasets/EngageNet
+```
+
+By default this writes non-empty chat text for roughly 40% of clips and leaves
+the rest empty. To keep the legacy 4-column format:
+
+```bash
+python preprocessing/engagenet/create_annotations.py \
+  --data_root datasets/EngageNet \
+  --disable_chat_text
 ```
 
 Or run the one-command wrapper:

@@ -101,7 +101,11 @@ class InvertedResidual(nn.Module):
         self.stride = stride
 
         branch_features = oup // 2
-        assert (self.stride != 1) or (inp == branch_features << 1)
+        if self.stride == 1 and inp != branch_features << 1:
+            raise ValueError(
+                f'stride=1 InvertedResidual requires input channels ({inp}) to equal '
+                f'output channels ({branch_features << 1}).'
+            )
 
         if self.stride > 1:
             self.branch1 = nn.Sequential(
@@ -132,4 +136,3 @@ class InvertedResidual(nn.Module):
         out = channel_shuffle(out, 2)
 
         return out
-

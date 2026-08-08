@@ -26,16 +26,28 @@ def parse_args() -> argparse.Namespace:
         help="DAiSEE root directory containing DataSet/.",
     )
     parser.add_argument(
-        "--target_time",
-        default=3.6,
+        "--max_video_seconds",
+        default=0.0,
         type=float,
-        help="Centered temporal window to keep before frame sampling.",
+        help="Optional cap on seconds processed from the start of the video. 0 keeps the full clip.",
     )
     parser.add_argument(
-        "--save_frames",
-        default=15,
+        "--max_frames",
+        default=0,
         type=int,
-        help="Number of frames to save per clip.",
+        help="Maximum number of frames to save per clip. 0 keeps all sampled frames.",
+    )
+    parser.add_argument(
+        "--target_fps",
+        default=0.0,
+        type=float,
+        help="Optional output FPS cap before max_frames sampling.",
+    )
+    parser.add_argument(
+        "--frame_stride",
+        default=1,
+        type=int,
+        help="Frame stride before max_frames sampling.",
     )
     parser.add_argument(
         "--output_size",
@@ -112,22 +124,26 @@ def crop_face_or_resize(
     return frame_bgr
 
 
-def extract_clip_faces(video_path: Path, detector, save_frames: int, target_time: float, output_size: int, device: torch.device, face_cascade) -> np.ndarray:
+def extract_clip_faces(video_path: Path, detector, max_frames: int, max_video_seconds: float, target_fps: float, frame_stride: int, output_size: int, device: torch.device, face_cascade) -> np.ndarray:
     cap = cv2.VideoCapture(str(video_path))
     fps = cap.get(cv2.CAP_PROP_FPS)
     if not fps or fps <= 0:
         fps = 30.0
     frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
 
-    window_frames = max(save_frames, int(round(target_time * fps)))
-    if frame_count > window_frames:
-        start_frame = max(0, (frame_count - window_frames) // 2)
-    else:
-        start_frame = 0
-        window_frames = frame_count
-
-    selected = select_distributed(save_frames, max(window_frames, 1))
-    selected_set = set(start_frame + idx for idx in selected)
+    max_window_frames = frame_count
+    if max_video_seconds and max_video_seconds > 0:
+        max_window_frames = min(frame_count, int(round(max_video_seconds * fps)))
+    effective_stride = max(int(frame_stride), 1)
+    raw_selected = list(range(0, max(max_window_frames, 1), effective_stride))
+    if target_fps and target_fps > 0:
+        effective_stride = max(int(round(fps / target_fps)), 1)
+        raw_selected = list(range(0, max(max_window_frames, 1), effective_stride))
+    raw_selected = [idx for idx in raw_selected if idx < frame_count]
+    if max_frames and max_frames > 0:
+        keep_indices = select_distributed(max_frames, len(raw_selected))
+        raw_selected = [raw_selected[idx] for idx in keep_indices]
+    selected_set = set(raw_selected)
     frames: list[np.ndarray] = []
     current = 0
 
@@ -143,12 +159,9 @@ def extract_clip_faces(video_path: Path, detector, save_frames: int, target_time
     cap.release()
 
     if not frames:
-        frames = [np.zeros((output_size, output_size, 3), dtype=np.uint8) for _ in range(save_frames)]
-    elif len(frames) < save_frames:
-        filler = frames[-1]
-        frames.extend([filler.copy() for _ in range(save_frames - len(frames))])
+        frames = [np.zeros((output_size, output_size, 3), dtype=np.uint8)]
 
-    return np.asarray(frames[:save_frames], dtype=np.uint8)
+    return np.asarray(frames, dtype=np.uint8)
 
 
 def main() -> None:
@@ -175,8 +188,10 @@ def main() -> None:
         clip = extract_clip_faces(
             video_path,
             detector=detector,
-            save_frames=args.save_frames,
-            target_time=args.target_time,
+            max_frames=args.max_frames,
+            max_video_seconds=args.max_video_seconds,
+            target_fps=args.target_fps,
+            frame_stride=args.frame_stride,
             output_size=args.output_size,
             device=device,
             face_cascade=face_cascade,

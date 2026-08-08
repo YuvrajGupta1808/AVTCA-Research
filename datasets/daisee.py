@@ -45,15 +45,19 @@ class DAISEE(data.Dataset):
         audio_feature_transform=None,
         data_root="",
         audio_features="mfcc",
+        target_frames=None,
+        frame_sampling="uniform",
+        audio_target_secs=None,
     ):
         del data_root
         self.data = make_dataset(subset, annotation_path)
         self.spatial_transform = spatial_transform
         self.audio_transform = audio_transform
         self.audio_feature_transform = audio_feature_transform
-        self.loader = get_loader()
+        self.loader = get_loader(target_frames=target_frames, frame_sampling=frame_sampling)
         self.data_type = data_type
         self.audio_features = audio_features
+        self.audio_target_secs = audio_target_secs
 
     def __getitem__(self, index):
         target = self.data[index]["label"]
@@ -74,7 +78,7 @@ class DAISEE(data.Dataset):
 
         if self.data_type == "audio" or self.data_type == "audiovisual":
             path = self.data[index]["audio_path"]
-            y, sr = load_audio(path, sr=22050)
+            y, sr = load_audio(path, sr=22050, target_secs=self.audio_target_secs)
 
             if self.audio_transform is not None:
                 self.audio_transform.randomize_parameters()
@@ -93,7 +97,16 @@ class DAISEE(data.Dataset):
                 return audio_features, target
 
         if self.data_type == "audiovisual":
-            return audio_features, clip, target
+            audio_features = torch.as_tensor(audio_features, dtype=torch.float32)
+            clip = torch.as_tensor(clip, dtype=torch.float32).permute(1, 0, 2, 3)
+            return (
+                audio_features,
+                clip,
+                target,
+                int(audio_features.shape[-1]),
+                int(clip.shape[0]),
+                "",
+            )
 
     def __len__(self):
         return len(self.data)

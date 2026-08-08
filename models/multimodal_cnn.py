@@ -1,5 +1,6 @@
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 from models.modulator import Channel, Spatial, Modulator
 from models.efficient_face import LocalFeatureExtractor, InvertedResidual
 from models.transformer import AttentionBlock, Attention
@@ -12,9 +13,17 @@ class AttentionPool(nn.Module):
         super().__init__()
         self.proj = nn.Linear(dim, 1)
 
-    def forward(self, x):
+    def forward(self, x, mask=None):
         # x: (B, T, dim)
-        weights = torch.softmax(self.proj(x), dim=1)   # (B, T, 1)
+        logits = self.proj(x)
+        if mask is not None:
+            invalid = (~mask).unsqueeze(-1)
+            logits = logits.masked_fill(invalid, torch.finfo(logits.dtype).min)
+        weights = torch.softmax(logits, dim=1)   # (B, T, 1)
+        if mask is not None:
+            weights = weights * mask.unsqueeze(-1).to(weights.dtype)
+            denom = weights.sum(dim=1, keepdim=True).clamp_min(1e-6)
+            weights = weights / denom
         return (weights * x).sum(dim=1)                # (B, dim)
 
 
@@ -99,9 +108,16 @@ class EfficientFaceTemporal(nn.Module):
 
     def forward_stage1(self, x):
         #Getting samples per batch
-        assert x.shape[0] % self.im_per_sample == 0, "Batch size is not a multiple of sequence length."
+        if x.shape[0] % self.im_per_sample != 0:
+            raise ValueError(
+                f'Visual feature batch has {x.shape[0]} frames, which is not divisible by '
+                f'im_per_sample={self.im_per_sample}.'
+            )
         n_samples = x.shape[0] // self.im_per_sample
         x = x.view(n_samples, self.im_per_sample, x.shape[1])
+        return self.forward_stage1_from_sequence(x)
+
+    def forward_stage1_from_sequence(self, x):
         x = x.permute(0,2,1)
         x = self.conv1d_0(x)
         x = self.conv1d_1(x)
@@ -223,9 +239,16 @@ class AttentionLocalVisualTemporal(nn.Module):
         return x
 
     def forward_stage1(self, x):
-        assert x.shape[0] % self.im_per_sample == 0, "Batch size is not a multiple of sequence length."
+        if x.shape[0] % self.im_per_sample != 0:
+            raise ValueError(
+                f'Visual feature batch has {x.shape[0]} frames, which is not divisible by '
+                f'im_per_sample={self.im_per_sample}.'
+            )
         n_samples = x.shape[0] // self.im_per_sample
         x = x.view(n_samples, self.im_per_sample, x.shape[1])
+        return self.forward_stage1_from_sequence(x)
+
+    def forward_stage1_from_sequence(self, x):
         x = x.permute(0, 2, 1)
         x = self.conv1d_0(x)
         x = self.conv1d_1(x)
@@ -323,6 +346,53 @@ class AudioCNNPool(nn.Module):
     
 
 
+class LateTextFusion(nn.Module):
+    """Refine an audio-visual summary by reading text afterwards."""
+
+    def __init__(self, embed_dim, vocab_size, num_heads):
+        super().__init__()
+        self.embedding = nn.Embedding(vocab_size, embed_dim, padding_idx=0)
+        self.encoder = nn.GRU(
+            input_size=embed_dim,
+            hidden_size=embed_dim // 2,
+            num_layers=1,
+            batch_first=True,
+            bidirectional=True,
+        )
+        self.readout = nn.MultiheadAttention(embed_dim, num_heads, batch_first=True)
+        self.gate = nn.Sequential(
+            nn.Linear(embed_dim * 2, embed_dim),
+            nn.Sigmoid(),
+        )
+        self.norm = nn.LayerNorm(embed_dim)
+
+    def forward(self, av_context, text_tokens=None, text_mask=None):
+        if text_tokens is None or text_mask is None:
+            return av_context
+
+        valid_rows = text_mask.any(dim=1)
+        if not valid_rows.any():
+            return av_context
+
+        refined_context = av_context.clone()
+        valid_tokens = text_tokens[valid_rows]
+        valid_mask = text_mask[valid_rows]
+        valid_context = av_context[valid_rows]
+
+        text_embeddings = self.embedding(valid_tokens)
+        encoded_text, _ = self.encoder(text_embeddings)
+        attended_text, _ = self.readout(
+            query=valid_context.unsqueeze(1),
+            key=encoded_text,
+            value=encoded_text,
+            key_padding_mask=~valid_mask,
+        )
+        text_context = attended_text.squeeze(1)
+        gate = self.gate(torch.cat((valid_context, text_context), dim=-1))
+        refined_context[valid_rows] = self.norm(valid_context + gate * text_context)
+        return refined_context
+
+
 class MultiModalCNN(nn.Module):
     def __init__(
         self,
@@ -335,14 +405,19 @@ class MultiModalCNN(nn.Module):
         visual_backbone='efficientface',
         visual_stem_pooling='maxpool',
         it_fusion_mode='modern',
+        text_vocab_size=4096,
+        late_text_fusion=True,
     ):
         super(MultiModalCNN, self).__init__()
-        assert fusion in ['ia', 'it', 'lt'], f'Unsupported fusion method: {fusion}'
-        assert it_fusion_mode in ['modern', 'legacy'], f'Unsupported it_fusion_mode: {it_fusion_mode}'
+        if fusion not in ['ia', 'it', 'lt']:
+            raise ValueError(f'Unsupported fusion method "{fusion}". Expected one of: ia, it, lt')
+        if it_fusion_mode not in ['modern', 'legacy']:
+            raise ValueError(f'Unsupported it_fusion_mode "{it_fusion_mode}". Expected one of: legacy, modern')
 
         self.audio_model = AudioCNNPool(num_classes=num_classes)
         self.visual_backbone = visual_backbone
         self.it_fusion_mode = it_fusion_mode
+        self.late_text_fusion = late_text_fusion
         if visual_backbone == 'efficientface':
             self.visual_model = EfficientFaceTemporal([4, 8, 4], [29, 116, 232, 464, 1024], num_classes, seq_length)
         elif visual_backbone == 'attention_local':
@@ -395,14 +470,76 @@ class MultiModalCNN(nn.Module):
             
         self.audioAttention  = MultiheadAttention(e_dim, num_heads)
         self.visualAttention = MultiheadAttention(e_dim, num_heads)
+        if late_text_fusion:
+            self.av_context = nn.Sequential(
+                nn.Linear(e_dim * 2, e_dim),
+                nn.ReLU(inplace=True),
+            )
+            self.text_addon = LateTextFusion(e_dim, text_vocab_size, num_heads)
 
         self.classifier_1 = nn.Sequential(
             nn.Linear(e_dim*2, num_classes),
         )
-        
-            
 
-    def forward(self, x_audio, x_visual):
+    def _ensure_video_mask(self, x_visual, video_mask):
+        if video_mask is not None:
+            return video_mask.bool()
+        return torch.ones(x_visual.shape[0], x_visual.shape[1], dtype=torch.bool, device=x_visual.device)
+
+    def _visual_backbone_features(self, x_visual):
+        if x_visual.dim() == 5:
+            batch_size, time_steps, channels, height, width = x_visual.shape
+            flattened = x_visual.reshape(batch_size * time_steps, channels, height, width)
+            features = self.visual_model.forward_features(flattened)
+            return features.view(batch_size, time_steps, -1)
+        if x_visual.dim() == 4:
+            features = self.visual_model.forward_features(x_visual)
+            return features
+        raise ValueError(f'Unsupported visual input rank: {x_visual.dim()}')
+
+    def _visual_stage1(self, visual_features):
+        if visual_features.dim() == 3:
+            return self.visual_model.forward_stage1_from_sequence(visual_features)
+        return self.visual_model.forward_stage1(visual_features)
+
+    def _mask_lengths(self, mask):
+        return mask.long().sum(dim=1)
+
+    def _adaptive_align_audio_to_video(self, x_audio, audio_lengths, video_lengths, target_length):
+        aligned = []
+        aligned_mask = []
+        max_audio_length = x_audio.shape[-1]
+        for sample, audio_length, video_length in zip(x_audio, audio_lengths.tolist(), video_lengths.tolist()):
+            audio_length = min(max(int(audio_length), 1), max_audio_length)
+            video_length = min(max(int(video_length), 1), target_length)
+            sample_valid = sample[:, :audio_length].unsqueeze(0)
+            pooled = torch.nn.functional.adaptive_avg_pool1d(sample_valid, video_length).squeeze(0)
+            if video_length < target_length:
+                pad = sample.new_zeros(sample.shape[0], target_length - video_length)
+                pooled = torch.cat([pooled, pad], dim=1)
+            aligned.append(pooled)
+            mask = torch.zeros(target_length, dtype=torch.bool, device=sample.device)
+            mask[:video_length] = True
+            aligned_mask.append(mask)
+        return torch.stack(aligned, dim=0), torch.stack(aligned_mask, dim=0)
+
+    def _downsample_mask(self, mask, levels=1):
+        pooled = mask.to(dtype=torch.float32).unsqueeze(1)
+        for _ in range(levels):
+            pooled = F.max_pool1d(pooled, kernel_size=2, stride=2)
+        return pooled.squeeze(1) > 0
+
+    def forward(
+        self,
+        x_audio,
+        x_visual,
+        audio_mask=None,
+        video_mask=None,
+        audio_lengths=None,
+        video_lengths=None,
+        text_tokens=None,
+        text_mask=None,
+    ):
 
         if self.fusion == 'lt':
             return self.forward_transformer(x_audio, x_visual)
@@ -411,20 +548,66 @@ class MultiModalCNN(nn.Module):
             return self.forward_feature_2(x_audio, x_visual)
        
         elif self.fusion == 'it':
-            return self.forward_feature_3(x_audio, x_visual)
+            return self.forward_feature_3(
+                x_audio,
+                x_visual,
+                audio_mask=audio_mask,
+                video_mask=video_mask,
+                audio_lengths=audio_lengths,
+                video_lengths=video_lengths,
+                text_tokens=text_tokens,
+                text_mask=text_mask,
+            )
 
  
         
-    def forward_feature_3(self, x_audio, x_visual):
+    def forward_feature_3(
+        self,
+        x_audio,
+        x_visual,
+        audio_mask=None,
+        video_mask=None,
+        audio_lengths=None,
+        video_lengths=None,
+        text_tokens=None,
+        text_mask=None,
+    ):
         if self.it_fusion_mode == 'legacy':
             return self.forward_feature_3_legacy(x_audio, x_visual)
 
         x_audio = self.audio_model.forward_stage1(x_audio)
-        x_visual = self.visual_model.forward_features(x_visual)
-        x_visual = self.visual_model.forward_stage1(x_visual)
+        if x_visual.dim() == 5:
+            x_visual = self._visual_backbone_features(x_visual)
+            x_visual = self._visual_stage1(x_visual)
+        else:
+            x_visual = self.visual_model.forward_features(x_visual)
+            x_visual = self.visual_model.forward_stage1(x_visual)
 
-        # Align audio temporal dimension to video (fixes ~11× mismatch at cross-attention)
-        x_audio = self.audio_temporal_pool(x_audio)
+        video_mask = self._ensure_video_mask(x_visual if x_visual.dim() == 3 else x_visual.permute(0, 2, 1), video_mask)
+        if video_lengths is None:
+            video_lengths = self._mask_lengths(video_mask)
+        if audio_mask is not None:
+            audio_stage1_mask = self._downsample_mask(audio_mask.to(x_audio.device), levels=2)
+            audio_stage1_lengths = self._mask_lengths(audio_stage1_mask)
+        elif audio_lengths is not None:
+            audio_stage1_lengths = torch.div(audio_lengths.to(x_audio.device), 4, rounding_mode='floor').clamp_min(1)
+        else:
+            audio_stage1_lengths = torch.full(
+                (x_audio.shape[0],),
+                x_audio.shape[-1],
+                dtype=torch.long,
+                device=x_audio.device,
+            )
+
+        # Align audio temporal dimension to each sample's valid visual length before cross-attention.
+        target_length = x_visual.shape[-1]
+        x_audio, aligned_audio_mask = self._adaptive_align_audio_to_video(
+            x_audio,
+            audio_stage1_lengths,
+            video_lengths.to(x_audio.device),
+            target_length,
+        )
+        attention_mask = ~(video_mask & aligned_audio_mask)
 
         # Modality dropout — forces each encoder to be independently capable
         if self.training:
@@ -433,11 +616,23 @@ class MultiModalCNN(nn.Module):
             x_audio  = x_audio  * audio_mask
             x_visual = x_visual * visual_mask
 
+        # Eval-time single-modality ablation. Zeroing happens at the same point as
+        # modality dropout so the ablated stream matches what training already saw.
+        ablate = getattr(self, 'ablate_modality', 'none')
+        if ablate == 'audio_only':
+            x_visual = torch.zeros_like(x_visual)
+        elif ablate == 'video_only':
+            x_audio = torch.zeros_like(x_audio)
+        elif ablate != 'none':
+            raise ValueError(
+                f'Unsupported ablate_modality "{ablate}". Expected none, audio_only, or video_only.'
+            )
+
         proj_x_a = x_audio.permute(0, 2, 1)
         proj_x_v = x_visual.permute(0, 2, 1)
 
-        h_av = self.av1(proj_x_v, proj_x_a)
-        h_va = self.va1(proj_x_a, proj_x_v)
+        h_av = self.av1(proj_x_v, proj_x_a, key_padding_mask=attention_mask, query_padding_mask=attention_mask)
+        h_va = self.va1(proj_x_a, proj_x_v, key_padding_mask=attention_mask, query_padding_mask=attention_mask)
 
         h_av = h_av.permute(0, 2, 1)
         h_va = h_va.permute(0, 2, 1)
@@ -448,30 +643,59 @@ class MultiModalCNN(nn.Module):
         x_audio  = self.audio_model.forward_stage2(x_audio)
         x_audio  = self.audio_feature_gate(x_audio)
         x_visual = self.visual_model.forward_stage2(x_visual)
+        audio_stage2_mask = self._downsample_mask(aligned_audio_mask, levels=2)
+        x_audio = x_audio * audio_stage2_mask.unsqueeze(1).to(x_audio.dtype)
+        x_visual = x_visual * video_mask.unsqueeze(1).to(x_visual.dtype)
 
         # (T, B, C) format required by PyTorch MultiheadAttention
         x_audio  = x_audio.permute(2, 0, 1)
         x_visual = x_visual.permute(2, 0, 1)
 
         # Cross-modal attention: audio queries video, video queries audio
-        x_audio_attention,  _ = self.audioAttention( x_audio,  x_visual, x_visual)
-        x_visual_attention, _ = self.visualAttention(x_visual, x_audio,  x_audio)
+        x_audio_attention,  _ = self.audioAttention(
+            x_audio,
+            x_visual,
+            x_visual,
+            key_padding_mask=~video_mask,
+        )
+        x_visual_attention, _ = self.visualAttention(
+            x_visual,
+            x_audio,
+            x_audio,
+            key_padding_mask=~audio_stage2_mask,
+        )
 
         # Residual + dropout
         x_audio  = x_audio  + self.attn_dropout(x_audio_attention)
         x_visual = x_visual + self.attn_dropout(x_visual_attention)
+        x_audio = x_audio * audio_stage2_mask.transpose(0, 1).unsqueeze(-1).to(x_audio.dtype)
+        x_visual = x_visual * video_mask.transpose(0, 1).unsqueeze(-1).to(x_visual.dtype)
 
         x_audio_ca  = x_audio.permute(1, 0, 2)   # (B, T, C)
         x_visual_ca = x_visual.permute(1, 0, 2)
 
-        x_audio_final  = self.audioCrossAttention( xk=x_visual_ca, xq=x_audio_ca)
-        x_visual_final = self.visualCrossAttention(xk=x_audio_ca,  xq=x_visual_ca)
+        x_audio_final  = self.audioCrossAttention(
+            xk=x_visual_ca,
+            xq=x_audio_ca,
+            key_padding_mask=~video_mask,
+            query_padding_mask=~audio_stage2_mask,
+        )
+        x_visual_final = self.visualCrossAttention(
+            xk=x_audio_ca,
+            xq=x_visual_ca,
+            key_padding_mask=~audio_stage2_mask,
+            query_padding_mask=~video_mask,
+        )
 
         # Learned attention pooling over temporal dimension
-        audio_pooled = self.attn_pool_audio(x_audio_final)
-        video_pooled = self.attn_pool_video(x_visual_final)
+        audio_pooled = self.attn_pool_audio(x_audio_final, mask=audio_stage2_mask)
+        video_pooled = self.attn_pool_video(x_visual_final, mask=video_mask)
 
-        x  = torch.cat((audio_pooled, video_pooled), dim=-1)
+        x = torch.cat((audio_pooled, video_pooled), dim=-1)
+        if self.late_text_fusion:
+            av_context = self.av_context(x)
+            refined_context = self.text_addon(av_context, text_tokens=text_tokens, text_mask=text_mask)
+            x = torch.cat((av_context, refined_context), dim=-1)
         x1 = self.classifier_1(x)
         return x1
 

@@ -41,6 +41,10 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Rewrite existing extracted files.",
     )
+    parser.add_argument("--max_video_seconds", type=float, default=0.0)
+    parser.add_argument("--max_frames", type=int, default=0)
+    parser.add_argument("--target_fps", type=float, default=0.0)
+    parser.add_argument("--frame_stride", type=int, default=1)
     return parser.parse_args()
 
 
@@ -75,6 +79,15 @@ def main() -> None:
     if args.force:
         audio_cmd.append("--force")
         face_cmd.append("--force")
+    if args.max_video_seconds > 0:
+        audio_cmd.extend(["--max_video_seconds", str(args.max_video_seconds)])
+        face_cmd.extend(["--max_video_seconds", str(args.max_video_seconds)])
+    if args.max_frames > 0:
+        face_cmd.extend(["--max_frames", str(args.max_frames)])
+    if args.target_fps > 0:
+        face_cmd.extend(["--target_fps", str(args.target_fps)])
+    if args.frame_stride > 1:
+        face_cmd.extend(["--frame_stride", str(args.frame_stride)])
 
     run_step(audio_cmd)
     run_step(face_cmd)

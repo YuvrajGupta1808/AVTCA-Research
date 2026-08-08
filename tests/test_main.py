@@ -54,6 +54,14 @@ class TestModelFactory(unittest.TestCase):
         self.assertFalse(model.audio_channel_attention)
         self.assertIsNotNone(params)
 
+    def test_unknown_model_raises_value_error(self):
+        from src.models.factory import generate_model
+        opt = MagicMock()
+        opt.model = 'token_fusion'
+
+        with self.assertRaisesRegex(ValueError, 'Unknown model'):
+            generate_model(opt)
+
 
 if __name__ == '__main__':
     unittest.main()
