@@ -36,6 +36,9 @@ def parse_opts(argv=None):
     parser.add_argument('--behavior_skip_dim', default=64, type=int, help='Width of the direct pooled-AU skip into the classifier.')
     parser.add_argument('--behavior_dir', default='', type=str, help='Directory of per-clip behavior .npy files (OpenFace features).')
     parser.add_argument('--behavior_baselines', default='', type=str, help='JSON of per-subject neutral AU baselines.')
+    parser.add_argument('--text_fusion', action='store_true', help='Fuse behavior-caption text via the sentence TextEncoder (it fusion only). Replaces the hashed late-text add-on.')
+    parser.set_defaults(text_fusion=False)
+    parser.add_argument('--text_backend', default='hashing', choices=['hashing', 'minilm', 'auto'], help='Sentence embedding backend for text fusion. hashing = dependency-free (default).')
     parser.add_argument('--num_heads', default=1, type=int, help='number of heads, in the paper 1 or 4')
     
     parser.add_argument('--device', default='cuda', type=str, help='Specify the device to run. Defaults to cuda, fallsback to cpu')

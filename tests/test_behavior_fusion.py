@@ -44,7 +44,7 @@ def test_behavior_on_registers_expected_modules():
     assert 'behavior_encoder' in keys
     assert 'behavior_av_proj' in keys
     assert 'behavior_missing' in keys
-    assert 'classifier_behavior' in keys
+    assert 'classifier_fused' in keys
 
 
 def test_forward_smoke_behavior_present():
@@ -96,7 +96,7 @@ def test_grad_reaches_behavior_modules():
 
     assert has_grad('behavior_encoder')
     assert has_grad('behavior_skip')
-    assert has_grad('classifier_behavior')
+    assert has_grad('classifier_fused')
     # missing token gets no grad when all samples present — that's expected.
 
 
@@ -114,4 +114,4 @@ def test_off_and_on_produce_expected_head_dims():
     off = _make_model(behavior=False)
     on = _make_model(behavior=True)
     assert off.classifier_1[0].in_features == 256
-    assert on.classifier_behavior.in_features == 256 + 128 + 64
+    assert on.classifier_fused.in_features == 256 + 128 + 64

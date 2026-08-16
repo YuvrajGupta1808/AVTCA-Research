@@ -76,6 +76,8 @@ CONFIG_IDENTITY_KEYS = [
     'behavior',
     'behavior_feature_dim',
     'behavior_skip_dim',
+    'text_fusion',
+    'text_backend',
 ]
 
 CONFIG_IDENTITY_DEFAULTS = {
@@ -101,6 +103,8 @@ CONFIG_IDENTITY_DEFAULTS = {
     'behavior': False,
     'behavior_feature_dim': 22,
     'behavior_skip_dim': 64,
+    'text_fusion': False,
+    'text_backend': 'hashing',
     'optimizer': 'sgd',
     'momentum': 0.9,
     'dampening': 0.9,

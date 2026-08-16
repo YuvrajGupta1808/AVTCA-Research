@@ -53,11 +53,26 @@ def test_behavior_paths_default_empty():
 def test_factory_builds_behavior_model():
     model, _ = factory.generate_model(_opt(behavior=True))
     assert model.behavior is True
-    assert hasattr(model, "classifier_behavior")
-    assert model.classifier_behavior.in_features == 256 + 128 + 64
+    assert hasattr(model, "classifier_fused")
+    assert model.classifier_fused.in_features == 256 + 128 + 64
 
 
 def test_factory_off_has_no_behavior():
     model, _ = factory.generate_model(_opt())
     assert model.behavior is False
-    assert not hasattr(model, "classifier_behavior")
+    assert not hasattr(model, "classifier_fused")
+
+
+def test_factory_builds_text_fusion_model():
+    model, _ = factory.generate_model(_opt(text_fusion=True))
+    assert model.text_fusion is True
+    assert hasattr(model, "classifier_fused")
+    assert model.classifier_fused.in_features == 256 + 128
+    # text fusion disables the hashed late-text add-on
+    assert model.late_text_fusion is False
+
+
+def test_text_fusion_flag_parses():
+    assert opts.parse_opts([]).text_fusion is False
+    assert opts.parse_opts(["--text_fusion"]).text_fusion is True
+    assert opts.parse_opts([]).text_backend == "hashing"

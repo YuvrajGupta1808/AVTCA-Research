@@ -43,7 +43,7 @@ def build_dataset(opt, subset, spatial_transform=None, audio_transform=None, aud
     )
     # Behavior features are engagement-only for now; RAVDESS/CREMAD loaders do not
     # accept these kwargs, so gate them on the dataset.
-    if opt.dataset == 'ENGAGENET' and getattr(opt, 'behavior', False):
+    if opt.dataset == 'ENGAGENET' and (getattr(opt, 'behavior', False) or getattr(opt, 'text_fusion', False)):
         kwargs.update(
             behavior=True,
             behavior_dir=getattr(opt, 'behavior_dir', None),
