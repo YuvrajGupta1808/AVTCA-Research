@@ -18,6 +18,7 @@ Layout of the K=22 default feature vector (OpenFace 2.0 intensities, radians):
 
 from __future__ import annotations
 
+import csv
 from typing import Iterable, List, Optional
 
 import numpy as np
@@ -35,6 +36,30 @@ _INDEX = {name: i for i, name in enumerate(FEATURE_NAMES)}
 def feature_index(name: str) -> int:
     """Column index of a named AU / gaze / pose channel."""
     return _INDEX[name]
+
+
+_OPENFACE_COLS = (
+    [f"{au}_r" for au in AU_NAMES]
+    + ["gaze_angle_x", "gaze_angle_y", "pose_Rx", "pose_Ry", "pose_Rz"]
+)
+
+
+def load_openface_csv(path: str) -> np.ndarray:
+    """Parse an OpenFace 2.0 CSV into a ``(T, 22)`` array in ``FEATURE_NAMES`` order.
+
+    OpenFace pads headers with a leading space (e.g. ``" AU01_r"``), so columns
+    are matched on their stripped names. Raises if any expected column is absent.
+    """
+    with open(path, newline="") as handle:
+        reader = csv.reader(handle)
+        header = [h.strip() for h in next(reader)]
+        idx = {name: i for i, name in enumerate(header)}
+        missing = [c for c in _OPENFACE_COLS if c not in idx]
+        if missing:
+            raise ValueError(f"OpenFace CSV missing columns: {missing}")
+        cols = [idx[c] for c in _OPENFACE_COLS]
+        rows = [[float(r[c]) for c in cols] for r in reader if r]
+    return np.asarray(rows, dtype=np.float32)
 
 
 def resample_time(feats: np.ndarray, target_frames: int) -> np.ndarray:
