@@ -492,6 +492,8 @@ class MultiModalCNN(nn.Module):
         self.text_fusion = text_fusion
         self.behavior_skip_dim = behavior_skip_dim
         fused_extra = 0
+        if (behavior or text_fusion) and it_fusion_mode == 'legacy':
+            raise ValueError("behavior/text fusion require it_fusion_mode='modern' (the legacy path skips fusion)")
         if behavior:
             if fusion != 'it':
                 raise ValueError("behavior fusion is only supported with fusion='it'")
@@ -755,7 +757,7 @@ class MultiModalCNN(nn.Module):
         batch = av_pair.shape[0]
         device = av_pair.device
         if behavior_feats is None:
-            ctx = self.behavior_missing.to(device).expand(batch, -1)
+            ctx = self.behavior_missing.to(device=device, dtype=av_pair.dtype).expand(batch, -1)
             skip = torch.zeros(batch, self.behavior_skip_dim, device=device, dtype=av_pair.dtype)
             return torch.cat((ctx, skip), dim=-1)
 
@@ -775,7 +777,7 @@ class MultiModalCNN(nn.Module):
         ctx, _ = self.behaviorCrossAttention(query, tokens, tokens)
         ctx = ctx.squeeze(1)                               # (B, e_dim)
         if (~behavior_present).any():
-            miss = self.behavior_missing.to(device).expand(batch, -1)
+            miss = self.behavior_missing.to(device=device, dtype=av_pair.dtype).expand(batch, -1)
             ctx = torch.where(behavior_present.view(batch, 1), ctx, miss)
 
         skip = self.behavior_skip(behavior_feats.mean(dim=1))          # (B, skip_dim)
@@ -811,7 +813,7 @@ class MultiModalCNN(nn.Module):
         batch = av_pair.shape[0]
         device = av_pair.device
         if behavior_feats is None:
-            return self.text_missing.to(device).expand(batch, -1)
+            return self.text_missing.to(device=device, dtype=av_pair.dtype).expand(batch, -1)
 
         streams = self._captions_from_feats(behavior_feats, behavior_present)
         tokens, mask = self.text_encoder(streams, device=device)   # (B, M, e_dim), (B, M)
@@ -824,7 +826,7 @@ class MultiModalCNN(nn.Module):
         ctx, _ = self.textCrossAttention(query, tokens, tokens, key_padding_mask=safe_mask)
         ctx = ctx.squeeze(1)
         if empty.any():
-            miss = self.text_missing.to(device).expand(batch, -1)
+            miss = self.text_missing.to(device=device, dtype=av_pair.dtype).expand(batch, -1)
             ctx = torch.where(empty.view(batch, 1), miss, ctx)
         return ctx
 
