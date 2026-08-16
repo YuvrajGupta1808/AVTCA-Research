@@ -30,6 +30,9 @@ def generate_model(opt):
         'visual_stem_pooling': _string_option(opt, 'visual_stem_pooling', 'maxpool'),
         'text_vocab_size': getattr(opt, 'text_vocab_size', 4096),
         'late_text_fusion': _bool_option(opt, 'late_text_fusion', True),
+        'behavior': _bool_option(opt, 'behavior', False),
+        'behavior_feature_dim': getattr(opt, 'behavior_feature_dim', 22),
+        'behavior_skip_dim': getattr(opt, 'behavior_skip_dim', 64),
     }
 
     signature = inspect.signature(MultiModalCNN.__init__)
