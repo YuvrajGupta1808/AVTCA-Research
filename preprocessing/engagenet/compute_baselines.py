@@ -51,6 +51,9 @@ def main() -> None:
     args = parser.parse_args()
 
     baselines = build_baselines(args.annotation_path, args.behavior_dir, args.neutral_label)
+    out_dir = os.path.dirname(args.out)
+    if out_dir:
+        os.makedirs(out_dir, exist_ok=True)
     with open(args.out, "w") as handle:
         json.dump(baselines, handle)
     print(f"wrote {len(baselines)} subject baselines -> {args.out}")

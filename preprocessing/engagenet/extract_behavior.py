@@ -46,7 +46,7 @@ def main() -> None:
     parser.add_argument("--openface_bin", default=None)
     args = parser.parse_args()
 
-    for video_path in sorted(glob.glob(args.videos_glob)):
+    for video_path in sorted(glob.glob(args.videos_glob, recursive=True)):
         stem = os.path.splitext(os.path.basename(video_path))[0]
         out_npy = os.path.join(args.out_dir, f"{stem}.npy")
         try:
