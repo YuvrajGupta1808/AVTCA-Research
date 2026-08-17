@@ -29,7 +29,12 @@ def generate_model(opt):
         'visual_backbone': _string_option(opt, 'visual_backbone', 'efficientface'),
         'visual_stem_pooling': _string_option(opt, 'visual_stem_pooling', 'maxpool'),
         'text_vocab_size': getattr(opt, 'text_vocab_size', 4096),
-        'late_text_fusion': _bool_option(opt, 'late_text_fusion', True),
+        'late_text_fusion': _bool_option(opt, 'late_text_fusion', True) and not _bool_option(opt, 'text_fusion', False),
+        'behavior': _bool_option(opt, 'behavior', False),
+        'behavior_feature_dim': getattr(opt, 'behavior_feature_dim', 22),
+        'behavior_skip_dim': getattr(opt, 'behavior_skip_dim', 64),
+        'text_fusion': _bool_option(opt, 'text_fusion', False),
+        'text_backend': _string_option(opt, 'text_backend', 'hashing'),
     }
 
     signature = inspect.signature(MultiModalCNN.__init__)

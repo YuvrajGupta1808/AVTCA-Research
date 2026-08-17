@@ -4,6 +4,8 @@ import torch.nn.functional as F
 from models.modulator import Channel, Spatial, Modulator
 from models.efficient_face import LocalFeatureExtractor, InvertedResidual
 from models.transformer import AttentionBlock, Attention
+from models.behavior_encoder import BehaviorEncoder
+from models.text_encoder import TextEncoder
 from torch.nn import MultiheadAttention
 
 
@@ -407,6 +409,11 @@ class MultiModalCNN(nn.Module):
         it_fusion_mode='modern',
         text_vocab_size=4096,
         late_text_fusion=True,
+        behavior=False,
+        behavior_feature_dim=22,
+        behavior_skip_dim=64,
+        text_fusion=False,
+        text_backend='hashing',
     ):
         super(MultiModalCNN, self).__init__()
         if fusion not in ['ia', 'it', 'lt']:
@@ -481,6 +488,35 @@ class MultiModalCNN(nn.Module):
             nn.Linear(e_dim*2, num_classes),
         )
 
+        self.behavior = behavior
+        self.text_fusion = text_fusion
+        self.behavior_skip_dim = behavior_skip_dim
+        fused_extra = 0
+        if (behavior or text_fusion) and it_fusion_mode == 'legacy':
+            raise ValueError("behavior/text fusion require it_fusion_mode='modern' (the legacy path skips fusion)")
+        if behavior:
+            if fusion != 'it':
+                raise ValueError("behavior fusion is only supported with fusion='it'")
+            self.behavior_encoder = BehaviorEncoder(feature_dim=behavior_feature_dim, hidden=e_dim)
+            self.behavior_av_proj = nn.Linear(e_dim * 2, e_dim)
+            self.behaviorCrossAttention = MultiheadAttention(e_dim, num_heads, batch_first=True)
+            self.behavior_skip = nn.Sequential(
+                nn.Linear(behavior_feature_dim, behavior_skip_dim),
+                nn.ReLU(inplace=True),
+            )
+            self.behavior_missing = nn.Parameter(torch.randn(e_dim))
+            fused_extra += e_dim + behavior_skip_dim
+        if text_fusion:
+            if fusion != 'it':
+                raise ValueError("text fusion is only supported with fusion='it'")
+            self.text_encoder = TextEncoder(embed_dim=e_dim, backend=text_backend)
+            self.text_av_proj = nn.Linear(e_dim * 2, e_dim)
+            self.textCrossAttention = MultiheadAttention(e_dim, num_heads, batch_first=True)
+            self.text_missing = nn.Parameter(torch.randn(e_dim))
+            fused_extra += e_dim
+        if fused_extra:
+            self.classifier_fused = nn.Linear(e_dim * 2 + fused_extra, num_classes)
+
     def _ensure_video_mask(self, x_visual, video_mask):
         if video_mask is not None:
             return video_mask.bool()
@@ -539,6 +575,8 @@ class MultiModalCNN(nn.Module):
         video_lengths=None,
         text_tokens=None,
         text_mask=None,
+        behavior_feats=None,
+        behavior_present=None,
     ):
 
         if self.fusion == 'lt':
@@ -557,10 +595,12 @@ class MultiModalCNN(nn.Module):
                 video_lengths=video_lengths,
                 text_tokens=text_tokens,
                 text_mask=text_mask,
+                behavior_feats=behavior_feats,
+                behavior_present=behavior_present,
             )
 
- 
-        
+
+
     def forward_feature_3(
         self,
         x_audio,
@@ -571,6 +611,8 @@ class MultiModalCNN(nn.Module):
         video_lengths=None,
         text_tokens=None,
         text_mask=None,
+        behavior_feats=None,
+        behavior_present=None,
     ):
         if self.it_fusion_mode == 'legacy':
             return self.forward_feature_3_legacy(x_audio, x_visual)
@@ -691,13 +733,102 @@ class MultiModalCNN(nn.Module):
         audio_pooled = self.attn_pool_audio(x_audio_final, mask=audio_stage2_mask)
         video_pooled = self.attn_pool_video(x_visual_final, mask=video_mask)
 
-        x = torch.cat((audio_pooled, video_pooled), dim=-1)
+        av_pair = torch.cat((audio_pooled, video_pooled), dim=-1)
+        if self.behavior or self.text_fusion:
+            extras = [av_pair]
+            if self.behavior:
+                extras.append(self._behavior_fusion(av_pair, behavior_feats, behavior_present))
+            if self.text_fusion:
+                extras.append(self._text_fusion(av_pair, behavior_feats, behavior_present))
+            return self.classifier_fused(torch.cat(extras, dim=-1))
+        x = av_pair
         if self.late_text_fusion:
             av_context = self.av_context(x)
             refined_context = self.text_addon(av_context, text_tokens=text_tokens, text_mask=text_mask)
             x = torch.cat((av_context, refined_context), dim=-1)
-        x1 = self.classifier_1(x)
-        return x1
+        return self.classifier_1(x)
+
+    def _behavior_fusion(self, av_pair, behavior_feats, behavior_present):
+        """Behavior context (AV summary attends behavior tokens) + direct AU skip.
+
+        Absent samples get a learnable missing-modality token and a zeroed skip.
+        Returns (B, e_dim + behavior_skip_dim).
+        """
+        batch = av_pair.shape[0]
+        device = av_pair.device
+        if behavior_feats is None:
+            ctx = self.behavior_missing.to(device=device, dtype=av_pair.dtype).expand(batch, -1)
+            skip = torch.zeros(batch, self.behavior_skip_dim, device=device, dtype=av_pair.dtype)
+            return torch.cat((ctx, skip), dim=-1)
+
+        behavior_feats = behavior_feats.to(device=device, dtype=av_pair.dtype)
+        if behavior_present is None:
+            behavior_present = torch.ones(batch, dtype=torch.bool, device=device)
+        else:
+            behavior_present = behavior_present.to(device).bool().view(-1)
+
+        enc = self.behavior_encoder(behavior_feats, present=behavior_present)
+        tokens = enc['tokens']                              # (B, T, e_dim)
+        query = self.behavior_av_proj(av_pair).unsqueeze(1)  # (B, 1, e_dim)
+
+        # AV summary queries the behavior token sequence. Behavior tokens are a
+        # dense 15-frame stream (no per-token padding), so no key mask is needed;
+        # whole-clip absence is handled by the missing-modality token below.
+        ctx, _ = self.behaviorCrossAttention(query, tokens, tokens)
+        ctx = ctx.squeeze(1)                               # (B, e_dim)
+        if (~behavior_present).any():
+            miss = self.behavior_missing.to(device=device, dtype=av_pair.dtype).expand(batch, -1)
+            ctx = torch.where(behavior_present.view(batch, 1), ctx, miss)
+
+        skip = self.behavior_skip(behavior_feats.mean(dim=1))          # (B, skip_dim)
+        skip = skip * behavior_present.view(batch, 1).to(skip.dtype)
+        return torch.cat((ctx, skip), dim=-1)
+
+    def _captions_from_feats(self, behavior_feats, behavior_present):
+        """Turn each clip's mean AU/gaze/pose vector into a unified text stream.
+
+        Text is currently the behavior caption (chat can be threaded in later);
+        absent behavior -> empty stream -> missing token downstream.
+        """
+        from models.behavior_features import caption_stream
+        from models.behavior_captioner import build_unified_stream
+
+        feats = behavior_feats.detach().cpu().float().numpy()
+        present = None if behavior_present is None else behavior_present.detach().cpu()
+        streams = []
+        for i in range(feats.shape[0]):
+            if present is not None and not bool(present[i]):
+                streams.append([])
+                continue
+            caption = caption_stream(feats[i].mean(axis=0))
+            streams.append(build_unified_stream(chat="", behavior_caption=caption))
+        return streams
+
+    def _text_fusion(self, av_pair, behavior_feats, behavior_present):
+        """Behavior-caption text -> frozen sentence encoder -> AV summary cross-attends it.
+
+        Absent behavior (or an empty caption) falls back to a learnable missing
+        token. Returns (B, e_dim).
+        """
+        batch = av_pair.shape[0]
+        device = av_pair.device
+        if behavior_feats is None:
+            return self.text_missing.to(device=device, dtype=av_pair.dtype).expand(batch, -1)
+
+        streams = self._captions_from_feats(behavior_feats, behavior_present)
+        tokens, mask = self.text_encoder(streams, device=device)   # (B, M, e_dim), (B, M)
+        tokens = tokens.to(dtype=av_pair.dtype)
+        query = self.text_av_proj(av_pair).unsqueeze(1)            # (B, 1, e_dim)
+
+        empty = ~mask.any(dim=1)                                   # rows with no usable text
+        safe_mask = (~mask).clone()
+        safe_mask[empty] = False                                  # avoid all-pad rows (NaN)
+        ctx, _ = self.textCrossAttention(query, tokens, tokens, key_padding_mask=safe_mask)
+        ctx = ctx.squeeze(1)
+        if empty.any():
+            miss = self.text_missing.to(device=device, dtype=av_pair.dtype).expand(batch, -1)
+            ctx = torch.where(empty.view(batch, 1), miss, ctx)
+        return ctx
 
     def forward_feature_3_legacy(self, x_audio, x_visual):
         x_audio = self.audio_model.forward_stage1(x_audio)

@@ -30,8 +30,7 @@ def build_dataset(opt, subset, spatial_transform=None, audio_transform=None, aud
     use_dynamic_temporal = opt.dataset in {'ENGAGENET', 'DAISEE'} and getattr(opt, 'full_video_preprocessing', False)
     target_frames = None if use_dynamic_temporal else getattr(opt, 'sample_duration', 15)
     audio_target_secs = None if use_dynamic_temporal else 3.6
-    return DATASET_REGISTRY[opt.dataset](
-        opt.annotation_path, subset,
+    kwargs = dict(
         spatial_transform=spatial_transform,
         data_type='audiovisual',
         audio_transform=audio_transform,
@@ -42,6 +41,15 @@ def build_dataset(opt, subset, spatial_transform=None, audio_transform=None, aud
         frame_sampling=getattr(opt, 'frame_sampling', 'uniform'),
         audio_target_secs=audio_target_secs,
     )
+    # Behavior features are engagement-only for now; RAVDESS/CREMAD loaders do not
+    # accept these kwargs, so gate them on the dataset.
+    if opt.dataset == 'ENGAGENET' and (getattr(opt, 'behavior', False) or getattr(opt, 'text_fusion', False)):
+        kwargs.update(
+            behavior=True,
+            behavior_dir=getattr(opt, 'behavior_dir', None),
+            behavior_baselines=getattr(opt, 'behavior_baselines', None),
+        )
+    return DATASET_REGISTRY[opt.dataset](opt.annotation_path, subset, **kwargs)
 
 
 def get_training_set(opt, spatial_transform=None, audio_transform=None, audio_feature_transform=None):

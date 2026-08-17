@@ -2,7 +2,10 @@
 """Bootstrap EngageNet dataset loader for the current AVT-CA pipeline."""
 
 import csv
+import json
+import os
 
+import numpy as np
 import torch
 import torch.utils.data as data
 
@@ -33,6 +36,7 @@ def make_dataset(subset, annotation_path):
                     "audio_path": audio_path,
                     "label": int(label),
                     "text": row[4] if len(row) > 4 else "",
+                    "subject": row[5] if len(row) > 5 else "",
                 }
             )
     return dataset
@@ -53,6 +57,10 @@ class ENGAGENET(data.Dataset):
         target_frames=None,
         frame_sampling="uniform",
         audio_target_secs=None,
+        behavior=False,
+        behavior_dir=None,
+        behavior_baselines=None,
+        behavior_num_frames=None,
     ):
         del data_root
         self.data = make_dataset(subset, annotation_path)
@@ -63,6 +71,32 @@ class ENGAGENET(data.Dataset):
         self.data_type = data_type
         self.audio_features = audio_features
         self.audio_target_secs = audio_target_secs
+
+        self.behavior = behavior
+        self.behavior_dir = behavior_dir
+        self._behavior = None
+        self._baselines = {}
+        if behavior:
+            from models.behavior_features import BehaviorFeatures
+
+            frames = behavior_num_frames or target_frames or 15
+            self._behavior = BehaviorFeatures(num_frames=frames)
+            if behavior_baselines:
+                with open(behavior_baselines) as handle:
+                    self._baselines = {
+                        key: np.asarray(vec, dtype=np.float32)
+                        for key, vec in json.load(handle).items()
+                    }
+
+    def _behavior_for(self, index):
+        raw = None
+        if self.behavior_dir:
+            stem = os.path.splitext(os.path.basename(self.data[index]["video_path"]))[0]
+            npy_path = os.path.join(self.behavior_dir, f"{stem}.npy")
+            if os.path.isfile(npy_path):
+                raw = np.load(npy_path)
+        baseline = self._baselines.get(self.data[index].get("subject", ""))
+        return self._behavior.process(raw, baseline=baseline)
 
     def __getitem__(self, index):
         target = self.data[index]["label"]
@@ -104,7 +138,7 @@ class ENGAGENET(data.Dataset):
         if self.data_type == "audiovisual":
             audio_features = torch.as_tensor(audio_features, dtype=torch.float32)
             clip = torch.as_tensor(clip, dtype=torch.float32).permute(1, 0, 2, 3)
-            return (
+            sample = (
                 audio_features,
                 clip,
                 target,
@@ -112,6 +146,10 @@ class ENGAGENET(data.Dataset):
                 int(clip.shape[0]),
                 self.data[index].get("text", ""),
             )
+            if self.behavior:
+                beh = self._behavior_for(index)
+                sample = sample + (beh["features"], beh["present"])
+            return sample
 
     def __len__(self):
         return len(self.data)

@@ -131,7 +131,7 @@ def collect_logits(model, loader, opt, split_name):
     print(f'Collecting {split_name} logits...')
     with torch.no_grad():
         for batch_idx, batch in enumerate(loader):
-            audio, video, targets, audio_lengths, video_lengths, audio_mask, video_mask, text_tokens, text_mask = _unpack_multimodal_batch(batch)
+            audio, video, targets, audio_lengths, video_lengths, audio_mask, video_mask, text_tokens, text_mask, behavior_feats, behavior_present = _unpack_multimodal_batch(batch)
             audio = audio.to(opt.device)
             video = video.to(opt.device)
             audio_lengths = audio_lengths.to(opt.device)
@@ -141,6 +141,9 @@ def collect_logits(model, loader, opt, split_name):
             if text_tokens is not None:
                 text_tokens = text_tokens.to(opt.device)
                 text_mask = text_mask.to(opt.device)
+            if behavior_feats is not None:
+                behavior_feats = behavior_feats.to(opt.device)
+                behavior_present = behavior_present.to(opt.device)
 
             outputs = model(
                 audio,
@@ -151,6 +154,8 @@ def collect_logits(model, loader, opt, split_name):
                 video_lengths=video_lengths,
                 text_tokens=text_tokens,
                 text_mask=text_mask,
+                behavior_feats=behavior_feats,
+                behavior_present=behavior_present,
             )
             logits.append(outputs.cpu())
             targets_all.append(targets.cpu())
