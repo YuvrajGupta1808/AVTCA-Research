@@ -756,11 +756,12 @@ EfficientFace AV model and the behavior model and report an absolute answer. Ful
 | Arm A audio+video EfficientFace × 3 seeds (G04 config, mvf 50) | **done** — **66.27 ± 0.45** test top-1 / 91.55 adj / 0.440 MAE / 52.31 macro-F1; every epoch bit-identical to the August G04 seeds |
 | Arm B + behavior (50-step clock) × 3 seeds | **done** — **66.08 ± 0.59** / 91.62 / 0.441 / 52.16: **B − A = −0.19, no effect on any metric** (C7 answered; §16.7's +3.18 macro-F1 was seed noise) |
 | Arm C + behavior + caption-text × 3 seeds (C9) | **done** — **66.12 ± 0.59** / 91.67 / 0.439 / 52.26: equal to A and B at every decoder; the caption stream adds nothing |
-| Results table, fixed decoder `refined_expected_thresholds`, 3-seed means ± sd | **done** — plan.md §19.5; `python AVTCA-collab-test/scripts/fullclip/collect.py [--markdown]` |
+| Results table, fixed decoder `refined_expected_thresholds`, 3-seed means ± sd | **done** — plan.md §19.5; `python scripts/fullclip/collect.py [--markdown]` |
 | Modality ablations, all 9 runs | **done** — fusion − video-only **+0.74** mean, 8/9 ≥ 0; audio-only ≤ majority (50.27) on every run |
 | Segment transformer (our implementation of the ICMI tokenisation; 8 configs × 3 seeds, val-selected T7 d64 L2) | **done** — alone **67.0** test (thresholds) / 67.6 (argmax) with 22 features, = published 67.61; noisy across seeds (±3) and overfits by epoch 2–12 |
 | **Three-way fusion AV + transformer + GBM** (weights/thresholds on validation) | **done** — **70.29 ± 0.14** on the 3 A seeds, **70.15 ± 0.25** over all 8 neural checkpoints (min 69.68); weights 0.6/0.2/0.2 on 7 of 8; best and most stable number in the repo (plan.md §19.7) |
 | Two-way AV + transformer | done — 68.69 ± 2.08: the transformer's validation score is a poor weight guide (seed 1 picked 0.85/0.15 → 66.31); keep the GBM in the fusion |
+| Commit and push: development's pending work (5 commits) + merge of the behavior branch with the full-clip pipeline (`feat/behavior-fullclip`) | **done 2026-09-12** — 293 tests pass; A/B smokes identical post-merge; pushed to `origin/development` |
 | A seed 1 calibrated test | **done** — 65.78 / 92.24 adj / 53.41 macro-F1, identical to G04 seed 1 (deterministic; proves worktree AV path == main tree) |
 | **Top-1 levers measured** (plan.md §19.6) on the G04-s1 checkpoint | **done** — neighbour-clip smoothing: null (65.16 vs 65.69); EM prior shift: hurts (62.85); oracle test-fit thresholds 67.82 (bound only); confusion: 531/774 errors in classes 1–2 |
 | OpenFace-statistics GBM alone (20 segments × mean/std of the 22-d series, CPU, no NN) | **done** — **67.15 test top-1** / 53.19 macro-F1, equals the pixel model and is 0.46 below the published best |

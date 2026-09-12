@@ -418,8 +418,8 @@ the F01/F02 vs G01/G02 choice.*
 
 ### Behavior stream (OpenFace AUs) — temporal contract (2026-09-12)
 
-Lives in the collab worktree (`/home/922933190/AVTCA-collab-test`, branch `feat/behavior-text-fusion`,
-unmerged). Per clip, `datasets/EngageNet/behavior/<stem>.npy` holds OpenFace 2.x output for **every source
+Merged into `development` on 2026-09-12 (branch `feat/behavior-fullclip`, on top of the collaborator's
+`feat/behavior-text-fusion`; the worktree `/home/922933190/AVTCA-collab-test` is retired). Per clip, `datasets/EngageNet/behavior/<stem>.npy` holds OpenFace 2.x output for **every source
 frame** — `(T, 22)` = 17 AU intensities + gaze (x, y) + head pose (Rx, Ry, Rz); T is 300 at 30 fps and up to
 10,000 for the 1,038 clips encoded at a nominal 1000 fps.
 
@@ -470,7 +470,7 @@ Measured on the test set (plan.md §19.6): AV alone 66.27 ± 0.45, GBM alone 66.
 **69.86 ± 0.50** over three AV seeds (+2.25 over the published best 67.61). The members disagree on
 ~22% of test clips and each is right on roughly half of those. The neural behavior branch (arm B) does
 not remove the gain (69.77 / 70.04 with B members), so the segment-statistics representation, not the
-raw AU series, is what the pixel model lacks. Scripts: `AVTCA-collab-test/scripts/fullclip/
+raw AU series, is what the pixel model lacks. Scripts: `scripts/fullclip/
 {behavior_only_probe,ensemble_probe,context_analysis}.py`; cached logits per run under `context/`.
 Not yet wired into `ui/inference.py`.
 

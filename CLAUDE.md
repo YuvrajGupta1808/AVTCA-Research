@@ -77,7 +77,7 @@ AVT-CA (Audio-Video Token Cross-Attention) fuses audio and video through a two-s
 - The `ia` fusion path has a known bug: `forward_feature_2` uses attention weights as a gate rather than the attended output. It does not affect `it` or `lt` runs.
 - Temporal mismatch (~11×) exists at intermediate cross-attention: audio has ~168 time frames after stage1; video has 15. The model learns cross-modal correlations despite this, but at mismatched granularity.
 - **EngageNet clips are ≤10.06 s — the "10 s" window is the whole clip.** `_croppad10s.wav` (full-length, uncapped ffmpeg) and `_facecroppad.npy` (5 fps, 50 frames, to the last frame) already span 0→end; `_adaptive_align_audio_to_video` pools all ~431 mel frames onto the 50 video tokens. Do not "extend" past 10 s — there is nothing there (plan.md §19.1).
-- **Behavior stream (collab worktree `AVTCA-collab-test`) must run at the video clock**: pass `--behavior_frames` = `--max_video_frames` (default since 2026-09-12). The branch originally hardcoded 15 steps (1.5 fps) against 50-frame video; every pre-2026-09-12 behavior number used that. Calibration must use the trained run's value.
+- **Behavior stream (merged into `development` 2026-09-12; `--behavior`) must run at the video clock**: pass `--behavior_frames` = `--max_video_frames` (default since 2026-09-12). The branch originally hardcoded 15 steps (1.5 fps) against 50-frame video; every pre-2026-09-12 behavior number used that. Calibration must use the trained run's value.
 
 ## Known Issues (Open)
 See [docs/plan.md](docs/plan.md) for full detail.

@@ -1283,7 +1283,7 @@ the session scratchpad and the table is in plan.md §19.1); the defect class tha
 was the *other* direction — RAVDESS defaults (3.6 s, 15 frames) applied to a longer corpus.
 
 **Seeding a warm start for any new branch is now a script, not surgery:**
-`AVTCA-collab-test/scripts/fullclip/seed_warmstart.py --behavior [--text_fusion]` copies `classifier_1` into
+`scripts/fullclip/seed_warmstart.py --behavior [--text_fusion]` copies `classifier_1` into
 the AV columns of `classifier_fused`, zeros the rest, and refuses to write if the fused model's logits
 differ from the AV model on real clips (both variants verified at 0.0). The matched A/B/C runner
 (`scripts/fullclip/run_job.sh`) re-reads every input-shape and modality flag from the run's own opts json
@@ -1313,7 +1313,7 @@ probed). (2) Diverse-representation ensembles pay on this corpus; same-represent
 ensembles did not (65.6). (3) Keep raw OpenFace CSVs next time — only the 22-d `.npy` exist, and the
 paper's 98-d set (gaze vectors, head location, AU presence) is a ~2 CPU-hour re-extraction away.
 Single AV seed so far; replicate on `A_av_s2`/`A_av_s3` before writing it anywhere external.
-Scripts: `AVTCA-collab-test/scripts/fullclip/{behavior_only_probe,ensemble_probe,context_analysis}.py`.
+Scripts: `scripts/fullclip/{behavior_only_probe,ensemble_probe,context_analysis}.py`.
 
 ## Segment transformer: strong alone, unreliable as a lone fusion member; three-way fusion is the headline (2026-09-12)
 
@@ -1331,3 +1331,17 @@ validation score tracks test well enough to set a weight. Keep the boosting memb
 on top; re-extract 98-d OpenFace before trying to make the transformer stand alone. Scripts:
 `scripts/fullclip/{segment_features,segment_transformer,sweep_segtf,gbm_member,fuse_members,fuse_all}.py`;
 results `results/fullclip/segtf/`, `results/fullclip/gbm/`. See [[project-openface-gbm-ensemble]].
+
+## Behavior branch merged into `development` (2026-09-12, end of session)
+
+Everything from the collab worktree is now in the main tree: `feat/behavior-fullclip` (the collaborator's
+`feat/behavior-text-fusion` + `--behavior_frames` + `scripts/fullclip/` + `scripts/behavior_eval/`) merged
+with six conflicts resolved to keep both sides (MARLIN visual features and LateTextFusionV2 from
+development; `--behavior`/`--text_fusion` from the branch; `late_text_fusion` stays default **off**).
+Verified before committing: 293 tests pass; arm A and B smokes through `scripts/fullclip/run_job.sh`
+from the main repo reproduce the pre-merge numbers exactly. The fullclip scripts now derive the repo root
+from their own location; the seeded warm starts live in gitignored `pretrained/`. The worktree
+`/home/922933190/AVTCA-collab-test` is retired (its `results/` for §15–16 stay there, uncommitted).
+Five development commits preceded the merge (MARLIN/text-v2 code, text-v2 preprocessing, night scripts,
+UI, docs). **How to apply:** run everything from `/home/922933190/AVTCA-Research`; do not resurrect the
+worktree paths in scripts or docs.
