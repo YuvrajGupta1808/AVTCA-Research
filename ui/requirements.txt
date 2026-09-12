@@ -1,2 +1,8 @@
 streamlit
 pandas
+numpy
+torch
+librosa
+opencv-python
+facenet-pytorch
+imageio-ffmpeg
