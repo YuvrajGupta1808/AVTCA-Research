@@ -1,0 +1,20 @@
+# PHASE 1 - GPU 0
+# All runs warm start from the 66.36% E04 checkpoint onto the corrected splits.
+# Everything is held fixed except the one variable each run names.
+# Epoch budget is set so both queues finish with room for phase 2:
+# measured ~0.65 s/batch, 985 batches/epoch => ~11 min/epoch at mvf 96.
+#
+# G00 - CONTROL. E04's exact config (mvf 96, step lr 5e-5) re-run on the
+#       corrected data. Isolates the single variable plan.md 13.8 cares about:
+#       correct preprocessing + a validation set that matches test, so
+#       checkpoint selection finally scores the right distribution.
+train G00_control_mvf96_lr5e5 --max_video_frames 96 --learning_rate 0.00005 --lr_scheduler step --n_epochs 8
+
+# G01 - PADDING. G00 but mvf 50: stops padding every 50-frame clip with 46
+#       empty frames (plan.md 13.7 lever 4). Only mvf changes vs G00.
+train G01_mvf50_lr5e5 --max_video_frames 50 --learning_rate 0.00005 --lr_scheduler step --n_epochs 6
+
+# G03 - MACRO-F1 LEVER. G01 + sqrt-inverse class-weighted loss. macro-F1 52 vs
+#       top-1 66 is the real weakness (plan.md 13.7) and the metric with no
+#       published EngageNet comparison. This is E11r, never completed before.
+train G03_mvf50_clsweight_sqrt --max_video_frames 50 --learning_rate 0.00005 --lr_scheduler step --n_epochs 6 --class_weighting sqrt_inverse

@@ -1,0 +1,9 @@
+# MARLIN visual features — precomputed (T, 1024) embeddings replace raw frames.
+# Trained from scratch (no warm start: the E04 checkpoint's visual convs were
+# fitted to EfficientFace outputs, not MARLIN, so warm-starting would be wrong).
+# Reference point: published MARLIN-Transformer scores 65.20 on this split.
+# 3 seeds per config, because the measured noise floor (0.45 sd) makes any
+# single run uninterpretable.
+train M01_marlin_lr5e4_s1 --visual_features marlin --max_video_frames 0 --learning_rate 0.0005 --lr_scheduler warmup_cosine --warmup_ratio 0.05 --grad_clip_norm 5.0 --n_epochs 30 --manual_seed 1 --n_threads 4
+train M01_marlin_lr5e4_s2 --visual_features marlin --max_video_frames 0 --learning_rate 0.0005 --lr_scheduler warmup_cosine --warmup_ratio 0.05 --grad_clip_norm 5.0 --n_epochs 30 --manual_seed 2 --n_threads 4
+train M01_marlin_lr5e4_s3 --visual_features marlin --max_video_frames 0 --learning_rate 0.0005 --lr_scheduler warmup_cosine --warmup_ratio 0.05 --grad_clip_norm 5.0 --n_epochs 30 --manual_seed 3 --n_threads 4

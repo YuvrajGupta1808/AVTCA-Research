@@ -1,0 +1,22 @@
+# PHASE 1 - GPU 1
+#
+# G02 - AUGMENTATION. G01 but mvf 40 + random crop. mvf 40 is the only cap at
+#       which the temporal crop actually fires (plan.md 13.5: it was a silent
+#       no-op for the project's whole history). Tests whether augmentation
+#       fixes the E04 lineage's epoch-3 overfitting.
+train G02_mvf40_randcrop --max_video_frames 40 --train_frame_sampling random --learning_rate 0.00005 --lr_scheduler step --n_epochs 8
+
+# G04 - MACRO-F1 LEVER, ALTERNATIVE. G01 + sqrt-inverse balanced SAMPLER
+#       instead of weighted loss. plan.md 13.12 flagged the old class-balance
+#       comparison as confounded by LR/ordinal-weight/batch-size; here only the
+#       sampler differs from G01.
+train G04_mvf50_balsampler_sqrt --max_video_frames 50 --learning_rate 0.00005 --lr_scheduler step --n_epochs 6 --class_balance_sampler sqrt_inverse
+
+# G05 - LEARNING RATE. G01 at 2x LR with cosine decay. E04 sat flat at ~65 for
+#       8 epochs at 5e-5, suggesting it barely moved off the warm start.
+train G05_mvf50_lr1e4_cosine --max_video_frames 50 --learning_rate 0.0001 --lr_scheduler warmup_cosine --warmup_ratio 0.05 --grad_clip_norm 5.0 --n_epochs 6
+
+# G06 - AUDIO AUGMENTATION. G01 + SpecAugment. Bears directly on the AV claim:
+#       if audio's +1.06 contribution is real, regularising the audio path
+#       should move it. plan.md 13.6 said re-open this only if fusion holds.
+train G06_mvf50_specaug --max_video_frames 50 --learning_rate 0.00005 --lr_scheduler step --n_epochs 6 --spec_augment

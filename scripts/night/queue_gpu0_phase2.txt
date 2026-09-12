@@ -1,0 +1,4 @@
+# PHASE 2 - GPU 0 (auto-generated)
+ablate G04_mvf50_balsampler_sqrt
+ablate G00_control_mvf96_lr5e5
+train G04_mvf50_balsampler_sqrt_seed2 --max_video_frames 50 --learning_rate 0.00005 --lr_scheduler step --n_epochs 6 --class_balance_sampler sqrt_inverse --manual_seed 2
