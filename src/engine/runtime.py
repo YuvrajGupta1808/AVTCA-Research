@@ -74,6 +74,12 @@ CONFIG_IDENTITY_KEYS = [
     'text_vocab_size',
     'late_text_fusion',
     'text_fusion_arch',
+    'behavior',
+    'behavior_feature_dim',
+    'behavior_skip_dim',
+    'behavior_frames',
+    'text_fusion',
+    'text_backend',
 ]
 
 CONFIG_IDENTITY_DEFAULTS = {
@@ -97,6 +103,12 @@ CONFIG_IDENTITY_DEFAULTS = {
     'text_vocab_size': 4096,
     'late_text_fusion': True,
     'text_fusion_arch': 'legacy',
+    'behavior': False,
+    'behavior_feature_dim': 22,
+    'behavior_skip_dim': 64,
+    'behavior_frames': 0,
+    'text_fusion': False,
+    'text_backend': 'hashing',
     'optimizer': 'sgd',
     'momentum': 0.9,
     'dampening': 0.9,

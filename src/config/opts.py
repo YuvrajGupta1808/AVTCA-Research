@@ -6,7 +6,7 @@ This code is based on https://github.com/okankop/Efficient-3DCNNs
 import argparse
 
 
-def parse_opts():
+def parse_opts(argv=None):
     parser = argparse.ArgumentParser()
     parser.add_argument('--annotation_path', default='preprocessing/ravdess/annotations.txt', type=str, help='Annotation file path')
     parser.add_argument('--data_root', default='', type=str, help='Root directory containing the preprocessed RAVDESS ACTOR folders')
@@ -31,6 +31,16 @@ def parse_opts():
     parser.add_argument('--no_late_text_fusion', dest='late_text_fusion', action='store_false', help='Disable late text fusion for AV-only checkpoints.')
     parser.set_defaults(late_text_fusion=False)
     parser.add_argument('--text_fusion_arch', default='legacy', type=str, choices=['legacy', 'residual'], help='Text add-on architecture: legacy (v1 gated refinement; reinitializes the AV context path) or residual (zero-init additive residual; exact no-op at init, warm-start safe).')
+    parser.add_argument('--behavior', action='store_true', help='Enable the numeric-AU behavior modality (it fusion only).')
+    parser.set_defaults(behavior=False)
+    parser.add_argument('--behavior_feature_dim', default=22, type=int, help='Numeric behavior feature dim (17 AU + gaze2 + pose3).')
+    parser.add_argument('--behavior_skip_dim', default=64, type=int, help='Width of the direct pooled-AU skip into the classifier.')
+    parser.add_argument('--behavior_dir', default='', type=str, help='Directory of per-clip behavior .npy files (OpenFace features).')
+    parser.add_argument('--behavior_frames', default=0, type=int, help='Number of time steps the per-clip OpenFace (T, 22) series is resampled to, spanning the whole clip. 0 = match --max_video_frames so behavior tokens sit on the same 5 fps clock as the face frames (falls back to 15 when that cap is 0). The original branch hardcoded 15 (1.5 fps) against 50-frame video.')
+    parser.add_argument('--behavior_baselines', default='', type=str, help='JSON of per-subject neutral AU baselines.')
+    parser.add_argument('--text_fusion', action='store_true', help='Fuse behavior-caption text via the sentence TextEncoder (it fusion only). Replaces the hashed late-text add-on.')
+    parser.set_defaults(text_fusion=False)
+    parser.add_argument('--text_backend', default='hashing', choices=['hashing', 'minilm', 'auto'], help='Sentence embedding backend for text fusion. hashing = dependency-free (default).')
     parser.add_argument('--num_heads', default=1, type=int, help='number of heads, in the paper 1 or 4')
     
     parser.add_argument('--device', default='cuda', type=str, help='Specify the device to run. Defaults to cuda, fallsback to cpu')
@@ -118,6 +128,6 @@ def parse_opts():
     parser.add_argument('--manual_seed', default=1, type=int, help='Manually set random seed')
     parser.add_argument('--fusion', default='it', type=str, choices=['lt', 'it', 'ia'], help='fusion type: lt | it | ia')
     parser.add_argument('--mask', type=str, choices=['softhard', 'noise', 'nodropout'], help='dropout type : softhard | noise | nodropout', default='softhard')
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
 
     return args

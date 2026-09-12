@@ -30,8 +30,7 @@ def build_dataset(opt, subset, spatial_transform=None, audio_transform=None, aud
     use_dynamic_temporal = opt.dataset in {'ENGAGENET', 'DAISEE'} and getattr(opt, 'full_video_preprocessing', False)
     target_frames = None if use_dynamic_temporal else getattr(opt, 'sample_duration', 15)
     audio_target_secs = None if use_dynamic_temporal else 3.6
-    return DATASET_REGISTRY[opt.dataset](
-        opt.annotation_path, subset,
+    kwargs = dict(
         spatial_transform=spatial_transform,
         data_type='audiovisual',
         audio_transform=audio_transform,
@@ -43,6 +42,32 @@ def build_dataset(opt, subset, spatial_transform=None, audio_transform=None, aud
         audio_target_secs=audio_target_secs,
         **_visual_feature_kwargs(opt),
     )
+    # Behavior features are engagement-only for now; RAVDESS/CREMAD loaders do not
+    # accept these kwargs, so gate them on the dataset.
+    if opt.dataset == 'ENGAGENET' and (getattr(opt, 'behavior', False) or getattr(opt, 'text_fusion', False)):
+        kwargs.update(
+            behavior=True,
+            behavior_dir=getattr(opt, 'behavior_dir', None),
+            behavior_baselines=getattr(opt, 'behavior_baselines', None),
+            behavior_num_frames=resolve_behavior_frames(opt),
+        )
+    return DATASET_REGISTRY[opt.dataset](opt.annotation_path, subset, **kwargs)
+
+
+def resolve_behavior_frames(opt):
+    """Time steps for the per-clip OpenFace series.
+
+    ``--behavior_frames 0`` (default) follows ``--max_video_frames`` so the
+    behavior tokens span the whole clip on the same clock as the face frames
+    (50 at 5 fps for a 10 s EngageNet clip). The collaborator branch hardcoded
+    15, i.e. 1.5 fps against 50-frame video; that value is still reachable
+    explicitly for reproducing the 2026-08-18 runs.
+    """
+    explicit = int(getattr(opt, 'behavior_frames', 0) or 0)
+    if explicit > 0:
+        return explicit
+    cap = int(getattr(opt, 'max_video_frames', 0) or 0)
+    return cap if cap > 0 else 15
 
 
 def _visual_feature_kwargs(opt):
