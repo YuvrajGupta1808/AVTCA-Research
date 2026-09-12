@@ -15,6 +15,7 @@ import cv2
 if __package__ is None or __package__ == "":
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
+from preprocessing.engagenet.behavior_caption import caption_from_features, load_thresholds
 from preprocessing.engagenet.chat_text import build_chat_text
 from preprocessing.engagenet.chat_text import stratified_chat_assignment
 from preprocessing.engagenet.label_utils import load_all_labels
@@ -57,16 +58,46 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Write the legacy 4-column annotation format without chat text.",
     )
+    parser.add_argument(
+        "--text_source",
+        choices=("chat", "behavior", "none"),
+        default="chat",
+        help=(
+            "Column-5 text source: 'chat' = legacy synthetic chat sampled by label "
+            "(v1, label-leaking — kept only for reproduction), 'behavior' = label-free "
+            "captions from OpenFace features, 'none' = empty text column."
+        ),
+    )
+    parser.add_argument(
+        "--behavior_dir",
+        type=Path,
+        default=Path("datasets/EngageNet/behavior"),
+        help="Directory of per-clip OpenFace (T, 22) .npy files (--text_source behavior).",
+    )
+    parser.add_argument(
+        "--caption_stats",
+        type=Path,
+        default=Path("preprocessing/engagenet/behavior_caption_stats.json"),
+        help="Train-split threshold file from compute_caption_stats.py.",
+    )
+    parser.add_argument(
+        "--audio_suffix",
+        choices=("croppad", "croppad10s"),
+        default="croppad",
+        help="Which extracted wav variant to reference (croppad10s = 10 s audio).",
+    )
     return parser.parse_args()
 
 
-def build_paths(data_root: Path, subset: str, clip_name: str) -> tuple[Path, Path, Path]:
+def build_paths(
+    data_root: Path, subset: str, clip_name: str, audio_suffix: str = "croppad"
+) -> tuple[Path, Path, Path]:
     split_dir = data_root / SPLIT_DIR_MAP[subset]
     if not clip_name.endswith(".mp4"):
         clip_name = f"{clip_name}.mp4"
     raw_video_path = split_dir / clip_name
     face_path = raw_video_path.with_name(raw_video_path.stem + "_facecroppad.npy")
-    audio_path = raw_video_path.with_name(raw_video_path.stem + "_croppad.wav")
+    audio_path = raw_video_path.with_name(f"{raw_video_path.stem}_{audio_suffix}.wav")
     return (face_path if face_path.exists() else raw_video_path), audio_path, raw_video_path
 
 
@@ -106,23 +137,42 @@ def main() -> None:
 
     labels_by_split = load_all_labels(data_root)
     missing_paths: list[str] = []
+    use_chat = args.text_source == "chat" and not args.disable_chat_text
     chat_assignments = (
         stratified_chat_assignment(labels_by_split=labels_by_split, text_ratio=args.text_ratio)
-        if not args.disable_chat_text
+        if use_chat
         else {}
     )
+    caption_thresholds = None
+    missing_behavior: list[str] = []
+    captioned = 0
+    if args.text_source == "behavior":
+        caption_thresholds = load_thresholds(args.caption_stats)
+        import numpy as np  # local import: only the behavior path needs it
 
     with annotation_file.open("w", newline="") as handle:
         writer = csv.writer(handle, delimiter=";")
         for subset, labels in labels_by_split.items():
             for clip_name, label in sorted(labels.items()):
-                video_path, audio_path, raw_video_path = build_paths(data_root, subset, clip_name)
+                video_path, audio_path, raw_video_path = build_paths(
+                    data_root, subset, clip_name, audio_suffix=args.audio_suffix
+                )
                 if args.strict and (not video_path.exists() or not audio_path.exists()):
                     missing_paths.append(f"{video_path} | {audio_path}")
                     continue
 
                 row = [str(video_path), str(audio_path), str(label), subset]
-                if not args.disable_chat_text:
+                if args.text_source == "behavior":
+                    behavior_path = args.behavior_dir / f"{raw_video_path.stem}.npy"
+                    if behavior_path.exists():
+                        row.append(
+                            caption_from_features(np.load(behavior_path), caption_thresholds)
+                        )
+                        captioned += 1
+                    else:
+                        missing_behavior.append(str(behavior_path))
+                        row.append("")
+                elif use_chat:
                     chat_text = ""
                     if clip_name in chat_assignments.get(subset, set()):
                         duration_secs = get_video_duration_secs(raw_video_path)
@@ -135,6 +185,8 @@ def main() -> None:
                             duration_secs=duration_secs,
                         )
                     row.append(chat_text)
+                elif args.text_source == "none" and not args.disable_chat_text:
+                    row.append("")
                 writer.writerow(row)
 
     if missing_paths and args.strict:
@@ -142,7 +194,21 @@ def main() -> None:
         raise FileNotFoundError(f"Missing preprocessed EngageNet paths:\n{preview}")
 
     total = sum(len(labels) for labels in labels_by_split.values())
-    if args.disable_chat_text:
+    if args.text_source == "behavior":
+        coverage = captioned / total if total else 0.0
+        print(
+            f"Wrote {total} EngageNet annotations to {annotation_file} "
+            f"with {captioned} behavior captions ({coverage:.2%})."
+        )
+        if missing_behavior:
+            print("First missing behavior files:")
+            for path in missing_behavior[:5]:
+                print(f"  {path}")
+        if coverage < 0.99:
+            raise SystemExit(
+                f"behavior caption coverage {coverage:.2%} < 99% — check --behavior_dir"
+            )
+    elif args.disable_chat_text or args.text_source == "none":
         print(f"Wrote {total} EngageNet annotations to {annotation_file}")
     else:
         non_empty = sum(len(clips) for clips in chat_assignments.values())
