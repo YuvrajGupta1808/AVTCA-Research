@@ -1,0 +1,8 @@
+# GPU 1 — one job at a time. A_av_s2 already running.
+train B_beh_s2 B --manual_seed 2
+train C_behtext_s2 C --manual_seed 2
+train C_behtext_s3 C --manual_seed 3
+ablate A_av_s2
+ablate B_beh_s2
+ablate C_behtext_s2
+ablate C_behtext_s3

@@ -56,6 +56,19 @@ def parse_args():
     parser.add_argument('--late_text_fusion', action='store_true')
     parser.add_argument('--no_late_text_fusion', dest='late_text_fusion', action='store_false')
     parser.set_defaults(late_text_fusion=True)
+    # behavior / text-fusion flags: the forward loop below already handles these
+    # tensors, but the CLI never exposed them, so a behavior checkpoint could not
+    # be calibrated (model built without the modules -> state-dict mismatch).
+    parser.add_argument('--behavior', action='store_true')
+    parser.set_defaults(behavior=False)
+    parser.add_argument('--behavior_dir', default='')
+    parser.add_argument('--behavior_baselines', default='')
+    parser.add_argument('--behavior_feature_dim', default=22, type=int)
+    parser.add_argument('--behavior_skip_dim', default=64, type=int)
+    parser.add_argument('--behavior_frames', default=0, type=int, help='Must match the trained run (0 = follow --max_video_frames).')
+    parser.add_argument('--text_fusion', action='store_true')
+    parser.set_defaults(text_fusion=False)
+    parser.add_argument('--text_backend', default='hashing')
     parser.add_argument('--prediction_mode', default='argmax')
     parser.add_argument('--loss', default='ce')
     parser.add_argument('--ordinal_distance_weight', default=0.35, type=float)
