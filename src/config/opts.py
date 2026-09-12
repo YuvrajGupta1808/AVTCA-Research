@@ -29,7 +29,8 @@ def parse_opts():
     parser.add_argument('--text_vocab_size', default=4096, type=int, help='Hash-bucket vocabulary size for optional text add-on tokens.')
     parser.add_argument('--late_text_fusion', action='store_true', help='Enable the late optional text-fusion add-on after audio/video pooling.')
     parser.add_argument('--no_late_text_fusion', dest='late_text_fusion', action='store_false', help='Disable late text fusion for AV-only checkpoints.')
-    parser.set_defaults(late_text_fusion=True)
+    parser.set_defaults(late_text_fusion=False)
+    parser.add_argument('--text_fusion_arch', default='legacy', type=str, choices=['legacy', 'residual'], help='Text add-on architecture: legacy (v1 gated refinement; reinitializes the AV context path) or residual (zero-init additive residual; exact no-op at init, warm-start safe).')
     parser.add_argument('--num_heads', default=1, type=int, help='number of heads, in the paper 1 or 4')
     
     parser.add_argument('--device', default='cuda', type=str, help='Specify the device to run. Defaults to cuda, fallsback to cpu')
@@ -67,6 +68,8 @@ def parse_opts():
     parser.add_argument('--class_weighting', default='none', choices=['none', 'inverse', 'sqrt_inverse'], help='Optional class-weighted loss from training label counts.')
     parser.add_argument('--class_balance_sampler', default='none', choices=['none', 'inverse', 'sqrt_inverse'], help='Optional weighted sampler for imbalanced training classes.')
     parser.add_argument('--prediction_mode', default='argmax', choices=['argmax', 'expected_round'], help='Prediction decoding for ordered labels. expected_round rounds the softmax expected class index.')
+    parser.add_argument('--save_every_epoch', action='store_true', help='Additionally retain a per-epoch checkpoint copy (epoch_XXX.pth) so any epoch can be re-selected or ensembled after the run.')
+    parser.set_defaults(save_every_epoch=False)
     parser.add_argument('--selection_min_delta', default=0.0, type=float, help='Minimum validation selection-metric improvement required to update best checkpoint or reset early stopping.')
     parser.add_argument(
         '--selection_metric',
@@ -90,6 +93,14 @@ def parse_opts():
         choices=['maxpool', 'stride_conv'],
         help='Downsampling method after the first visual conv in the attention_local backbone',
     )
+    parser.add_argument(
+        '--visual_features',
+        default='frames',
+        choices=['frames', 'marlin'],
+        help='Visual input representation. frames decodes raw video through the visual backbone; marlin loads precomputed MARLIN (T, 1024) embeddings and bypasses the backbone.',
+    )
+    parser.add_argument('--marlin_tokens', default=9, type=int, help='Resample every MARLIN sequence to exactly this many tokens. The shipped features are not length-consistent (modal 9, but 592 train clips are 312 and hundreds are 1-8); 0 disables resampling.')
+    parser.add_argument('--marlin_root', default='', type=str, help='Root directory containing MARLIN_Train/MARLIN_Validation/MARLIN_Test. Defaults to --data_root.')
     parser.add_argument('--checkpoint_path', default='', type=str, help='Explicit checkpoint to evaluate during test-only flows.')
     parser.add_argument('--no_train', action='store_true', help='If true, training is not performed.')
     parser.set_defaults(no_train=False)

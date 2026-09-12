@@ -41,7 +41,20 @@ def build_dataset(opt, subset, spatial_transform=None, audio_transform=None, aud
         target_frames=target_frames,
         frame_sampling=getattr(opt, 'frame_sampling', 'uniform'),
         audio_target_secs=audio_target_secs,
+        **_visual_feature_kwargs(opt),
     )
+
+
+def _visual_feature_kwargs(opt):
+    """MARLIN options, passed only to datasets that accept them."""
+    visual_features = getattr(opt, 'visual_features', 'frames')
+    if visual_features == 'frames' or opt.dataset != 'ENGAGENET':
+        return {}
+    return {
+        'visual_features': visual_features,
+        'marlin_root': getattr(opt, 'marlin_root', '') or opt.data_root,
+        'marlin_tokens': getattr(opt, 'marlin_tokens', 9),
+    }
 
 
 def get_training_set(opt, spatial_transform=None, audio_transform=None, audio_feature_transform=None):
