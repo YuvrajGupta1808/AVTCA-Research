@@ -35,6 +35,7 @@ def parse_opts(argv=None):
     parser.add_argument('--behavior_feature_dim', default=22, type=int, help='Numeric behavior feature dim (17 AU + gaze2 + pose3).')
     parser.add_argument('--behavior_skip_dim', default=64, type=int, help='Width of the direct pooled-AU skip into the classifier.')
     parser.add_argument('--behavior_dir', default='', type=str, help='Directory of per-clip behavior .npy files (OpenFace features).')
+    parser.add_argument('--behavior_frames', default=0, type=int, help='Number of time steps the per-clip OpenFace (T, 22) series is resampled to, spanning the whole clip. 0 = match --max_video_frames so behavior tokens sit on the same 5 fps clock as the face frames (falls back to 15 when that cap is 0). The original branch hardcoded 15 (1.5 fps) against 50-frame video.')
     parser.add_argument('--behavior_baselines', default='', type=str, help='JSON of per-subject neutral AU baselines.')
     parser.add_argument('--text_fusion', action='store_true', help='Fuse behavior-caption text via the sentence TextEncoder (it fusion only). Replaces the hashed late-text add-on.')
     parser.set_defaults(text_fusion=False)

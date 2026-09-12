@@ -1,0 +1,11 @@
+# GPU 0 — one job at a time (mvf 50 uses ~12.9 GB; two do not fit in 24 GB). A_av_s1 already running.
+train B_beh_s1 B --manual_seed 1
+train A_av_s3 A --manual_seed 3
+train B_beh_s3 B --manual_seed 3
+train C_behtext_s1 C --manual_seed 1
+# modality ablations on the same weights (video_only / audio_only), after training
+ablate A_av_s1
+ablate B_beh_s1
+ablate A_av_s3
+ablate B_beh_s3
+ablate C_behtext_s1
