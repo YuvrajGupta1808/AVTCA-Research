@@ -2031,9 +2031,12 @@ pass). The behavior encoder (Conv1d + BiGRU + mean) is length-agnostic, so no ar
 
 ### 19.3 Experiment — three arms, three seeds, one config, one code tree
 
-All arms run from the collab worktree (the only tree with the behavior branch) so the comparison is
-code-matched; results are written to the main repo at `results/fullclip/`. Scripts:
-`AVTCA-collab-test/scripts/fullclip/{common.sh,run_job.sh,worker.sh,queue_gpu*.txt,seed_warmstart.py,collect.py}`.
+All arms ran from the collab worktree (then the only tree with the behavior branch) so the comparison is
+code-matched; results are written to `results/fullclip/`. **Merged into `development` on 2026-09-12** — the
+behavior branch, `--behavior_frames`, `scripts/fullclip/` and `scripts/behavior_eval/` now live in the main tree,
+the subject-annotated file is `preprocessing/engagenet/annotations_engagement_a10_subject.txt`, and the seeded
+warm starts sit in the gitignored `pretrained/` (regenerate with `scripts/fullclip/seed_warmstart.py`). Scripts:
+`scripts/fullclip/{common.sh,run_job.sh,worker.sh,queue_gpu*.txt,seed_warmstart.py,collect.py}`.
 
 | Arm | Model | Warm start (`model.pth`) | Extra flags |
 |---|---|---|---|
@@ -2156,7 +2159,7 @@ three seeds: no effect (66.08 / 66.12). The way to move the number is §19.6.
 
 Yuvraj asked for a plan to raise top-1. Rather than list options, four levers were measured on the
 G04 seed-1 checkpoint (identical weights to `A_av_s1`) with everything selected on validation and test
-touched once. Scripts: `AVTCA-collab-test/scripts/fullclip/{context_analysis,behavior_only_probe,ensemble_probe}.py`;
+touched once. Scripts: `scripts/fullclip/{context_analysis,behavior_only_probe,ensemble_probe}.py`;
 outputs under each run's `context/`.
 
 **Where top-1 is lost (test confusion matrix, expected-value thresholds):**
