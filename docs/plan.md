@@ -343,6 +343,9 @@ Expected output: ~10,000–12,000 labeled clips, 2 cohorts, 8 sessions, 24 uniqu
 | — | Implement role conditioning: `role_embedding(is_speaking)` added to video tokens before first AttentionBlock | Critical |
 | — | Replace MaxPool aggregation with learned attention pooling | High |
 | — | Add attention output dropout (p=0.1–0.2) before each residual add | High |
+| TX1 | `preprocessing/zoom/extract_chat.py` — parse Zoom chat export, per-student per-clip text (Section 17) | High — unblocked now |
+| TX3 | Chat elicitation prompts + display-name convention into E1 session script (Section 17.1) | High — merge with E1 |
+| TX2, TX4–TX7 | Chat schema, text encoder, null token, text dropout, leakage gate + A/B (Section 17.7) | Blocked on pilot data |
 
 **ProsodyEncoder implementation note (E9):** Do NOT produce a single summary token for concatenation into the temporal sequence. A scalar token attends identically at every time step. Instead, condition the audio CNN features directly:
 ```python
@@ -1079,3 +1082,1260 @@ parameters, experiment types), so the evidence document is self-contained for a 
 to be described as trends, not isolated effects; the DAiSEE row as portability, not a result; §6 should be
 quoted as **+1.47 on the best model**, not the +8.20 seen on weak checkpoints (calibration rescues poor
 models more than good ones).
+
+### 13.13 F01/F02 final result, a calibration defect, and the overnight G-sweep (2026-08-12)
+
+**F01/F02 completed.** They confirm the §13.10.5 diagnosis. Neither beat the 66.36% incumbent, and
+neither approached it:
+
+| Run | best val top-1 | best val epoch | test top-1 (argmax) | test top-1 (logit bias) |
+|---|---:|---:|---:|---:|
+| F01 (no augmentation) | 53.59 | 8 | 52.62 | 56.69 |
+| F02 (crop active) | 53.97 | 8 | 51.91 | 55.63 |
+
+Both sit **below the 50.27% majority-class baseline on some epochs** and oscillate without trend across
+all 18. The §13.10.1 decision matrix row "beats 66.36% top-1?" is answered **NO for the retraining
+route** — but the correct reading is narrower than "checkpoint selection was not the limiter". These runs
+retrained from the AffectNet pretrain in 18 epochs, so they confound the data fix with initialisation and
+training length. The matrix row is properly answered only by a finetune of the existing best checkpoint,
+which is what the G-sweep below does.
+
+#### 13.13.1 New defect: calibration ran at a frame cap the models never trained at
+
+`scripts/exp2026_run.sh` hardcodes `--max_video_frames 96` in `COMMON`, and `run_train` calls
+`run_calib` **without forwarding the run's own override**. F01 trained at `mvf 50` and F02 at `mvf 40`;
+both were then calibrated and tested at `mvf 96`. Every F01/F02 **test** number above is therefore a
+train/eval mismatch and should not be cited.
+
+Their **validation** curves are unaffected — validation runs inside training at the correct cap — and the
+val curves alone (peak 53.6 / 54.0 against E04's 65.3) already support the failure conclusion. So the
+verdict stands; the test numbers do not.
+
+This is the fourth preprocessing/evaluation mismatch found in this project (after §12.1, §13.1, §13.7).
+The pattern is consistent: **a default in a shared config silently overriding a per-run setting.**
+`scripts/night/run_job.sh` now reads `max_video_frames` and `frame_sampling` back out of each run's own
+`opts*.json` and passes them to calibration, so the two can no longer diverge.
+
+#### 13.13.2 Overnight G-sweep — design
+
+Seven matched finetunes, all warm-started from the E04 best checkpoint (the 66.36% model) onto the
+corrected splits, two GPUs in parallel. Everything is held fixed — `h8`, `mel`, `fusion it`, `bs 8`,
+`ordinal_distance 0.15`, `label_smoothing 0.1`, `sgd`, `selection_metric top1_accuracy`, 10 epochs, AV
+only — **except the one variable each run names.** This directly addresses the §13.12 audit, which found
+the older class-balance and loss-function tables confounded across three or four parameters at once.
+
+| ID | GPU | Variable under test | Why |
+|---|---|---|---|
+| G00 | 0 | none — E04's exact config (`mvf 96`, step lr 5e-5) | **Control.** Isolates the one variable §13.8 cares about: corrected data + a validation set that matches test, so selection finally scores the right distribution |
+| G01 | 0 | `mvf 50` | Stops padding every 50-frame clip with 46 empty frames (§13.7 lever 4) |
+| G03 | 0 | `class_weighting sqrt_inverse` | E11r, never completed. Targets the macro-F1 gap (52 against top-1 66) — the real weakness and the metric with no published EngageNet comparison |
+| G02 | 1 | `mvf 40` + `train_frame_sampling random` | The only cap at which the temporal crop actually fires (§13.5). Tests whether augmentation fixes the E04 lineage's epoch-3 overfitting |
+| G04 | 1 | `class_balance_sampler sqrt_inverse` | Same target as G03 by a different mechanism, and matched this time |
+| G05 | 1 | `lr 1e-4` + warmup-cosine | E04 sat flat at ~65 for 8 epochs at 5e-5, suggesting it barely moved off the warm start |
+| G06 | 1 | `spec_augment` | Bears on the AV claim: if audio's +1.06 is real, regularising the audio path should move it |
+
+**Phase 2 is generated automatically** once all seven finish (`scripts/night/phase2.py`), and answers the
+two remaining §13.10 questions:
+
+- **Modality ablation** (`audio_only` / `video_only`) on the top two runs → does the AV claim survive
+  clean training (§13.10 question b). This is the difference between an audio-visual paper and a video
+  paper with a negative ablation appendix.
+- **Two seed repeats of the winner** (E22) → is the fusion gain seed noise. No paper claim without this.
+- **F03 checkpoint ensembling** (`scripts/night/ensemble.py`), inference-only. Averages **probabilities,
+  not logits**, because members differ in LR and loss and would otherwise be weighted by logit magnitude.
+
+**Calibration discipline is unchanged and was verified against the code:** logit bias and both
+expected-threshold decoders are fit on **validation** logits and applied to **test**. Nothing is fit on
+test.
+
+#### 13.13.3 New capability: `--save_every_epoch`
+
+Additive flag (default off, so no existing behaviour changes). Retains `epochs/epoch_NNN.pth` alongside
+the usual best/last checkpoints. Two payoffs: any epoch can be re-selected post-hoc against a different
+`--selection_metric` without retraining — which matters because the ordinal framing argues for selecting
+on MAE rather than top-1 — and every epoch becomes an ensemble member for F03.
+
+#### 13.13.4 Resilience
+
+Both workers are launched under `setsid nohup`, so the sweep is independent of the SSH session, the
+laptop sleeping, or Claude Code exiting. A failing job writes `FAILED` and the queue continues; a
+completed job writes `DONE` and is skipped on relaunch, so the whole sweep is resumable by re-running
+`scripts/night/worker.sh`.
+
+---
+
+## 14. Streamlit Engagement UI (2026-08-12)
+
+The Streamlit app was written for the RAVDESS 8-class emotion model and had drifted out of
+scope. It now serves the EngageNet engagement models instead. `ui/inference.py` and `ui/app.py`
+were rewritten; the RAVDESS-specific asset lookups (`_find_precomputed_ravdess_asset`,
+annotation-file audio resolution) were dropped rather than carried forward.
+
+### 14.1 Which checkpoints the UI exposes
+
+Only the two runs that beat the published EngageNet video-only baselines, decoded with the
+calibrated `refined_expected_thresholds` from their own calibration sweep:
+
+| Key | Checkpoint | Audio contract | Test top-1 | Adjacent | Calibration source |
+|---|---|---|---:|---:|---|
+| `e04_ft10s` (default) | `results/exp2026/E04_ft10s_ord_lr5e5_e8/ENGAGENET_multimodal_cnn_15_best.pth` | full 10 s | **66.36%** | 90.96% | `results/exp2026/R04_e04_av_fixed/` |
+| `v12_05` | `results/v12_05_finetune_uniform_best_ord_nosampler_lr0001_e30/model.pth` | 3.6 s centre crop | 66.13% | 91.00% | `results/exp2026/R01_v12_av_fixed/` |
+
+Everything else in `results/` is either RAVDESS/DAiSEE, a superseded run, or below these two.
+The registry lives in `MODEL_REGISTRY` in `ui/inference.py`; when the G-sweep (§13.13) produces
+a winner that beats 66.36%, add it there with its own thresholds and metrics.
+
+### 14.2 Long-video handling
+
+EngageNet clips are exactly 10 s. Arbitrary uploads are sliced into 10 s windows (optionally
+50% overlapping), each window preprocessed and scored independently, then rolled up into a
+session summary: mean expected score, share of time at level ≥ Engaged, time-per-level
+distribution, most/least engaged window, and a per-window CSV export.
+
+### 14.3 Preprocessing contract — verified bit-exact
+
+The UI reproduces the training contract rather than approximating it. Verified by extracting
+frames from a raw `.mp4` and diffing against the stored `*_facecroppad.npy`: **mean absolute
+difference 0.0**, and window scores match the training path to within 0.02.
+
+- **5 fps frame stride, not uniform-96.** `extract_faces.py` was run with `--target_fps 5`, so
+  every stored clip is ~50 frames. Sampling 96 uniformly — the obvious reading of
+  `--max_video_frames 96` — hands the visual stem a temporal resolution it never saw and
+  measurably changes predictions. The 96 cap only applies after the 5 fps stride.
+- **BGR channel order.** `extract_faces.py` saves frames straight from `cv2` without a
+  BGR→RGB conversion, so the UI must not convert either.
+- **MTCNN is mandatory.** With `facenet_pytorch` missing, the Haar fallback detected a face in
+  only 32% of frames on a test clip and scores diverged wildly (2.50 → 0.08). The app now
+  refuses quietly no longer — it shows a blocking error telling the user to run inside the
+  `avtca` conda env.
+- **Audio** is mono 22050 Hz, 64-bin mel in dB (`ref=np.max`), sliced per window and centre
+  cropped to 3.6 s only for the `v12_05` contract.
+
+### 14.4 Decoding
+
+Softmax expected class index → `np.digitize` against the run's refined thresholds. This is the
+decision rule the reported accuracy was measured with; plain argmax is 1.5–2 points worse on
+test and is shown in the per-window table only as a secondary signal.
+
+### 14.5 Optional modality split
+
+A checkbox runs each window three times (fused / `audio_only` / `video_only`) using the model's
+existing `ablate_modality` hook, and reports how often each single-modality decode agrees with
+the fused one. Expect low audio agreement — that is the known EngageNet result, not a UI bug.
+
+#### 13.13.5 Concurrency: what actually limits runs per GPU (measured 2026-08-12)
+
+The sweep started at one run per GPU. Measurement showed that was leaving capacity unused, but not for the
+reason a "24 GB card, small model" reading would suggest.
+
+| Constraint | Measurement | Verdict |
+|---|---|---|
+| GPU memory | mvf 96 run = **19.3 GB of 24**; mvf 50 ≈ 11.7 GB; mvf 40 = 10.3 GB | Hard cap: **1 run at mvf 96, 2 at mvf 50** |
+| Dataloader | Data wait **0.007 s of 0.46 s per batch (1.5%)** | Not the bottleneck |
+| CPU | **0% idle, 0% iowait**, load 107 on 20 cores | Saturated |
+| GPU utilisation | GPU0 ~60%, GPU1 ~45% | Headroom being wasted |
+| Threads | **495 threads on 20 cores**, `OMP_NUM_THREADS` unset | The waste |
+
+The model is small (2.4 M parameters) but the *input* is not: 40–96 frames of 224×224×3 per sample. Memory
+scales with the frame cap, so **the frame cap sets the concurrency limit**, not parameter count.
+
+The CPU saturation was largely self-inflicted. PyTorch defaults to one OMP thread per core *per process*,
+and the sweep runs ~22 processes, giving 495 threads on 20 cores — load 107 and **48% of CPU time in
+sys**. `OMP_NUM_THREADS=1` is correct here: the dataloader does no meaningful BLAS and the training step
+runs on the GPU. Set in `scripts/night/common.sh`, with `--n_threads` reduced from 10 to 6.
+
+Measured effect of going from 2 concurrent runs to 3:
+
+| | 2 runs | 3 runs |
+|---|---:|---:|
+| GPU0 | 2.17 batch/s | 2.23 batch/s |
+| GPU1 | 2.36 batch/s | **3.51** batch/s |
+| Total | 4.53 batch/s | **5.74 batch/s (+27%)** |
+
+Doubling up on one card returns **+49% on that card** — real, but well short of 2×, because CPU is still
+the binding constraint (0.4% idle at three runs). **Six to seven runs per GPU is not achievable**, and
+adding a fourth returns progressively less.
+
+**Harness change:** `run_job.sh` now gates on free GPU memory before starting (waits up to 4 h for
+`GPU_FREE_MIB`, default 13000), so several workers can share a card without racing into an OOM. A second
+worker per GPU (`worker.sh <gpu> <queue> nophase2 <tag>`) drains an additional queue; only the primary
+worker per GPU generates and drains the phase-2 queue, or they would duplicate every phase-2 job.
+
+**Five runs added** with the freed capacity, chosen so that sweep tables §13.12 marked *confounded*
+become citeable — G07/G01/G09 give a clean three-point ordinal-weight sweep (0.35 / 0.15 / 0.60), G08
+isolates CE against ordinal loss, and G12/G13 isolate EMA and label smoothing, both of which have been
+carried as unexamined defaults in every run in this project.
+
+### 13.14 G-sweep results — the sweep is flat, and the noise floor explains why (2026-08-12)
+
+Fourteen matched runs completed overnight (G00–G13 plus two seed repeats), all warm-started from the E04
+best checkpoint onto the corrected splits, plus a full modality ablation on 13 of them and a 14-member
+ensemble. **All numbers below use a single fixed decoder, `refined_expected_thresholds`**, so fusion and
+video-only are compared like for like. This matters: G04 reads 66.76 under `expected_thresholds` and
+65.78 under `refined_expected_thresholds` — the decoder alone moves a checkpoint by ~1 point, so no
+number in this project should be quoted without its decoder.
+
+#### 13.14.1 The decisive statistic
+
+| Source of variation | Top-1 sd | Top-1 spread |
+|---|---:|---:|
+| **14 different configurations** (loss, ordinal weight, class weighting, balanced sampler, LR, EMA, label smoothing, SpecAugment, frame cap, augmentation) | **0.52** | 1.95 |
+| **Same configuration, 3 random seeds** (G04) | **0.45** | 0.89 |
+
+**Varying every hyperparameter we tested produces almost exactly as much variation as re-running one
+configuration with a different seed.** For macro-F1 the picture is worse: across-run spread 3.00 against
+a seed range of 2.29.
+
+This is the quantitative form of the conclusion §12.7's encoder-free probe reached qualitatively — three
+model families converging on the same ceiling. **The limitation is the corpus, not the model, the loss,
+or the optimiser.** It is a stronger and more useful result than any 0.3-point accuracy claim, and it is
+the empirical justification for the purpose-built dataset in §2–11.
+
+**Practical consequence: no single-run comparison in this project is interpretable.** Every past sweep
+table quoted differences of 0.5–2 points between single runs. The measured noise floor is 0.45 sd on
+top-1 and ~1.1 sd on macro-F1. Those tables were reading noise. Future comparisons need ≥3 seeds or they
+should not be made.
+
+#### 13.14.2 The three pre-committed questions (§13.10.1)
+
+**(a) Did anything beat 66.36% top-1? No.** Best of the night is 66.67 (G04 seed 3), **+0.31** — well
+inside the 0.45 seed sd, and inside the ±2.75 binomial CI on 2,257 clips. The cleanest evidence is G00,
+E04's exact configuration on corrected data, at **66.09 vs 66.36** — corrected preprocessing and a valid
+selection signal changed test accuracy by *−0.27*. The §13.7 "Lever 1" hypothesis, that broken checkpoint
+selection was the largest untapped gain, is **refuted**. The matrix's pre-committed response applies:
+stop chasing accuracy, commit to the ordinal-evaluation and calibration framing.
+
+**(b) Does fusion still beat video-only on cleanly-trained models? On top-1 yes, on macro-F1 no.**
+
+| Metric | Fusion better in | Mean Δ | sd |
+|---|---|---:|---:|
+| Top-1 | **12 / 13** | **+0.67** | 0.59 |
+| macro-F1 | 4 / 13 | −0.09 | 1.21 |
+
+Audio-only never exceeds the majority-class baseline on any model (values 46.59–50.27 against 50.27).
+So §13.6's finding survives **only in its narrow form**: audio carries no standalone engagement signal
+but adds a small consistent top-1 gain when fused. §13.6's additional claim of a **+1.95 macro-F1 gain
+does not reproduce** and must be withdrawn — it was an artefact of defect-trained weights.
+
+The mean +0.67 is below the noise floor of any single comparison; what makes it credible is consistency
+of sign across 13 models (12/13) and across the two seeds tested (+0.80, +1.99). State it as
+"a small positive fusion effect, consistent in sign across 13 matched models", never as a point estimate
+from one run.
+
+**A retracted intermediate finding, recorded because it is instructive.** Mid-sweep, G04 showed a
+macro-F1 fusion gain of +2.65 while every non-class-balanced run was negative, suggesting audio's
+minority-class contribution required class-balanced training to surface. **Seed 2 of the same config gave
+−0.61.** The effect was seed noise. It survived less than two hours and only because the seed repeats
+were run — which is precisely what E22 was for.
+
+**(c) Did augmentation hold its peak? No — it was the second-worst run.** G02 (mvf 40 + random crop,
+the first run in this project where the crop actually fires) scored **64.89**, against 65.82 for the
+otherwise-identical G01. The matrix's pre-committed reading applies: **overfitting is a dataset-size
+limit** (7,983 training clips), not an augmentation gap — a direct argument for the purpose-built corpus
+rather than further tuning on EngageNet.
+
+#### 13.14.3 Full results, fixed decoder `refined_expected_thresholds`
+
+| Run | Variable | Top-1 | Adj | MAE | macro-F1 | Δ vs video-only (top-1 / macro-F1) |
+|---|---|---:|---:|---:|---:|---:|
+| G04 seed 3 | balanced sampler | **66.67** | 91.31 | 0.440 | 52.37 | +1.99 / +1.01 |
+| G04 seed 2 | balanced sampler | 66.36 | 91.09 | 0.444 | 51.13 | +0.80 / −0.61 |
+| G00 | control (E04 config) | 66.09 | 91.40 | 0.444 | 52.25 | +1.24 / +0.05 |
+| G12 | EMA 0.999 | 65.96 | 91.22 | 0.446 | 50.93 | +0.04 / −1.93 |
+| G08 | loss = CE | 65.91 | 91.36 | 0.446 | 50.92 | +1.11 / −0.44 |
+| G13 | no label smoothing | 65.91 | 91.44 | 0.445 | 51.01 | +0.66 / −0.81 |
+| G09 | ordinal w = 0.60 | 65.87 | 91.36 | 0.446 | 50.94 | +0.71 / −0.47 |
+| G01 | mvf 50 | 65.82 | 91.40 | 0.446 | 50.76 | +1.02 / −0.69 |
+| G04 seed 1 | balanced sampler | 65.78 | **92.24** | **0.436** | **53.41** | +0.18 / +2.65 |
+| G05 | lr 1e-4 cosine | 65.69 | 91.36 | 0.448 | 50.72 | +0.66 / −0.63 |
+| G07 | ordinal w = 0.35 | 65.38 | 91.27 | 0.452 | 50.68 | +0.22 / −0.43 |
+| G06 | SpecAugment | 65.34 | 91.22 | 0.453 | 50.59 | not ablated |
+| G02 | mvf 40 + random crop | 64.89 | 91.53 | 0.450 | 50.42 | +0.27 / −0.59 |
+| G03 | class-weighted loss | 64.72 | 91.71 | 0.452 | 50.41 | −0.18 / +1.74 |
+| *E04 incumbent* | — | *66.36* | *90.96* | *0.458* | *52.03* | — |
+
+**Isolated comparisons that are now clean but null.** CE vs ordinal loss (G08 65.91 vs G01 65.82),
+ordinal weight 0.15/0.35/0.60 (65.82/65.38/65.87), label smoothing on/off (65.82/65.91), EMA
+(65.96/65.82) — every one of these is inside the seed noise band. §13.12 marked the old loss and
+class-balancing tables *confounded*; they are now **matched, and the answer is that none of these
+variables has a measurable effect on this corpus.**
+
+#### 13.14.4 Harness defect found and fixed during the sweep
+
+`scripts/night/ensemble.py` completed all 14 members and every metric, then failed at
+`json.dump` because `ordinal_metrics` and the threshold fits return numpy scalars. Fixed with
+`default=float`. Worth recording only because the failure came *after* all compute was spent — the
+result was recoverable by re-running, but a serialization guard belongs in any long inference job.
+
+#### 13.14.5 F03 checkpoint ensembling is refuted — and it is not a dilution problem
+
+§13.7 listed ensembling as "lever 3 — the cheapest reliable gain… typically returns +1–2 points", and
+noted that since the gap to the best published baseline was only 1.25, "this alone could close it."
+It does not. It costs about a point, and a second variant rules out the obvious excuse.
+
+| Model | Top-1 (refined) | Best adjacent | MAE | macro-F1 |
+|---|---:|---:|---:|---:|
+| Best single model (G04 seed 3) | **66.67** | 91.31 | 0.440 | 52.37 |
+| Best single adjacent (G04 seed 1, logit bias) | 65.78 | **92.55** | **0.436** | **53.41** |
+| E04 incumbent | 66.36 | 90.96 | 0.458 | 52.03 |
+| **F03 — 14-member ensemble** | 65.69 | 91.98 | 0.449 | 50.60 |
+| **F03b — top-5 members only** | 65.60 | 92.07 | 0.447 | 51.32 |
+
+**Dropping the nine weakest members changed nothing** (65.69 → 65.60, inside the 0.45 seed sd). So the
+failure is not that weak members dragged the average down — **the members carry no decorrelated error to
+average away.** All 14 warm-start from the same E04 checkpoint and diverge for only 6 epochs, so they are
+near-copies of one model. Ensembling reduces variance only when members err independently; here there is
+no independence to exploit.
+
+This is the same conclusion the noise floor reached (§13.14.1) arriving by a second route: these
+configurations are not meaningfully different models. **Both ensembles are worse than the best single
+model on every one of the four metrics** — top-1, adjacent, MAE and macro-F1.
+
+**Correction to an intermediate claim.** On first seeing the 14-member result it was noted that its
+adjacent accuracy (91.98) was "the best of anything tonight". That is wrong: G04 seed 1 under logit-bias
+decoding reaches **92.55**, above both ensembles. The ensembles do shift weight toward adjacent accuracy
+relative to their own top-1, but they do not set the best adjacent figure.
+
+**Consequence for the paper.** Of the four levers §13.7 identified — retraining on corrected splits,
+train-split consistency, ensembling, and the two wasted settings — **none produced a measurable gain.**
+Combined with §13.14.1, the remaining honest contributions are the ordinal evaluation and calibration
+framing (where adjacent 92.55 and macro-F1 53.41 have no published EngageNet comparison), the negative
+audio result, and the methodological finding that this corpus cannot resolve the differences prior work
+in this repository claimed to measure.
+
+#### 13.14.6 Label granularity: where the accuracy actually goes (2026-08-12)
+
+Same checkpoint (G04 seed 3), same test set, argmax decoding — only the number of engagement levels
+changes. Nothing is retrained.
+
+| Levels | Accuracy | Majority baseline | **Gain over baseline** |
+|---|---:|---:|---:|
+| 4 (as trained) | 64.27 | 50.3 | +13.97 |
+| 3 (merge the two middle levels) | 70.70 | 50.3 | **+20.40** |
+| 2 (disengaged vs engaged) | 85.95 | 68.9 | +17.05 |
+
+Per-class recall at 4 levels: class 0 **75.5%**, class 1 **20.3%**, class 2 **31.0%**, class 3 **81.6%**.
+Error structure: exact 64.3%, **off-by-one 28.1%**, off-by-two-or-more 7.6%.
+
+**The model separates the extremes and cannot separate the middle.** Nearly four fifths of all errors are
+off-by-one, and they are concentrated in classes 1 and 2, which together are 29.5% of the test set and
+are recognised at 20–31%. This is the same fact the 92% adjacent accuracy has been reporting all along,
+stated in the form that matters for design.
+
+**Merging the two middle levels is the single largest improvement found in this entire project** — +6.43
+points, roughly seven times the measured seed noise (0.45 sd), and it costs no compute. It also gives the
+largest gain over the majority baseline of any granularity, because it removes exactly the distinction
+the data cannot support. The binary split scores higher in absolute terms (85.95) but its baseline is
+also much higher, so it is less informative than the 3-level scheme.
+
+**Direct consequence for the dataset design (§2, §11).** The planned corpus uses a **5-level** ordinal
+scale. This evidence says the opposite direction is warranted: with 4 levels the two middle categories are
+already not separable from audio-visual behaviour, and a 5-level scale subdivides precisely that
+unresolvable middle. Before collection begins, either justify 5 levels against this result or re-scope to
+3 levels plus the binary confusion flag. Annotator agreement on the middle levels should be measured in
+the pilot, because if the model cannot separate them there is a real chance human raters cannot either —
+in which case the labels, not the model, are the ceiling.
+
+## 15. Collaborator branch evaluation — `feat/behavior-text-fusion` (2026-08-16)
+
+First external contribution to the repo (author: Gakshith). Evaluated **without merging**, in a detached
+git worktree at `/home/922933190/AVTCA-collab-test` on `f9cce71`. Six commits, +1595/-23 across 25 files,
+branched from `development` at `3def305`.
+
+### What the branch adds
+
+| Feature | Flag | Mechanism |
+|---|---|---|
+| Numeric behavior modality | `--behavior` | 22 OpenFace channels (17 AU + 2 gaze + 3 pose), per-subject baseline subtraction, frozen `BehaviorFeatures` -> trainable `BehaviorEncoder`, cross-attention from the AV summary + a direct pooled-AU skip |
+| Sentence text fusion | `--text_fusion` | `TextEncoder` (backends `hashing` / `minilm`) fused inside `it`, replacing the hashed late-text add-on |
+
+Engineering quality is good: 283 tests pass (191 subtests, ~13 s), 9 new test files covering his own paths,
+new dataset kwargs gated so RAVDESS/CREMAD loaders are unaffected, and the new flags registered in
+`CONFIG_IDENTITY_KEYS` so checkpoint-identity checks stay honest.
+
+### Matched A/B result (7 epochs, warm start from E04, one arm per 3090)
+
+Both arms identical to `scripts/night/common.sh` except the treatment flag, `--max_video_frames 50`,
+lr 5e-5, epochs 4-10.
+
+| Epoch | A_control top1 | B_text_fusion top1 | B UAR |
+|---|---|---|---|
+| 4 | 67.13 | 53.13 | 25.0 |
+| 5 | 67.04 | 53.13 | 25.0 |
+| 6 | 67.60 | 53.13 | 25.0 |
+| 7 | 67.41 | 55.00 | 28.79 |
+| 8 | 67.23 | 60.22 | 39.39 |
+| 9 | 67.41 | 61.62 | 42.23 |
+| 10 | **67.69** | 62.47 | 43.94 |
+
+`A_control` best 67.69 (UAR 56.04, adjacent 93.74) — above the 66.36 prior best but inside the +/-0.45
+seed noise floor, so not a claimable gain. `B_text_fusion` never beat the 65.27 best score inherited from
+the warm-start checkpoint and therefore **wrote no `_best.pth` at all**.
+
+### Why B collapsed — three silent defects
+
+**1. `classifier_fused` is randomly initialised and bypasses the warm-started head.** When `text_fusion` or
+`behavior` is on, `forward_feature_3` returns `self.classifier_fused(...)` instead of `self.classifier_1(...)`.
+13 tensors fail to warm-start, including the classifier itself:
+`classifier_fused.{weight,bias}`, `textCrossAttention.*`, `text_av_proj.*`, `text_encoder.{proj,recency_emb,source_emb}`,
+`text_missing`. At lr 5e-5 a from-scratch 4-way head cannot recover in 7 epochs — hence UAR pinned at exactly
+25.0 (constant single-class prediction) for three epochs. Loss fell monotonically (1.245 -> 1.106) and UAR
+climbed to 43.94, confirming a relearning head rather than a broken architecture.
+
+**2. `--text_fusion` never reads the transcripts.** `_text_fusion(av_pair, behavior_feats, behavior_present)`
+takes *behavior* features and calls `_captions_from_feats`, which captions the mean AU/gaze/pose vector with
+`chat=""` hardcoded. The `text_tokens` / `text_mask` arguments carrying annotation column 5 are accepted and
+ignored on this path. This is a design choice, not a bug, but it means text fusion is downstream of behavior
+and cannot run without OpenFace.
+
+**3. Behavior filename mismatch, failing silently.** `extract_behavior.py` names outputs from the video stem
+(`subject_86_..._vid_0_4.npy`) while `ENGAGENET._behavior_for` derives the key from the annotation
+`video_path`, which carries a `_facecroppad` suffix. Every lookup misses; a miss returns zeros with
+`present=False` rather than raising. A full OpenFace extraction over ~11k clips would have been wasted before
+anyone noticed.
+
+The common thread: **nothing warns when the behavior stream is entirely absent.** A `present.mean() == 0`
+assertion at dataset construction would surface all of this immediately.
+
+### Feasibility of a real evaluation
+
+OpenFace is **not installed** on this box, but the source videos **are** present: 11,311 `.mp4` across
+Train/Validation/Test against 11,206 annotation rows. So extraction is possible — but fix defect 3 and add
+the presence assertion first.
+
+### Repo friction found along the way (ours, not his)
+
+- `CLAUDE.md` documents `python -m src.main`; the real entry point is `main.py` at the repo root.
+- `--save_every_epoch` is an **uncommitted local addition** to `src/config/opts.py`, absent from his branch.
+- **`--n_epochs` is misleading on resume**: `opt.begin_epoch` is overwritten from the checkpoint and the loop
+  is `range(begin_epoch, n_epochs+1)`. E04 is epoch 3 -> begin 4, so `--n_epochs 6` in `queue_gpu0.txt`
+  trained **3** epochs, not 6. The G-sweep epoch counts in earlier notes are overstated.
+- Adding parameters breaks `--resume_path`: SGD's saved param group no longer matches and
+  `optimizer.load_state_dict` throws. Workaround used here: `warmstart_E04_noopt.pth`, an optimizer/scheduler-
+  stripped copy, applied to **both** arms to keep the comparison matched.
+
+### Open items from this evaluation
+
+| # | Item | Status |
+|---|---|---|
+| C1 | Seed `classifier_fused` from `classifier_1` (copy trained weights into the first `e_dim*2` columns, zero the rest) and re-run B | open — cheap diagnostic, isolates how much of the gap is the head |
+| C2 | Fix `_facecroppad` filename mismatch in `ENGAGENET._behavior_for` / `extract_behavior.py` | open — prerequisite for any behavior run |
+| C3 | Add `present.mean() == 0` assertion so an absent behavior stream fails loudly | open |
+| C4 | Install OpenFace, extract 11,311 clips, then evaluate `--behavior` and `--text_fusion` for real | open — only path to a genuine number |
+| C5 | Decide whether text fusion should read transcripts or AU captions | **decided 2026-08-17: AU/behavior captions** — implemented in the main repo as text v2 (see §16); transcripts rejected because EngageNet clips are silent |
+| C6 | Fix `--n_epochs` / `begin_epoch` semantics on resume, or document them | open — affects all past sweep records |
+
+---
+
+## 16. Text modality v2 — label-leakage fix and behavior captions (2026-08-17)
+
+### 16.1 The defect
+
+The v1 chat text (`preprocessing/engagenet/chat_text.py`) was generated by indexing hand-authored
+phrase banks **by the ground-truth label** (`load_chat_bank(topic)[f"label_{label}"][bucket]`); even the
+length bucket is label-conditioned. Audit (`audit_text_leakage.py`) on `annotations_engagement_a10.txt`:
+4,480/11,206 rows with text, **792 unique strings, 99.84% label-deterministic, BoW logistic regression
+text→label 98.1% val / 96.8% test**. A label oracle applied identically to all splits — every
+`--late_text_fusion` run on a v1 file (V8/V9, `text_teacher_smoke`) is contaminated.
+
+Why the oracle still *lowered* accuracy (V9 55.32 vs V7 62.90): legacy `LateTextFusion` wiring routes the
+pooled AV vector through a randomly-initialized `av_context` Linear(256→128) before the classifier, so
+enabling text destroys the warm-started AV representation at init. (Hash/padding collision ruled out.)
+The old architecture.md explanation ("weakly label-correlated by construction") was factually wrong.
+
+### 16.2 The fix
+
+**Dataset**: `behavior_caption.py` + `compute_caption_stats.py` + `create_annotations.py --text_source
+behavior` generate deterministic, label-free captions from the OpenFace `(300,22)` series in
+`datasets/EngageNet/behavior/` (11 clip-level statistics → train-split-only tertiles →
+phrase table; thresholds in `behavior_caption_stats.json`). Output: `annotations_engagement_v2.txt` and
+`_v2_a10.txt` — columns 1–4 byte-identical to v1, 100% text coverage, **6,614 unique captions**, BoW
+probe 61.3% val / 63.5% test vs 53.1/50.3 majority. The caption API takes no label anywhere. v1 files
+untouched; physical backups in `preprocessing/engagenet/backup_2026-08-17/`.
+
+**Model**: `LateTextFusionV2` (`--text_fusion_arch residual`; `--late_text_fusion` now defaults OFF).
+Classifier input stays the untouched 256-d `cat(audio_pooled, video_pooled)`; text adds a
+zero-initialized `Linear(128→256)` residual (embedding → biGRU → MHA, AV-projected query). Exact no-op at
+init; E04 warm-starts with 546 restored / 0 skipped / 17 left-at-init (the zero text params).
+Tests: `tests/test_text_fusion_v2.py` (bit-exact no-op, label-free API, full state-dict restore).
+Calibration script text defaults fixed 48/8192 → 32/4096 to match training tokenization; `run_job.sh`
+now calibrates each run at its own `annotation_path`/text flags read from the run's opts json.
+
+### 16.3 Experiment in flight (queues `scripts/night/queue_textv2_gpu{0,1}.txt`)
+
+| Arm | Runs | Config |
+|---|---|---|
+| T10 v2 control (AV-only) | seeds 1–3 | warm start E04, v2_a10 annotations, mvf 96, lr 5e-5 step, 8 epochs |
+| T11 text residual | seeds 1–3 | same + `--late_text_fusion --text_fusion_arch residual` |
+
+Decision rule (seed sd ≈ 0.45): mean(T11) − mean(T10) ≥ +0.9 → claimable gain; +0.4–0.9 → add 2 seeds;
+≤ 0 → text stays interpretability-only and is reported honestly. Workers launched 2026-08-17 16:34 with
+`GPU_FREE_MIB=19500`; they wait behind the collaborator S1/S2 sweeps currently on both GPUs. Collect via
+`results/night/T1*/calibration/calibration_results.json`.
+
+Honest-framing note for the paper: captions are derived from video (OpenFace), so the claim is a
+structured-summary/longer-horizon gain, not an independent modality; the leakage audit is the
+paper-facing before/after artifact.
+
+---
+
+## 17. Plan of action — late text fusion on real student Zoom chat (2026-08-17)
+
+**Decision (2026-08-17):** the OpenFace behavior captions of Section 16 are **rejected as a text
+modality** — they are computed from the video, so fusing them adds no information the model does not
+already receive. `LateTextFusionV2` is kept as chat-ready architecture; the only text source we will
+train on is **real per-student Zoom chat** from our own classroom collection. This section is the
+end-to-end plan to get there.
+
+### 17.1 Capture protocol (bakes into E1 session script — must be locked before Session 1)
+
+1. **Zoom settings:** auto-save in-meeting chat ON (alongside the already-mandated per-participant
+   audio). Zoom exports one `meeting_saved_chat.txt` per session: `HH:MM:SS From <display name>: <text>`.
+2. **Identity mapping:** enforce a display-name convention at session start (`<student_id> - <first name>`)
+   so chat lines map deterministically to the per-student audio/video tracks. Verified in the first
+   5-minute calibration block.
+3. **Elicitation:** chat is uselessly sparse unless prompted. Each of the 5 blocks includes ≥2 scripted
+   check-for-understanding prompts answered **in chat** ("type your answer in the chat"), plus one
+   open prompt per block. This is the text-modality analogue of the audio-parity design (Section 10):
+   we engineer density instead of accepting a mostly-empty channel.
+4. **Exclusion:** the self-report survey messages (minutes 53–56, Likert ratings) are labels-adjacent
+   and are **excluded from training text**, exactly as those clips are already excluded from training.
+
+### 17.2 Preprocessing — `preprocessing/zoom/extract_chat.py` (new, TX2)
+
+- Parse `meeting_saved_chat.txt` → per-student, per-second message stream; drop instructor lines into a
+  separate context channel.
+- **Per-clip text assembly:** messages inside the clip's 10 s window, plus a trailing context window
+  (default 120 s) because typing lags the stimulus. Store: raw text, `text_present` flag,
+  `seconds_since_last_message`, and `latency_to_last_instructor_prompt`.
+- Extend the HDF5 schema (Section "Dataset File Format") with a variable-length UTF-8 `chat_text`
+  dataset per clip and the three scalar features; add the columns to `manifest.csv`.
+
+### 17.3 Leakage and contamination gates (reuse `audit_text_leakage.py`)
+
+- **Gate A — annotation blindness:** annotators never see the chat pane while labeling; labels must be
+  behavioral only. (Otherwise chat→label correlation is annotator-induced, the v1 failure in disguise.)
+- **Gate B — BoW probe:** before any training run, the Section-16 audit runs on the chat column.
+  Hard fail if a bag-of-words logistic probe predicts labels anywhere near oracle levels
+  (v1 was 98% — a genuine signal should be far weaker and must generalize across sessions, not memorize strings).
+
+### 17.4 Model side (mostly done)
+
+- `LateTextFusionV2` (zero-init residual, `--late_text_fusion --text_fusion_arch residual`) is built and
+  tested. Remaining choices, deferred until real chat exists:
+  - **TX4 — text encoder:** frozen sentence-embedding model (e.g. MiniLM) vs the current lightweight
+    embedding. Decide on pilot data; frozen encoder favored at our dataset size.
+  - **TX5 — empty-chat handling:** `text_present=0` clips contribute a learned null token; the zero-init
+    residual already makes "no chat" a safe no-op at init.
+  - **TX6 — modality dropout** extended to the text stream (p=0.15), matching the audio/video rule.
+
+### 17.5 Evaluation protocol (fixed now, so results are pre-registered)
+
+1. **Text-only probe:** chat features alone vs the majority predictor — establishes the channel carries
+   signal at all (mirrors the audio-parity floor of Section 10).
+2. **Matched A/B:** AV control vs AV+chat, identical warm start and config, ≥3 seeds per arm.
+   Decision rule as in Section 16.3: mean gain ≥ +0.9 top-1 (2× seed sd) → claimable; +0.4–0.9 → add
+   seeds; ≤ 0 → report honestly.
+3. Report per-arm mean ± sd on the held-out session split (never same-session clips across splits).
+
+### 17.6 What can be done before classroom data exists
+
+- **TX1 (now):** write `extract_chat.py` and test it on a mock Zoom call among ourselves — one 15-minute
+  call with scripted chat produces a real `meeting_saved_chat.txt` to develop against. No model training.
+- Everything else (TX3–TX7) is blocked on pilot Session 1 (task E14).
+
+### 17.7 Task list
+
+| ID | Task | Depends on | Status |
+|---|---|---|---|
+| TX1 | `preprocessing/zoom/extract_chat.py` + mock-call fixture test | — | open (can start now) |
+| TX2 | HDF5/manifest schema extension for chat text + 3 scalar features | TX1 | open |
+| TX3 | Chat elicitation prompts written into the E1 session script; display-name convention | E1 | open |
+| TX4 | Text encoder choice (frozen MiniLM vs learned embedding) on pilot data | E14 | open |
+| TX5 | Null-token handling for `text_present=0` clips | TX4 | open |
+| TX6 | Modality dropout on text stream (p=0.15) | TX4 | open |
+| TX7 | Leakage Gate B run + text-only probe + matched A/B on cohort data | Sessions 3+ | open |
+
+## 16. Behavior modality evaluated with real OpenFace features (2026-08-18)
+
+Continuation of §15. The collaborator branch was untestable there because no OpenFace features existed.
+They now do. Everything below ran in the worktree `/home/922933190/AVTCA-collab-test`; **still unmerged**.
+
+### 16.1 OpenFace built from source (no root)
+
+`TadasBaltrusaitis/OpenFace` -> `/home/922933190/openface_build/build/bin/FeatureExtraction`, conda env
+`ofbuild`. Two dependency failures, both worth recording:
+
+- **OpenBLAS**: `cmake/modules/FindOpenBLAS.cmake` searches a hardcoded path list with `NO_DEFAULT_PATH`
+  (never sees the conda prefix) and keys on `f77blas.h`, which conda's openblas does not ship. Fix: point
+  `-DOpenBLAS_INCLUDE_DIR` at OpenFace's own vendored `lib/3rdParty/OpenBLAS/include` (it has `f77blas.h`)
+  and `-DOpenBLAS_LIB` at `$CONDA_PREFIX/lib/libopenblas.so`.
+- **dlib**: conda-forge `dlib` is Python-only and installs **no** C++ headers or library. The C++ package
+  is `dlib-cpp`; pinned **19.24.6** (not 20.x) since OpenFace targets 19.13.
+- Patch-expert models: the Dropbox URLs in `download_models.sh` still work; the OneDrive mirrors are dead (403).
+
+**OpenFace is CPU-only.** No CUDA option in CMake, zero GPU references in the C++ sources, OpenBLAS is the
+only math backend. Not a build flag we missed — the code does not exist. GPU alternatives (LibreFace,
+py-feat) drop AU45/blink, AU23 intensity and head roll, which §11 boredom/confusion scoring depends on.
+
+### 16.2 Extraction
+
+`preprocessing/engagenet/extract_behavior_parallel.py` (new, in the worktree): 16 concurrent OpenFace
+processes, resumable, atomic writes, per-clip error log. ~2 h instead of ~30 h serial.
+
+| | |
+|---|---|
+| Clips extracted | **11,311 / 11,311, 0 errors** |
+| Annotation rows resolved | **11,206 / 11,206 (100%)** |
+| Of those, face detected | **11,069 (98.78%)** |
+| Frames/clip | min 29, median 300, max 10,000 |
+
+Output: `datasets/EngageNet/behavior/*.npy`, `(T, 22)` float32. This is data, not code — reusable
+regardless of what happens to the PR.
+
+### 16.3 Fixes applied to the collaborator's code (worktree only)
+
+1. **Filename mismatch (§15 defect 3)** — `ENGAGENET._behavior_for` now strips `_facecroppad` /
+   `_croppad` / `_facecrop` before lookup. Without this, coverage is 0% and fails silently.
+2. **`_assert_behavior_present`** — samples 200 clips at dataset construction and raises if none resolve,
+   warns on partial. This is the guard that makes the whole class of failure visible.
+3. **`scripts/calibrate_engagement_logits.py`** — its forward loop already handled `behavior_feats`, but
+   the CLI never exposed `--behavior` / `--text_fusion` / `--behavior_dir`, so a behavior checkpoint could
+   not be calibrated (model built without the modules -> state-dict mismatch). Flags added.
+
+### 16.4 Subject IDs and leakage-free baselines
+
+Annotations carry no subject column; subject IDs are recoverable from filenames
+(`subject_\d+_[a-z0-9]+`): **133 subjects, all 11,206 rows, splits fully subject-disjoint**.
+
+**His `compute_baselines` has a label-leakage problem.** It defines a subject's neutral reference as the
+mean over their **label-0** clips. Splits are subject-disjoint, so baselining a *test* subject requires
+knowing which of that subject's clips are label 0 — i.e. reading test labels at inference. Replaced with a
+**label-agnostic per-subject mean** (`baselines_subject.json`, 133 subjects). Between-subject std on AU04
+is 0.511, so the normalisation is not trivially redundant — but see 16.6: it did not help.
+
+### 16.5 From-scratch A/B (15 epochs, matched)
+
+First real test of the contribution.
+
+| | A (audio+video) | B (+behavior+text) | Δ |
+|---|---|---|---|
+| Best top1 | 56.12 | **57.14** | +1.03 |
+| Mean top1, ep 5–15 | 52.25 | **54.01** | **+1.76** |
+| Mean UAR, ep 5–15 | 53.31 | **55.10** | **+1.79** |
+| Epochs won (ep 5–15) | 2 | **9** | — |
+
+B wins 9 of 11 settled epochs. Validation, single seed.
+
+### 16.6 Hyperparameter sweep (staged, 10 runs)
+
+Ranked by **mean of top-3 val epochs** (single best is noise-dominated: val swings ~8 points between
+adjacent epochs).
+
+| Config | Score |
+|---|---|
+| **S5 lr 3e-3 + cosine** | **60.10** |
+| S2 cosine lr 1e-3 | 58.29 |
+| S7 heads 4 | 57.89 |
+| S8 per-subject baselines | 57.24 |
+| S1 step lr 1e-3 | 57.05 |
+| S3 cosine + EMA | 55.34 |
+| S6 lr 5e-4 | 54.56 |
+| S4 cosine + EMA + grad clip | 46.93 |
+
+Findings: **learning rate dominates** (3e-3 best, 5e-4 costs -5.5); cosine beats step (+1.24);
+**EMA hurts** (-2.95) and EMA+clipping is catastrophic (-11.4) — with val swinging 8 points, weight
+averaging blends genuinely different models; 4 heads worse than 8; **per-subject baselines did not help**
+(-1.05), contrary to the §11 design assumption.
+
+Long from-scratch run at the winning config (60 epochs): **B best 61.25 (ep14), A best 58.64 (ep45)**.
+**B overfits after ~epoch 14** and ends *below* A over the last 10 epochs — the extra capacity memorises.
+B needs early stopping; A does not.
+
+### 16.7 Warm-start A/B with a zero-initialised classifier (the §15 C1 fix, done properly)
+
+Instead of patching the model, **checkpoint surgery**: `warmstart_E04_seeded.pth` sets
+`classifier_fused.weight[:, :256]` = the trained `classifier_1.0.weight` and **zeros the 320 new
+behavior/text columns**; bias copied. The new encoders stay at random init but feed only zeroed columns.
+
+**Verified: `max abs logit difference = 0.000e+00`** against the AV-only model on identical inputs — the
+seeded model is bit-identical to E04 at step 0. Load report: 548 restored / 0 skipped (vs 546 / 0 for the
+control; the 2 extra are the seeded classifier). This is the same principle as the text-v2 zero-init
+residual and is the correct general fix for adding a modality to a warm-started model.
+
+Both arms, warm start from E04, mvf 96, lr 5e-5, 8 epochs:
+
+| | WA control | WB behavior+text |
+|---|---|---|
+| Best **val** top1 | 67.6937 | 67.6937 (identical) |
+| Mean val top1 | 67.28 | 67.49 (+0.21) |
+
+**Calibrated TEST metrics** (thresholds fit on validation, applied to test):
+
+| Decoder | Arm | Test top1 | Adjacent | Macro-F1 | MAE |
+|---|---|---|---|---|---|
+| argmax | A | 64.94 | 91.93 | 51.98 | 0.452 |
+| argmax | B | 64.81 | 91.76 | 51.70 | 0.455 |
+| logit_bias | A | 65.16 | 91.49 | 50.56 | 0.455 |
+| logit_bias | B | **65.25** | 91.22 | 51.07 | 0.457 |
+| expected_thr | A | **65.47** | 91.36 | 50.31 | 0.450 |
+| expected_thr | B | 64.10 | **92.64** | **53.49** | **0.446** |
+| refined_thr | A | **65.47** | 91.27 | 50.52 | 0.451 |
+| refined_thr | B | 64.49 | 92.38 | 52.97 | 0.448 |
+
+### 16.8 Conclusion
+
+**Behavior+text helps from scratch and is redundant under warm start — on top-1.**
+
+- From scratch: **+1.76 to +2.61**. The model has not learned to read facial behaviour from pixels, so
+  explicit AUs add real information.
+- Warm-started: **+0.21 val, -0.22 test on top-1**. The trained model already extracts this from pixels.
+- **But B is consistently better on the ordinal/minority metrics**: +3.18 macro-F1 and +1.28 adjacent on
+  the threshold decoders, with lower MAE. B's threshold decoder beats the 66.36 headline's own
+  90.96 adjacent / 52.03 macro-F1 (92.64 / 53.49) while scoring 2.3 lower on top-1.
+
+Since §13.14.6 and the memory notes both identify **macro-F1 52 vs top-1 66 (minority-class separation)**
+as the largest quality gap, the behavior features are attacking the documented weakness — just not the
+metric being tracked as the headline.
+
+### 16.9 Caveats — read before using any number above
+
+1. **Frame-cap mismatch.** These runs used `--max_video_frames 96`. The 66.36 headline was established on
+   **50-frame** data, and memory.md explicitly flags 96 as wasting 46 padding frames per clip. The A
+   control's 65.47 vs 66.36 may be this, not a failure to reproduce. Yesterday's warm control at mvf 50
+   reached 67.69 val vs today's 67.69 at mvf 96 — untested on test. **A matched mvf 50 re-run is the
+   single highest-value outstanding item.**
+2. **Single seed everywhere.** Seed sd is 0.45; the A-control shortfall of 0.89 is ~2 sd — suggestive,
+   not conclusive. Nothing here has been seed-replicated.
+3. **Val-test gap ~3 points** (68.53 val -> 65.16 test), consistent with epoch selection fitting validation.
+4. **Behavior and text were never ablated apart.** All B arms ran both flags.
+
+### 16.10 §15 item C5 resolved — but NOT in his favour
+
+§15 listed "decide whether text fusion should read transcripts or AU captions" as an open design question.
+It is now resolved, and the answer is **neither**:
+
+- **Not the v1 chat text** — it is label leakage (99.84% label-deterministic, BoW probe 97-98%). His code
+  ignoring that column is correct.
+- **Not AU captions either.** Yuvraj **rejected** the behavior-caption-as-text approach on 2026-08-17:
+  captions are computed from the video, so fusing them adds no information the model does not already
+  have. **Not a valid text modality — do not present `--text_fusion` as "text" in any report.**
+  See [[project-text-v2-leakage-fix]].
+
+**Consequence for how his contribution is described:** `--text_fusion` is a second view of the *same*
+OpenFace features, not a text modality. It should be reported as part of the behavior contribution.
+The 16.5–16.7 results are consistent with this: under warm start the combined arm added only +0.21 val,
+and the from-scratch gain has never been attributed between `--behavior` and `--text_fusion` (C9). The
+most likely reading is that the **numeric AU features do the work and the captions add little** — C9
+would confirm it, and until it is run no claim should attribute any gain to the caption stream.
+
+Real text fusion waits for genuine Zoom chat; `LateTextFusionV2` is the chat-ready architecture, and a
+label-blind generated-chat proxy (`annotations_engagement_v3_a10.txt`) exists for interim testing.
+
+### 16.11 Open items
+
+| # | Item | Status |
+|---|---|---|
+| C1 | zero-init `classifier_fused` | **done** (16.7), verified exact no-op |
+| C2 | `_facecroppad` filename fix | **done** (16.3) |
+| C3 | loud failure on absent modality | **done** (16.3) |
+| C4 | OpenFace install + extraction | **done** (16.1–16.2) |
+| C5 | transcripts vs AU captions | **withdrawn** (16.10) |
+| C6 | `--n_epochs` / `begin_epoch` resume semantics | open |
+| C7 | **Re-run warm A/B at mvf 50** to match 66.36 conditions | **done 2026-09-12** — §19.5: B 66.08 ± 0.59 vs A 66.27 ± 0.45, no effect on any metric |
+| C8 | Seed-replicate A control to confirm 66.36 reproduces | **done 2026-09-12** — 66.27 ± 0.45 (65.78 / 66.36 / 66.67), bit-identical to G04 |
+| C9 | Ablate `--behavior` alone vs `--text_fusion` alone | **done 2026-09-12** — §19.5: B 66.08 ± 0.59, C 66.12 ± 0.59, A 66.27 ± 0.45 — neither stream moves any metric |
+| C10 | Report filename fix, presence guard, calibration flags and baseline leakage to the author | open |
+
+## 18. Paper plan after the 2026-09-08 supervisor meeting (Sanchita Ghose)
+
+**Status: plan only — nothing below is implemented.** Next review: **Tuesday 2026-09-15, 7 PM** (Sanchita sends the invite).
+Owners: Yuvraj = results/evaluation section + related-work citations + architecture diagram; Akshit = methodology section.
+
+### 18.1 Correct the number reported in the meeting before it reaches the paper
+
+The meeting summary records "top-1 improved from 66.36% to 65.47% by adding the behavior stream". Repo record
+(`docs/behavior_modality_summary.md`, §16.7) says otherwise:
+
+| Arm | Test top-1 | Macro-F1 | Adjacent | MAE |
+|---|---:|---:|---:|---:|
+| Audio+Video (warm A/B control, mvf differs from 66.36 run) | **65.47** | 50.31 | 91.36 | 0.450 |
+| + Behavior (OpenFace AUs) | 65.25 | **53.49** | **92.64** | **0.446** |
+| 66.36 baseline (different frame cap) | 66.36 | 52.03 | 90.96 | 0.444 |
+
+So: 65.47 is the *control*, the behavior arm is −0.22 on top-1 (inside seed sd 0.45), and its gain is macro-F1 +3.18 /
+adjacent +1.28. The paper claim is therefore "behavior stream improves minority-class and ordinal metrics, not top-1".
+Yuvraj's own explanation in the meeting (more epochs) is the C7 confound — the matched re-run at mvf 50 (§16.11 C7) is
+the single experiment that must finish before the results table is written.
+
+### 18.2 Paper structure (journal target, IEEE template at `papers/research/paper.tex`)
+
+Order agreed: Introduction → Related Work → **Preliminaries (~1 page, journal only)** → Methodology → Experimental
+Results / Model Evaluation → Conclusion. Follow the format of Sanchita's previous paper (`papers/research/prof papeer.pdf`).
+
+| Section | Owner | What changes vs current draft | Done when |
+|---|---|---|---|
+| Introduction | Yuvraj | Add a **conceptual diagram** (problem framing, not the architecture). Restate contributions as bullet points, mirroring `research_contributions.md` §1–§6 but respecting the claim limits in memory (no SOTA, no "proved audio helps" without E22, decoder always stated). | Diagram + bullet list in tex |
+| Related Work | Yuvraj | Grow from 9 to **15–20 citations**. Mine the survey papers already in `papers/` (`qarbal2025review`, `s41019-025-00335-5.pdf`, `applsci-14-01190-v2.pdf`) and add recent multimodal audio-visual learning work (2023–2026). Keep the four subsections; add citations under "Multimodal Audio-Visual Learning" first. | ≥15 `\cite` keys, all in the bib |
+| Preliminaries | Yuvraj | New ~1 page: ordinal engagement labels, decoder definitions (argmax / bias / expected / refined expected), the four metrics (top-1, adjacent, MAE, macro-F1) and why each matters for an ordinal task. | 1 page |
+| Methodology | Akshit | Group the many blocks into **major components**: (1) audio encoder, (2) video encoder + OpenFace behavior stream, (3) temporal alignment + two-stage cross-attention fusion, (4) ordinal head + calibration. One paragraph per component, one equation where needed. Must describe Akshit's visual-emphasis variant honestly as a design choice, not assume it (see 18.4). | Draft with the diagram from 18.3 |
+| Model Evaluation | Yuvraj | Sanchita's structure: datasets (EngageNet primary; DAiSEE and RAVDESS as secondary), training parameters, then results **grouped by metric** with a one-line explanation of what each metric measures and why it is significant; then ablation analysis (modality ablation on identical weights, decoder ablation, behavior-stream ablation); then discussion of the hard categories (the middle levels) and *why* the model fails there; then limitations/clarifications for reviewers. Human-survey subsection is N/A until classroom data exists — say so explicitly. Keep it concise. | Tables + text for the Tuesday review |
+
+### 18.3 Architecture diagram — technical, hand-drawn in draw.io
+
+- Produce in draw.io (or equivalent), **not** AI-generated. Export SVG + PDF into `papers/research/figures/`.
+- Content must match `docs/architecture.md` Architecture 2 and the code: audio `(B,64,T)` → AudioCNNPool → `_adaptive_align_audio_to_video` → early cross-attention (av1/va1) → stage-2 conv → self-attention → final cross-attention → maxpool → concat (+ behavior tokens where the branch merges) → ordinal head → calibrated decoder.
+- Mark tensor shapes at every boundary; mark the modality-dropout and alignment points, since those are two of the six contributions.
+- Also upload it to the shared folder (Sanchita could not find one there).
+
+### 18.4 Coordination with Akshit (call tonight, 2026-09-08)
+
+1. Get the exact description of his "visual-emphasis" variant (what weighting, where in the fusion) and whether it has a measured result. Without a matched number it is a methodology *option*, not a paper result.
+2. Reconcile with the project's hard constraint that audio and video contribute equally on the future classroom dataset (CLAUDE.md decision 1). Resolution for the paper: EngageNet is video-dominant by construction (most clips silent), so a visual-weighted variant is defensible **on EngageNet only**, and the paper should say the equal-contribution design is reserved for the speech-rich classroom data.
+3. Agree section boundaries: he writes Methodology; Yuvraj supplies the component list in 18.2 and the diagram in 18.3 so terminology matches.
+
+### 18.5 New data — psychology professor's asynchronous class recordings
+
+Sanchita meets the professor 2026-09-09. What we need from that meeting, in order of importance:
+
+1. **Breakout-room recordings**, with "Record each participant separately" ON so per-student audio exists (plan §10/§11 — mixed gallery audio is unusable).
+2. **Zoom chat export** per session (plan §17 — the text modality is waiting on real chat; no substitute is acceptable).
+3. Consent language covering audio, video and text; per-student IDs stable across sessions.
+4. Session count and cadence — Session 1 of each cohort is Hawthorne-biased and is for pipeline debugging only (CLAUDE.md decision 5).
+
+### 18.6 Retraining the behavior model on personalized recordings — feasibility
+
+Question raised in the meeting: can the OpenFace behavior stream be retrained on the asynchronous-class recordings?
+Answer to give Tuesday, with the reasoning:
+
+- **Technically yes**: OpenFace extraction is already built (§16.1–16.2, CPU-only, ~real-time). Per-student baseline
+  calibration (CLAUDE.md decision 4) is exactly what "personalized" means here — AU/EAR/head-pose relative to each
+  student's first 5 minutes — and it is already in the plan (§11), not yet coded.
+- **Blocked on labels**: retraining needs engagement labels on those recordings. Options, cheapest first: (a) fine-tune
+  the EngageNet-trained model and evaluate only qualitatively until labels exist; (b) instructor/TA post-hoc labelling
+  with the §2 anchors; (c) self-report per block. Decide after we know the professor's session count.
+- **Minimum viable**: 2 sessions × ≥8 students × breakout rooms ≈ a few hundred clips — enough for calibration and a
+  per-student sanity check, not enough for a new headline number.
+
+### 18.7 Task list
+
+| # | Task | Owner | Due | Depends on |
+|---|---|---|---|---|
+| P1 | Finish C7 matched re-run (behavior vs AV at mvf 50) so the results table is confound-free | Yuvraj | before P5 | **running 2026-09-12 (§19)** |
+| P2 | Correct the 65.47/65.25 framing with Sanchita (email or Tuesday) | Yuvraj | 2026-09-15 | — |
+| P3 | Related work → 15–20 citations, bib entries verified | Yuvraj | **done** (21 entries; verify `dan2026multimodal` authors and `li2025mersurvey` volume) | — |
+| P4 | Preliminaries section | Yuvraj | **done** (Yuvraj wrote it; merged 2026-09-08 as §III with eq labels; Method/Eval now cite its equations instead of re-deriving) | — |
+| P5 | Model Evaluation section: metric-grouped tables + ablation + hard-category discussion | Yuvraj | 2026-09-15 | P1 |
+| P6 | draw.io architecture diagram, SVG/PDF in `papers/research/figures/`, copy to shared folder | Yuvraj | 2026-09-15 | — |
+| P7 | Call Akshit; capture his variant + agree section split | Yuvraj | 2026-09-08 | — |
+| P8 | Methodology section grouped into 4 components | Akshit | 2026-09-15 | P6, P7 |
+| P9 | Conceptual diagram for the Introduction | Yuvraj | 2026-09-15 | — |
+| P10 | Feasibility note on personalized retraining (18.6) ready to present | Yuvraj | 2026-09-15 | Sanchita's 09-09 meeting outcome |
+| P11 | Data-collection asks list (18.5) sent to Sanchita before her 09-09 meeting | Yuvraj | 2026-09-09 AM | — |
+
+### 18.8 Draft written 2026-09-08 (`papers/research/paper.tex`)
+
+Sections III–V now exist, laid out exactly like Ghose & Prevost, *FoleyGAN*, IEEE TMM 2023:
+III Proposed Research Method (A audio encoder, B visual encoder + behavior stream, C alignment + two-stage
+cross-attention + modality dropout, D ordinal loss + calibrated decoding); IV Experimental Details (A dataset,
+B protocols); V Model Evaluation (A–D one subsection per metric with its definition and why it matters,
+E quantitative analysis vs the six ICMI-2023 baselines + decoder table, F ablation: modality / alignment /
+behavior / 14-run sweep with noise floor, G error analysis on the middle levels + label-granularity table,
+H human-evaluation protocol). Eight tables, five equations. Three bib entries added (EfficientFace, OpenFace,
+RAVDESS) → 12 total; P3 still needs 15–20.
+
+Decisions taken while drafting: the preprocessing-defect history is **not** in the paper (engineering
+error, not a model property); the 3.6 s audio window is never mentioned; Akshit's visual-emphasis variant is
+a commented-out subsection until he supplies a number. `\ref{fig_arch}` is unresolved until P6 lands.
+TODO comments in the tex mark C7 (behavior row at mvf 96 vs 66.36 at mvf 50), C9, and the survey table.
+No LaTeX toolchain on this machine — the file passed a static environment/ref/cite check only.
+
+### 18.9 Master merge (2026-09-08, later)
+
+Yuvraj's Overleaf version (which already had a Preliminaries section with 13 equations) is now the master
+`papers/research/paper.tex`. Merged into it: expanded Related Work (21 cites), §IV Method, §V Experimental
+Details, §VI Model Evaluation, full bibliography. Duplicate equations (MHA, loss, expected level, MAE) were
+removed from §IV/§VI and replaced by `\ref` to the Preliminaries labels `eq:xattn_a/v`, `eq:argmax`, `eq:mu`,
+`eq:thresh`, `eq:loss`. All hard-coded "Section III-D" style references replaced with `\ref`. Template
+boilerplate comments stripped; `graphicx` enabled with `\graphicspath{{figures/}}`. My earlier standalone
+draft is kept as `paper_claude_draft_2026-09-08.tex`. Static check: 8 tables, 9 equations, 2 align blocks, 21
+bib entries all cited, only `fig_arch` unresolved (P6).
+
+### 18.10 Paper-vs-code check on the behavior stream (2026-09-08)
+
+Checked §IV-B/C of the paper against `AVTCA-collab-test/models/multimodal_cnn.py::_behavior_fusion` and
+`behavior_features.py`. Four statements were wrong and are now fixed in the tex:
+
+| Paper said | Code does |
+|---|---|
+| AU channels normalised by subject mean | absolute features; baseline subtraction tested in S8 and cost −1.05, so the reported run is un-normalised |
+| encoder summary $h_b$ added via skip | skip = Linear(22→64)+ReLU on the **raw** clip-mean descriptor; the GRU summary is unused |
+| behavior "refines" the AV summary | `[av_pair(256), ctx(128), skip(64)]` are **concatenated** → `classifier_fused(448→4)` |
+| streams max-pooled over time | `AttentionPool` (learned, masked) in `it_fusion_mode='modern'`, which is what the 66.36 lineage uses |
+
+Note for CLAUDE.md: its architecture summary still says "MaxPool each modality → concat → Linear(256,…)";
+that describes the legacy path only. `docs/architecture.md` is already correct (attention pooling).
+
+## 19. Full-clip audit and matched A/B/C at the video clock (2026-09-12)
+
+**Request (Yuvraj):** stop using "ten seconds of video and ten seconds of audio linked separately"; use the
+complete video and the complete audio of every clip, mapped onto each other from 0 s to the end, then train
+(a) the EfficientFace audio-visual model and (b) the behavior-stream model, and report an absolute answer.
+
+### 19.1 What "10 s" actually is on EngageNet — measured, not assumed
+
+Every one of the 11,311 source `.mp4` files was probed with OpenCV/ffprobe and compared against the stored
+face arrays and wavs (`scratchpad/duration_audit.json`):
+
+| Quantity | Value |
+|---|---|
+| Source duration min / median / max | 1.03 s / **10.00 s** / **10.06 s** |
+| Clips longer than 10.5 s | **0** |
+| Clips shorter than 9.5 s | 249 (source-limited; the corpus ships them short) |
+| Source fps (top values) | 30 (7,644) · 1000 (1,038, 10,000 frames) · 15 (325) · 29.97 (238) · 10 (165) |
+| Stored `*_facecroppad.npy` frames | **50** for 10,306 clips; 41–63 for the rest (fps rounding), all at 5 fps over the whole clip |
+| Stored `*_croppad10s.wav` duration | median **10.005 s**; 10,987 clips at 10.0 s; only 6 clips >0.25 s shorter than their video, and in every one the *source audio stream itself* is short (e.g. `subject_54_…_vid_1_1`: audio stream 3.38 s inside a 10.01 s video) |
+
+**Conclusion: the 10 s window *is* the whole clip.** The `_croppad10s` suffix is a name, not a cap —
+`extract_audios_full.py` runs ffmpeg with no `-t`, and `extract_faces.py --target_fps 5` walks every frame
+to the end. There is nothing after 10 s to take. The only thing that ever *was* capped was the legacy
+3.6 s audio (fixed 2026-08-07, §12.1) and the 15-frame test/val video (fixed 2026-08-07, §13).
+
+Mapping is already synced end to end for audio and video: the loader keeps all ~431 mel frames
+(`--max_audio_steps 0`) and all 50 face frames (`--max_video_frames 50`), and
+`_adaptive_align_audio_to_video` average-pools the full valid audio span onto the valid video tokens
+per sample, so audio token *i* covers exactly the same time window as video frame *i*. Verified from the
+first training batch: `audio=(8, 64, 431)  visual=(8, 50, 3, 224, 224)`.
+
+### 19.2 The one stream that was NOT on the full-clip clock: behavior
+
+The collaborator branch's `BehaviorFeatures(num_frames=15)` resamples each clip's OpenFace `(T, 22)` series
+to **15 steps** — the legacy RAVDESS frame count — while the video it was extracted from is fed at 50 frames.
+It still spans 0→end (endpoint-preserving linspace) but at **1.5 fps against 5 fps video**: consecutive AU
+samples are 667 ms apart. Every §16 behavior number was produced this way.
+
+**Fix (worktree, `--behavior_frames`):** resample to `--max_video_frames` by default (50 here; 15 remains
+reachable explicitly to reproduce §16). Alignment check against the frames `extract_faces.py` actually kept:
+
+| Source fps / frames | Behavior step vs kept video frame, max offset | Old 15-step spacing |
+|---|---|---|
+| 30 / 300 | 5 src frames = 167 ms | 667 ms |
+| 15 / 150 | 2 = 133 ms | 667 ms |
+| 10 / 100 | 1 = 100 ms | 667 ms |
+| 1000 / 10,000 | 199 = 199 ms | 667 ms |
+
+So behavior step *i* now sits within one 5 fps interval of video frame *i* for every fps in the corpus.
+Plumbed through `src/config/opts.py`, `src/data/dataset.py::resolve_behavior_frames`, the calibration
+script and `CONFIG_IDENTITY_KEYS`; unit-tested (`tests/test_behavior_frames_option.py`, 40 behavior tests
+pass). The behavior encoder (Conv1d + BiGRU + mean) is length-agnostic, so no architecture change.
+
+### 19.3 Experiment — three arms, three seeds, one config, one code tree
+
+All arms run from the collab worktree (the only tree with the behavior branch) so the comparison is
+code-matched; results are written to the main repo at `results/fullclip/`. Scripts:
+`AVTCA-collab-test/scripts/fullclip/{common.sh,run_job.sh,worker.sh,queue_gpu*.txt,seed_warmstart.py,collect.py}`.
+
+| Arm | Model | Warm start (`model.pth`) | Extra flags |
+|---|---|---|---|
+| **A** | audio + video, EfficientFace backbone | E04 best (66.36) | — |
+| **B** | A + OpenFace behavior stream | E04 with `classifier_fused` (4×448) seeded: AV columns copied, 192 new columns zeroed | `--behavior --behavior_frames 50` |
+| **C** | A + behavior + behavior-caption "text" (plan §16.10: a second view of the AUs, not a text modality) | E04 seeded, 4×576, 320 columns zeroed | `--behavior --text_fusion --behavior_frames 50` |
+
+Shared config = the G04 winner of the 2026-08-12 sweep, held fixed: `mvf 50, uniform, lr 5e-5 step,
+6 epochs, sqrt-inverse balanced sampler, ordinal 0.15, label smoothing 0.1, bs 8, SGD, 8 heads, mel,
+nodropout, full_video_preprocessing, max_audio_steps 0`. Seeds 1/2/3 per arm; **one job per GPU** — a
+mvf-50 run holds ~12.9 GB of a 24 GB 3090, so two per card would OOM (the night sweep's 2-per-GPU gate
+only ever admitted a second job once the first had finished). Queue order: A/B seeds first, C after.
+
+`seed_warmstart.py` generalises the §16.7 surgery to any branch combination and **verified on real
+validation batches that both seeded models produce logits identical to the AV model (max abs diff 0.0)**,
+so B and C start exactly where A starts and can only diverge through gradients. Load reports: A 546
+restored / 0 left at init; B 548 restored / 24 left at init (behavior encoder); C 548 / 35.
+
+Calibration (thresholds fit on validation, applied to test) reads `max_video_frames`, `frame_sampling`,
+`behavior`, `text_fusion`, `behavior_dir`, `behavior_frames` and `annotation_path` back out of each
+run's own `opts*.json` — never from a shared default (memory.md, "shared-config defaults silently
+override per-run settings").
+
+### 19.4 Pre-committed reading rules (written before any result existed)
+
+1. **Fixed decoder for every comparison: `refined_expected_thresholds`** (the 66.36 decoder). All four
+   decoders are printed by `collect.py`; none is selected per arm.
+2. **Seed noise on this corpus is sd 0.45 top-1 / ~2.3 macro-F1** (memory.md). A between-arm difference
+   below ~1.0 top-1 or ~2.3 macro-F1 on 3-seed means is *not* an effect; report it as "within noise".
+3. **top-1 alone is misleading at 50% class imbalance** — report adjacent, MAE and macro-F1 alongside.
+4. A also answers C8 (does the 66.36 lineage reproduce at mvf 50 under valid selection?). B vs A answers
+   C7. C vs B answers C9.
+
+### 19.5 Results (test set, 2,256 clips, decoder fixed to `refined_expected_thresholds`, thresholds fit on validation)
+
+**Arm A — audio + video (EfficientFace), the "full video + full audio" run: complete.**
+
+| Run | Best val top-1 (epoch) | Test top-1 | Adjacent | MAE | Macro-F1 | Per-class acc 0/1/2/3 |
+|---|---:|---:|---:|---:|---:|---|
+| `A_av_s1` | 67.97 (ep 3) | 65.78 | 92.24 | 0.436 | 53.41 | 74.2 / 22.4 / 27.7 / 85.9 |
+| `A_av_s2` | 67.88 (ep 4) | 66.36 | 91.09 | 0.444 | 51.13 | 79.2 / 12.2 / 26.7 / 87.6 |
+| `A_av_s3` | 67.88 (ep 2) | 66.67 | 91.31 | 0.440 | 52.37 | 77.0 / 18.7 / 23.4 / 88.9 |
+| **mean ± sd** | | **66.27 ± 0.45** | 91.55 | 0.440 | 52.31 ± 1.14 | |
+
+Every epoch of every seed reproduces the 2026-08-12 G04 runs to the hundredth (`G04_*` val logs and
+test numbers are identical), which (i) proves the collab worktree's AV path is bit-for-bit the main
+tree's, and (ii) is the direct answer to the request: **the audio-visual model was already trained on the
+full 10 s clip, so "use the complete video and audio" changes nothing for it** — 66.27 ± 0.45 is the
+absolute number, 1.34 below the published best 67.61 and 16.0 above the majority predictor.
+
+**Arm B — A + OpenFace behavior stream on the 50-step clock (C7 / C8 / the "behavior run"): complete.**
+
+| Run | Best val top-1 (epoch) | Test top-1 | Adjacent | MAE | Macro-F1 | Per-class acc 0/1/2/3 |
+|---|---:|---:|---:|---:|---:|---|
+| `B_beh_s1` | 67.13 (ep 2) | 66.58 | 91.62 | 0.436 | 53.05 | 74.8 / 19.5 / 26.3 / 88.4 |
+| `B_beh_s2` | 67.79 (ep 4) | 66.22 | 91.36 | 0.442 | 51.50 | 79.0 / 12.2 / 29.1 / 86.5 |
+| `B_beh_s3` | 68.25 (ep 2) | 65.43 | 91.89 | 0.444 | 51.93 | 77.7 / 15.0 / 30.1 / 84.5 |
+| **mean ± sd** | | **66.08 ± 0.59** | 91.62 | 0.441 | 52.16 ± 0.80 | |
+
+**B − A = −0.19 top-1, +0.07 adjacent, +0.001 MAE, −0.15 macro-F1: zero effect on every metric**, all
+well inside the seed sd. This is the confound-free answer to C7: with the frame cap matched (50), the
+code matched (same tree, AV path verified bit-identical), the warm start verified as an exact no-op,
+the behavior series on the video clock, and three seeds, **the end-to-end neural behavior branch adds
+nothing on top of the pixel model** — on top-1 *or* on the ordinal metrics. The single-seed +3.18
+macro-F1 / +1.28 adjacent reported in §16.7 was seed noise (macro-F1 seed sd here is 0.8–1.1). §18.1's
+paper claim "behavior stream improves minority-class and ordinal metrics" must be withdrawn. The
+behavior *signal* is real (§19.6: 67.15 alone as segment statistics, +3.6 in late fusion); the
+*branch* is what fails to extract it.
+
+**Arm C — B + behavior-caption "text" (§16.10: a second view of the same AUs), the C9 ablation: complete.**
+
+| Run | Best val top-1 (epoch) | Test top-1 | Adjacent | MAE | Macro-F1 | Per-class acc 0/1/2/3 |
+|---|---:|---:|---:|---:|---:|---|
+| `C_behtext_s1` | 67.04 (ep 6) | 66.27 | 91.62 | 0.439 | 52.85 | 75.3 / 19.5 / 26.5 / 87.5 |
+| `C_behtext_s2` | 67.60 (ep 3) | 66.62 | 91.71 | 0.433 | 53.07 | 76.8 / 16.3 / 31.3 / 86.5 |
+| `C_behtext_s3` | 67.97 (ep 2) | 65.47 | 91.67 | 0.445 | 50.85 | 78.6 / 9.3 / 33.4 / 84.2 |
+| **mean ± sd** | | **66.12 ± 0.59** | 91.67 | 0.439 | 52.26 ± 1.22 | |
+
+**All three arms at every decoder (3 seeds each, test):**
+
+| Decoder | A audio+video | B +behavior | C +behavior+text |
+|---|---:|---:|---:|
+| argmax | 64.27 ± 0.22 | 64.26 ± 0.23 | 64.42 ± 0.07 |
+| logit bias | 65.06 ± 0.37 | 64.83 ± 0.23 | 64.52 ± 0.55 |
+| expected thresholds | 66.34 ± 0.50 | 66.15 ± 0.73 | 66.52 ± 0.14 |
+| **refined expected thresholds** | **66.27 ± 0.45** | **66.08 ± 0.59** | **66.12 ± 0.59** |
+| adjacent / MAE / macro-F1 (refined) | 91.55 / 0.440 / 52.31 | 91.62 / 0.441 / 52.16 | 91.67 / 0.439 / 52.26 |
+
+**C9 answered: neither the numeric-AU branch nor the caption stream moves any metric at any decoder**
+(largest arm difference 0.54 top-1 at logit-bias, under the 0.9 two-sigma bar). The behavior *branch*
+as designed in the collab branch is inert on top of a warm-started pixel model; the behavior *signal*
+is not (§19.6).
+
+**Modality ablations — same weights, one stream zeroed at evaluation (refined expected thresholds, test):**
+
+| Run | Fusion | Video-only | Audio-only | Fusion − video-only | Fusion macro-F1 | Video-only macro-F1 |
+|---|---:|---:|---:|---:|---:|---:|
+| `A_av_s1` | 65.78 | 65.60 | 46.59 | +0.18 | 53.41 | 50.76 |
+| `A_av_s2` | 66.36 | 65.56 | 50.27 | +0.80 | 51.13 | 51.74 |
+| `A_av_s3` | 66.67 | 64.67 | 50.27 | +1.99 | 52.37 | 51.37 |
+| `B_beh_s1` | 66.58 | 65.96 | 50.27 | +0.62 | 53.05 | 53.60 |
+| `B_beh_s2` | 66.22 | 64.67 | 46.68 | +1.55 | 51.50 | 53.04 |
+| `B_beh_s3` | 65.43 | 65.56 | 50.27 | −0.13 | 51.93 | 51.46 |
+| `C_behtext_s1` | 66.27 | 65.65 | 46.59 | +0.62 | 52.85 | 51.35 |
+| `C_behtext_s2` | 66.62 | 65.56 | 46.19 | +1.06 | 53.07 | 50.98 |
+| `C_behtext_s3` | 65.47 | 65.47 | 50.27 | 0.00 | 50.85 | 50.55 |
+| **mean** | 66.16 | 65.41 | 48.60 | **+0.74** (8/9 ≥ 0) | 52.24 | 51.65 |
+
+The audio contribution measured in the August sweep (+0.67, 12/13 models) reproduces under clean
+three-seed training: **+0.74 top-1 from fusing audio, sign-consistent on 8 of 9 runs**, while audio alone
+is exactly the majority predictor (50.27) or below it (46.2–46.7 when the model collapses to a different
+constant). Macro-F1 is not consistently helped (5/9). This is the defensible AV claim for the paper:
+*audio has no standalone engagement signal on EngageNet but adds ~0.7 top-1 on top of video when fused.*
+
+**Bottom line of §19.5.** "Full video + full audio" = the model that already existed: 66.27 ± 0.45.
+The behavior branch, on the video clock, matched code, matched frame cap, verified no-op warm start,
+three seeds: no effect (66.08 / 66.12). The way to move the number is §19.6.
+
+### 19.6 How to raise top-1 — what was measured today (2026-09-12), before proposing anything
+
+Yuvraj asked for a plan to raise top-1. Rather than list options, four levers were measured on the
+G04 seed-1 checkpoint (identical weights to `A_av_s1`) with everything selected on validation and test
+touched once. Scripts: `AVTCA-collab-test/scripts/fullclip/{context_analysis,behavior_only_probe,ensemble_probe}.py`;
+outputs under each run's `context/`.
+
+**Where top-1 is lost (test confusion matrix, expected-value thresholds):**
+
+| true \ predicted | 0 | 1 | 2 | 3 | recall |
+|---|---:|---:|---:|---:|---:|
+| 0 | 374 | 21 | 35 | 27 | 81.8% |
+| 1 | 79 | 18 | 80 | 69 | **7.3%** |
+| 2 | 52 | 19 | 116 | 232 | **27.7%** |
+| 3 | 12 | 9 | 139 | 974 | 85.9% |
+
+531 of 774 errors are the two middle classes; 232 of 419 "engaged" clips are called "highly engaged".
+
+**Lever 1 — session-context smoothing: NULL.** Clips are consecutive 10 s segments of one recording
+(`_vid_<v>_<k>`), and consecutive test clips share a label 69.3% of the time (chance 34%). Smoothing the
+expected engagement value over ±h neighbours of the same video, thresholds refit on validation:
+val-selected config (triangular, h=1, centre weight 3) scores **65.16 test vs 65.69 unsmoothed**; no
+window beats the baseline by more than noise and h ≥ 3 costs 3–8 points of adjacent accuracy. The
+model's errors are as autocorrelated as the labels, so neighbours add no information. Do not pursue.
+
+**Lever 2 — label-prior shift: real but not recoverable without labels.** Validation is 12.3% class 0 /
+53.1% class 3; test is 20.3% / 50.3%. Thresholds fit on test itself would give **67.82** (an oracle bound,
+not a method) vs 65.69 with validation-fit thresholds. Unsupervised EM prior re-estimation (Saerens 2002)
+*hurts* (62.85): the probabilities are not calibrated enough and EM overshoots class 1 to 23%. The gap
+is the cost of a small validation split with a different class mix; the only honest fix is a larger,
+test-like validation set (e.g. cross-fitted thresholds over train+val by subject).
+
+**Lever 3 — the OpenFace features alone are as strong as the whole pixel model.** Laid out the way the
+EngageNet paper's best baseline does it (20 uniform segments × [mean, std] of the per-frame features
+= 880-d + clip mean/std), a `HistGradientBoostingClassifier` on our 22-d series, trained on the train
+split only, scores on **test**:
+
+| Model | Test top-1 (argmax) | Adjacent | Macro-F1 |
+|---|---:|---:|---:|
+| Logistic regression (balanced) | 60.64 | 85.33 | 48.57 |
+| HistGB lr 0.05, 300 it | 66.67 | 88.16 | 52.41 |
+| HistGB lr 0.03, 600 it | **67.15** | 88.21 | **53.19** |
+| our AV model (pixels + audio), same test set | 65.69 | 90.96 | 49.42 |
+| published best (Transformer, OpenFace G+HP+AU, 98-d) | 67.61 | — | — |
+
+No neural network, no GPU, 2 minutes on CPU. Our 22 features are a subset of the paper's 98 (we lack
+gaze vectors, head *location*, and the 18 AU presence flags — the raw OpenFace CSVs were not kept, only
+the 22-d `.npy`); re-extracting would take ~2 CPU-hours. The neural behavior encoder of the collab branch
+(Conv1d + GRU, from-scratch val ≤ 61) is therefore badly under-using its own input.
+
+**Lever 4 — late fusion of the pixel model and the OpenFace model: +4.4 top-1, above the published
+best.** Probability averaging `w·p_AV + (1−w)·p_GBM`, weight **and** thresholds selected on validation
+only, GBM = mean of 3 fits, test set touched once:
+
+| w_AV | Val top-1 | **Test top-1 (E-thresholds)** | Adjacent | MAE | Macro-F1 |
+|---:|---:|---:|---:|---:|---:|
+| 1.0 (AV alone) | 67.97 | 65.69 | 90.96 | 0.451 | 49.42 |
+| 0.0 (GBM alone) | 65.27 | 66.05 | 89.27 | 0.473 | 50.35 |
+| 0.5 | 66.01 | 69.77 | 89.58 | 0.426 | 51.91 |
+| 0.6 | 67.32 | 69.99 | 90.43 | 0.413 | 53.40 |
+| **0.7 (selected on val)** | **68.72** | **70.12** | 90.69 | **0.408** | 53.62 |
+| 0.8 | 68.25 | 69.15 | 90.91 | 0.417 | 52.42 |
+
+Every weight in 0.4–0.8 lands at 69.1–70.1, so this is not a tuned point. Why it works: on test the AV
+model is wrong on 35.9% of clips and the GBM on 33.5%, but **both are wrong on only 23.5%** — the AV
+model is wrong-and-GBM-right on 12.4%, the reverse on 9.9%. Pixels and AU statistics make different
+mistakes. A stacking logistic regression fit on validation reaches 70.83 argmax / 58.27 macro-F1, but
+its validation number is then optimistic, so probability averaging is the number to quote.
+
+**Replication on `A_av_s2` (same protocol, val-selected w_AV = 0.7 again):** AV alone 65.82 → ensemble
+**69.28** test top-1 / 89.76 adj / 0.427 MAE (w 0.4–0.8: 68.48–70.30; complementarity 12.4% / 10.3%).
+`A_av_s3`: AV alone 66.67 → **70.17** (w 0.4–0.8: 68.48–70.26). **Three AV seeds, all val-selected at
+w = 0.7: 70.12 / 69.28 / 70.17 = 69.86 ± 0.50 test top-1**, against 66.27 ± 0.45 for the AV model alone
+(**+3.59**) and 67.61 for the published best (**+2.25**). Adjacent 89.8–90.7, MAE 0.408–0.427,
+macro-F1 51.6–53.6. This is the paper's headline candidate; the protocol (GBM on train only, weight and
+thresholds on validation, test once) is pre-registered above.
+
+**The neural behavior branch does not capture what the GBM captures.** Same protocol with `B_beh_s1`
+(arm B: AV + OpenFace branch, 66.80 alone at E-thresholds) as the neural member: val-selected w = 0.7 →
+**69.77** test (w 0.4–0.8: 68.35–70.08); `B_beh_s2` 66.22 → **70.04**; `B_beh_s3` 65.34 → **68.93**; `C_behtext_s2` 66.49 → **69.41**;
+complementarity unchanged (neural member wrong & GBM right 12.0–12.7% on every member).
+
+**Per-member summary (test top-1, expected-value thresholds; w = 0.7 selected on validation for every
+single member; GBM member identical throughout):**
+
+| Neural member | Alone | + GBM (w 0.7) | Gain | Range over w 0.4–0.8 |
+|---|---:|---:|---:|---|
+| `A_av_s1` | 65.69 | **70.12** | +4.43 | 69.06–70.12 |
+| `A_av_s2` | 65.82 | **69.28** | +3.46 | 68.48–70.30 |
+| `A_av_s3` | 66.67 | **70.17** | +3.50 | 68.48–70.26 |
+| `B_beh_s1` | 66.80 | **69.77** | +2.97 | 68.35–70.08 |
+| `B_beh_s2` | 66.22 | **70.04** | +3.82 | 67.91–70.04 |
+| `B_beh_s3` | 65.34 | **68.93** | +3.59 | 68.40–70.21 |
+| `C_behtext_s1` | 66.76 | **69.73** | +2.97 | 68.26–69.73 |
+| `C_behtext_s2` | 66.49 | **69.41** | +2.92 | 68.04–69.68 |
+| **mean of 8** | 66.22 | **69.68** | **+3.46** | |
+
+Eight of eight members land above the published best (67.61) after fusion; the minimum over any
+member and any weight in 0.4–0.8 is 67.91. The "alone" column uses this script's own threshold fitter
+(step 0.02 grid) and differs from `collect.py`'s refined-threshold numbers by ≤ 0.2. Four neural members so far, all val-selected at w = 0.7: 70.12 / 69.28 / 69.77 / 70.04,
+mean **69.80**, every one above the published 67.61. So the
++3 to +4 from the GBM is orthogonal to the end-to-end behavior branch — the branch's per-frame
+Conv1d+GRU reads the AU series but not the segment statistics that carry the clip-level signal. This
+is the strongest argument for item 4 below (feed segment statistics into the branch). Also to test once B/C finish: does the neural behavior branch (arm B) buy
+the same gain end-to-end, or is the GBM's advantage the segment-statistics representation?
+
+**Proposed order of work for top-1 (highest expected value first):**
+1. Replicate lever 4 on three AV seeds; report mean ± sd. Zero training cost.
+2. Replace the GBM with the paper's Transformer over 20 segment tokens (8 heads, head size 256,
+   4 blocks, dropout 0.3) on the same 22-d features, then ensemble — the paper reaches 67.61 alone with
+   98-d features, so ≥ 66 with 22-d is plausible and a stronger second member lifts the ensemble.
+3. Re-extract OpenFace keeping the full CSV (98-d: gaze vectors, head location, AU presence), ~2 CPU-h,
+   so the behavior model has the paper's full feature set.
+4. Fold the segment-statistics representation into the neural behavior branch (arm B) so the gain is
+   end-to-end rather than an ensemble — only if 1–3 show the branch itself is the weak part.
+Not worth doing (measured): neighbour-clip smoothing, EM prior adaptation, checkpoint ensembling of
+near-identical AV runs (65.6–65.7), more AV hyperparameter sweeps (noise floor).
+
+### 19.7 Segment transformer member and three-way fusion (2026-09-12, evening)
+
+Yuvraj asked to build the segment transformer and run it. Scripts (worktree `scripts/fullclip/`):
+`segment_features.py` (cache, `results/fullclip/segtf/features_S20.npz`), `segment_transformer.py`
+(trainer), `sweep_segtf.py` (8 configs × 3 seeds), `gbm_member.py` (saved boosting member,
+`results/fullclip/gbm/probs.npz`), `fuse_members.py` (N-way fusion, weights + thresholds on validation),
+`fuse_all.py` (seed-paired tables). Results: `results/fullclip/segtf/`.
+
+**What is borrowed and what is ours.** The tokenisation (20 uniform segments × [mean, std] per clip) is
+the EngageNet baseline's and is cited to Singh et al. Everything else is our own implementation: the
+22-d feature set, a pre-norm Transformer encoder with a CLS token and learned positions, the repo's
+`OrdinalDistanceCrossEntropy` (weight 0.15, label smoothing 0.1), AdamW + warmup-cosine, token dropout,
+epoch selection on validation argmax top-1, expected-level thresholds fit on validation, and its role as
+one member of a late fusion with our audio-visual network.
+
+**Sweep (pre-registered selection: mean best-validation argmax over 3 seeds; test shown for all):**
+
+| Config | Mean val | Test top-1, thresholds (s1 / s2 / s3) | Test argmax (s1 / s2 / s3) | Best epochs |
+|---|---:|---|---|---|
+| **T7 d64 L2 ffn128 lr 1e-3** ← selected | **65.36** | 67.02 / 67.91 / 66.05 = **67.0** | 67.69 / 68.26 / 66.80 = **67.6** | 3 / 7 / 7 |
+| T3 d256 L4 ffn512 lr 5e-4 | 65.05 | 65.96 / 69.02 / 67.11 | 66.98 / 68.04 / 67.60 | 2 / 4 / 12 |
+| T5 d128 L4 + noise 0.1 | 64.86 | 65.87 / 67.20 / 67.77 | 65.87 / 68.04 / 67.11 | 2 / 9 / 9 |
+| T1 d128 L4 lr 1e-3 | 64.83 | 64.32 / 67.46 / 66.71 | 64.54 / 67.82 / 67.24 | 6 / 6 / 9 |
+| T2 d128 L2 | 64.77 | 64.49 / 66.84 / 65.51 | 64.23 / 65.38 / 66.36 | 10 / 4 / 4 |
+| T8 d128 L4 lr 3e-4 | 64.64 | 64.45 / 67.95 / 69.19 | 65.16 / 65.82 / 68.71 | 6 / 4 / 7 |
+| T4 d128 L4 + sqrt-inverse sampler | 63.99 | 68.66 / 64.58 / 65.87 | 68.62 / 64.18 / 64.63 | 5 / 8 / 19 |
+| T6 d128 L4 mean-pool, token dropout 0.2 | 63.96 | 66.76 / 63.79 / 65.51 | 66.80 / 64.10 / 65.07 | 2 / 1 / 9 |
+
+**Alone, the selected transformer averages 67.0 (thresholds) / 67.6 (argmax) on test with 22 features**,
+i.e. the published 67.61 baseline is reproduced with a fifth of its feature dimensionality. Two
+properties matter for how it is used: it overfits within 2–12 epochs, and its seed-to-seed test spread
+(~3 points) is much larger than the AV model's, with validation only weakly predicting test. The
+smallest model won on validation, which is consistent with 7,879 training clips.
+
+**Fusion (weights and thresholds on validation only; seed i paired with seed i; test once per row):**
+
+| Neural member | Alone | + transformer (2-way) | + transformer + GBM (3-way) | 3-way weights (val-selected) |
+|---|---:|---:|---:|---|
+| `A_av_s1` | 65.69 | 66.31 (w 0.85/0.15) | **70.17** | 0.6 / 0.2 / 0.2 |
+| `A_av_s2` | 66.40 | 69.59 | **70.26** | 0.6 / 0.2 / 0.2 |
+| `A_av_s3` | 64.98 | 70.17 | **70.43** | 0.6 / 0.2 / 0.2 |
+| `B_beh_s1` | 66.84 | — | 69.86 | 0.6 / 0.0 / 0.4 |
+| `B_beh_s2` | 66.05 | — | 70.26 | 0.6 / 0.2 / 0.2 |
+| `B_beh_s3` | 65.47 | — | 70.35 | 0.6 / 0.2 / 0.2 |
+| `C_behtext_s1` | 66.40 | — | 69.68 | 0.6 / 0.2 / 0.2 |
+| `C_behtext_s2` | 66.58 | — | 70.17 | 0.6 / 0.2 / 0.2 |
+| **A seeds, mean ± sd** | 65.69 | 68.69 ± 2.08 | **70.29 ± 0.14** | |
+| **all 8 members** | 66.04 | | **70.15 ± 0.25** (min 69.68) | |
+
+Three-way adjacent 90.4–91.7, MAE 0.392–0.417, macro-F1 51.1–56.5. Reading:
+
+- **The three-way fusion is the best and most stable number in the repository: 70.29 ± 0.14 on the
+  three A seeds, 70.15 ± 0.25 over all eight neural checkpoints, +2.5 over the published best, and it
+  chose the same weights (0.6 AV / 0.2 transformer / 0.2 GBM) on seven of eight members.** Versus the
+  two-way GBM fusion (69.86 ± 0.50) the gain is +0.43 — inside noise on the mean, but the sd shrinks
+  by 3.5× because the two behavior members average out each other's seed noise.
+- **The transformer is a weaker *fusion member* than the GBM despite being a stronger *stand-alone
+  model*.** Two-way A + transformer is 68.69 ± 2.08: on seed 1 validation chose w = 0.85/0.15 and
+  scored 66.31 on test. Its validation score does not track test well enough to set a weight on its
+  own; the boosting model's does. Use the transformer *with* the GBM, not instead of it.
+- Paper framing: audio-visual cross-attention network + two OpenFace-statistics models (one neural,
+  one boosting), fused at the probability level with a pre-registered validation protocol; the
+  segment tokenisation is credited to Singh et al.; the AV network alone (66.27 ± 0.45) and each
+  member alone are reported next to the fusion.
+
+**Open after this:** (a) 98-d OpenFace re-extraction (gaze vectors, head location, AU presence) for
+both behavior members; (b) stabilise the transformer (fewer epochs, stronger regularisation, or seed
+averaging of its logits) so it can carry the fusion without the GBM; (c) wire the three-way fusion into
+`ui/inference.py`; (d) the same protocol on DAiSEE as a second-corpus check.

@@ -103,7 +103,7 @@ Fusion type `it` (intermediate token) is default and best-performing.
 | E9 | Annotation guide document | 🔴 Not started |
 | E10 | Download + preprocess DAiSEE | 🔴 Not started |
 | E11 | Pilot Zoom session | 🔴 Not started |
-| E12 | Streamlit UI engagement timeline | 🔴 Not started |
+| E12 | Streamlit UI engagement timeline | ✅ Done 2026-08-12 — `ui/app.py` + `ui/inference.py`, EngageNet models only |
 | E13 | Fix temporal mismatch (Issue #6) | ✅ Done (code); accuracy re-validation pending |
 
 ---
@@ -258,12 +258,14 @@ python -m src.main --dataset CREMAD --audio_features mel --num_heads 8 \
 
 ---
 
-## EngageNet synthetic chat-text augmentation
+## EngageNet synthetic chat-text augmentation — SUPERSEDED by text v2 (2026-08-17)
 
-- `preprocessing/engagenet/create_annotations.py` now writes a fifth `chat_text` column by default: `video_path;audio_path;label;split;chat_text`.
-- Coverage is intentionally sparse: about **40%** of clips get non-empty chat text and the remaining **60%** stay empty, matching the plan to keep text optional per clip.
-- Assignment is deterministic and stratified by `(split, engagement label, source video topic)` so train/val/test stay balanced and reproducible.
-- The three topic buckets follow the EngageNet paper’s stimulus videos: **Schrodinger’s cat**, **cryptocurrency**, and **Where did English come from?**
+- `preprocessing/engagenet/create_annotations.py` writes a fifth `chat_text` column: `video_path;audio_path;label;split;chat_text`. v1 coverage was 40% from three topic banks (Schrodinger/crypto/English).
+- **v1 was label leakage**: `chat_text.py` selects the phrase pool by the ground-truth label (`label_{label}` key) and even the length bucket is label-biased. 792 unique strings, 99.8% label-deterministic; BoW logistic regression on v1 text alone scores 97–98% on held-out splits. Any run with `--late_text_fusion` on a v1 5-column file is contaminated (V8/V9, `text_teacher_smoke`).
+- **Why it still hurt accuracy** (the docs' old "weakly label-correlated" story was wrong): legacy `LateTextFusion` inserts a randomly-initialized `av_context` Linear(256→128) between the trained pooled features and the trained classifier — the AV path is scrambled at init. Hash/padding collision was ruled out (`_hash_token` → 1..4095, 0 = padding).
+- **v2 fix**: `--text_source behavior` generates label-free captions from OpenFace `(300,22)` features (`behavior_caption.py`; train-only tertile thresholds in `behavior_caption_stats.json`; API has no label parameter). `annotations_engagement_v2{,_a10}.txt`: 100% coverage, 6,614 unique captions, BoW probe 61–63% vs ~50–53% majority. v1 files untouched; backups in `preprocessing/engagenet/backup_2026-08-17/`.
+- **Model fix**: `LateTextFusionV2` (`--text_fusion_arch residual`) — zero-init additive residual on the untouched 256-d AV vector; exact no-op at init, E04 warm-starts with 0 skipped tensors (`tests/test_text_fusion_v2.py`). `--late_text_fusion` now defaults **OFF**. Calibration script text defaults fixed to 32/4096 (were 48/8192 — would have hashed tokens differently than training).
+- **Experiment in flight**: T10 (AV control) vs T11 (text residual), 3 seeds each, G00 config (mvf 96, lr 5e-5, 8 epochs), queues `scripts/night/queue_textv2_gpu{0,1}.txt`. Decision rule: mean delta ≥ +0.9 (≈2× seed sd 0.45) = claimable.
 - `datasets/engagenet.py` is backward-compatible with both 4-column and 5-column annotation files.
 
 ---
@@ -1018,10 +1020,314 @@ would over-claim every one of these:
   numbers as a finding about text (the text is synthetic), "collected a dataset" (designed only), and any
   claim of a published paper.
 
-**Open item:** the supervisor's name was given by dictation as **"Professor Sanchita Goes"** and appears
-nowhere in the repo — every doc says only "professor"/"advisor". The spelling is flagged in §1 of the
-overview and **must be confirmed before the document is used**.
+**Resolved 2026-09-08:** the supervisor is **Sanchita Ghose** (spelling taken from the Zoom meeting
+record, not dictation). The earlier "Goes" spelling was wrong.
 
 **Framing note for future external documents:** the strongest résumé material is not the headline
 accuracy — it is the calibration result (+2.26 over argmax with no retraining), being the first AV entry
 on EngageNet, and the defect-discovery / conclusion-reversal record. Weight future summaries that way.
+
+## Shared-config defaults silently override per-run settings (2026-08-12)
+
+Four preprocessing/evaluation mismatches have now been found in this project, and the last three share
+one cause: **a default in a shared config file overriding a per-run flag, silently.** The newest instance
+is `scripts/exp2026_run.sh`, whose `COMMON` array hardcodes `--max_video_frames 96` and whose `run_train`
+does not forward the run's own override to `run_calib`. F01 trained at 50 frames and F02 at 40; both were
+calibrated and tested at 96.
+
+**Why it matters:** the failure is invisible. Nothing errors, the numbers look plausible, and the defect
+is only findable by diffing the run's `opts*.json` against the calibration log's namespace dump. Three of
+the four defects in this project survived multiple sessions for exactly this reason.
+
+**How to apply:** any evaluation, calibration or ablation step must read its input-shape parameters
+(`max_video_frames`, `frame_sampling`, `max_audio_steps`, `audio_features`) back out of the trained run's
+own `opts*.json` rather than inheriting them from a shared default. `scripts/night/run_job.sh` does this
+via its `opt_value` helper; `scripts/night/ensemble.py` does the same per member. Before citing any test
+number, confirm the eval-time cap matches the train-time cap. Validation numbers logged during training
+are always safe — they run inside the training process at the correct settings.
+
+## Warm-start finetune, not retrain, when testing a data fix (2026-08-12)
+
+F01/F02 retrained from the AffectNet pretrain to test whether corrected preprocessing helps. They failed
+(peak val 53.6/54.0 against the incumbent's 65.3) — but the result is uninformative, because retraining
+changes initialisation and training length at the same time as the data.
+
+**Why:** the V12/E04 lineage reached 66% through many epochs of accumulated finetuning. Eighteen epochs
+from a generic face-recognition pretrain cannot reach that, so the comparison measures training budget,
+not the data fix.
+
+**How to apply:** to isolate a *data* or *selection* variable, warm start from the current best checkpoint
+and finetune. The mechanism in this repo is to copy the source checkpoint to `<result_path>/model.pth`;
+`src/cli/train.py` loads it when `--resume_path` is unset (weights only, no optimizer or epoch state).
+See [[project_engagenet_audio_null]] for the claim this discipline is protecting.
+
+## Streamlit UI inference must reproduce the 5 fps frame stride (2026-08-12)
+
+`preprocessing/engagenet/extract_faces.py` was run with `--target_fps 5`, so every stored
+`*_facecroppad.npy` holds ~50 frames for a 10 s clip — not the full 30 fps, and not 96 frames.
+`--max_video_frames 96` never binds on EngageNet; it is a cap that no clip reaches.
+
+Any inference path that reads a raw `.mp4` must therefore sample at a `round(fps / 5)` stride
+before face cropping. Sampling 96 frames uniformly (the intuitive reading of the flag) changed
+window scores by more than a full engagement level on several test clips.
+
+Two more contract details that are easy to get wrong and silently wrong:
+
+- Frames are stored in **OpenCV BGR order** — `extract_faces.py` never converts to RGB, so
+  inference must not convert either.
+- **MTCNN from `facenet_pytorch` is required.** With the Haar-cascade fallback a test clip's
+  face-detection rate dropped to 32% and its score moved 2.50 → 0.08. Run the UI inside the
+  `avtca` conda env.
+
+**Verification:** frames extracted from a raw `.mp4` by `ui/inference.py` diff against the
+stored `.npy` with mean absolute difference **0.0**, and window scores match the training path
+to within 0.02. Re-run that check after touching either preprocessing path.
+
+**Why this matters beyond the UI:** the same defect class already cost this project four
+evaluation redos (see the F01/F02 `--max_video_frames` mismatch). Frame-rate and channel-order
+contracts are not self-documenting in the checkpoint.
+
+## The EngageNet noise floor: seed variance ≈ full hyperparameter sweep (2026-08-12)
+
+Measured over 14 matched configurations plus 3 seeds of one configuration, fixed decoder
+`refined_expected_thresholds`:
+
+| Source | Top-1 sd | Spread | macro-F1 spread |
+|---|---:|---:|---:|
+| 14 different configurations | 0.52 | 1.95 | 3.00 |
+| Same configuration, 3 seeds | 0.45 | 0.89 | 2.29 |
+
+**Why it matters:** changing the loss, ordinal weight, class weighting, balanced sampler, learning rate,
+EMA, label smoothing, SpecAugment, frame cap and temporal augmentation moves top-1 about as much as
+changing the random seed. Every single-run comparison in this project's history — the §3.x sweep tables,
+the class-balancing verdicts, the loss-function trend — was reading noise at this scale.
+
+**How to apply:** never quote a difference between two single runs on EngageNet. Anything below ~1.0
+top-1 or ~2.3 macro-F1 needs ≥3 seeds before it is stated as an effect. Report the seed sd alongside any
+comparison. Consistency of *sign* across many models is the only usable evidence at this effect size —
+that is what makes the +0.67 fusion gain (12/13 models) defensible while the +2.65 macro-F1 gain from a
+single run was not (it flipped to −0.61 on the next seed). See [[project-engagenet-audio-null]].
+
+## Decoder choice moves a checkpoint by a full point (2026-08-12)
+
+The same G04 checkpoint scores **66.76** under `expected_thresholds` and **65.78** under
+`refined_expected_thresholds`. `collect.py` originally picked the best decoder per run *and per
+modality*, which silently inflated fusion-vs-video-only deltas because each side chose its own
+best-case decoder.
+
+**How to apply:** fix one decoder across every arm of a comparison, and state it with every number
+quoted. Never let an automated "best decode" selection run independently on the two sides of an ablation.
+
+## Full-text reads of the four collection-design papers (2026-08-14)
+
+All four PDFs in `papers/` were read in full to answer "which paper do we follow for collection design."
+Answer: none singly — CMOSE's setting (corrected) + EngageNet's annotation protocol, with COLER's
+ordinal loss and rubric-validation on the modeling/labeling side. Facts that correct or extend plan.md:
+
+- **COLER / "original aware multi-modal engagement.pdf"** (Tran et al., WACV): physical Vietnamese
+  classrooms, room cameras, 70 subjects / 30 groups / 3,924 individual 5-s clips; full-body pose +
+  shared-scene context branches; **zero audio**; no total hours, no kappa reported. Collection design
+  does not transfer to Zoom; ordinal loss (CE + squared-EMD) and rubric process (experts → 498-teacher
+  survey → 5-way majority vote) do.
+- **CMOSE**: per-student video was **cropped from one gallery recording** (412×234, no per-speaker
+  audio); elicitation incidental; splits random by clip (not subject-disjoint); authors admit joint AV
+  training degraded from speech sparsity (their fix: freeze visual, then train audio). 102 subjects,
+  12,193 segments avg 13.72 s ≈ 46.5 h, ICC(2,1)=0.84, EG class 69.5%.
+- **EngageNet**: web platform, silent individual stimulus-watching, **no speaking task anywhere**;
+  audio discarded in one sentence. 127 subjects, 11,311 clips × 10 s ≈ 31 h, weighted κ 0.73–0.79.
+  Authors blame 48.57% Highly-Engaged share on the short-lab-study effect and call for elicitation
+  designs producing low engagement.
+- **DatabaseEvaluation.pdf** = Qarbal et al., IEEE Access 2025 SLR (113 studies, vision-only, audio
+  explicitly excluded). Validates: manual/hybrid annotation over self-report, ordinal multiclass over
+  binary, 5–60 min sessions. EngageNet and CMOSE each used by only ONE follow-up study.
+- **Dataset Selection.pdf** = Li et al., EAAI 2026 — multimodal *emotion recognition* survey, contains
+  no engagement datasets. Relevant only to the emotion-label side and missing-modality protocols.
+
+**How to apply:** cite per-participant recording and subject-disjoint splits as headline collection
+contributions (neither prior dataset has them). Extracted texts cached in session tool-results dirs.
+
+### Collaborator branch `feat/behavior-text-fusion` — evaluated, not merged (2026-08-16)
+
+First external contribution (Gakshith). Tested in a **detached worktree** at `/home/922933190/AVTCA-collab-test`,
+never merged into `development`. This matters because his branch touches five files that have uncommitted
+local edits (`datasets/engagenet.py`, `models/multimodal_cnn.py`, `src/config/opts.py`, `src/data/dataset.py`,
+`scripts/calibrate_engagement_logits.py`).
+
+**Result: matched A/B gave A_control 67.69 vs B_text_fusion 62.47, but the B number is meaningless** — three
+silent defects mean the text stream was a constant for all 11,206 clips. Full detail in
+[`plan.md` §15](plan.md). The three:
+
+1. `classifier_fused` is randomly initialised and replaces the warm-started `classifier_1` whenever
+   `--behavior` or `--text_fusion` is on. 13 tensors miss the warm start. UAR pinned at exactly 25.0 for
+   three epochs = constant single-class prediction.
+2. `--text_fusion` **never reads the transcripts** — it captions the OpenFace AU vector with `chat=""`
+   hardcoded, so annotation column 5 is ignored. Text is downstream of behavior and cannot run without OpenFace.
+3. Behavior `.npy` lookup misses because of the `_facecroppad` suffix, and a miss returns zeros with
+   `present=False` instead of raising.
+
+**Non-obvious and easy to re-trip:**
+
+- **`--n_epochs` does not mean what it looks like on resume.** `opt.begin_epoch` is overwritten from the
+  checkpoint, loop is `range(begin_epoch, n_epochs+1)`. E04 is epoch 3 -> begin 4, so `--n_epochs 6` trained
+  **3** epochs. A too-small `--n_epochs` yields an empty loop: exit 0, log headers, zero rows, no error.
+  Past G-sweep epoch counts are overstated.
+- **Adding model parameters breaks `--resume_path`** — SGD's saved param group size no longer matches.
+  Fix: strip `optimizer`/`scheduler` from the checkpoint (`warmstart_E04_noopt.pth`) and apply the stripped
+  copy to *both* arms so the comparison stays matched.
+- **Entry point is `main.py` at the repo root**, not `python -m src.main` as CLAUDE.md claims.
+- **`--save_every_epoch` is an uncommitted local flag**, absent from any pushed branch.
+- EngageNet **source videos are present** (11,311 `.mp4`), so OpenFace extraction is feasible; OpenFace
+  itself is not installed.
+
+**Why:** the branch is well-engineered (283 tests pass, 9 new test files) but every failure mode here is
+silent — nothing warns when a modality is entirely absent. **How to apply:** before trusting any
+new-modality run, assert `present.mean() > 0` at dataset construction, and check the warm-start report for
+tensors "left at init" — 13 left at init was the tell that the classifier had been discarded.
+
+### Behavior modality with real OpenFace features — the verdict (2026-08-18)
+
+Extends the §15 collaborator entry. OpenFace now exists on this box and all 11,311 clips are extracted,
+so the branch was finally testable. Full detail in [`plan.md` §16](plan.md).
+
+**The result, in one line: behavior+text helps from scratch (+1.76 to +2.61) and is redundant under warm
+start on top-1 (+0.21 val / -0.22 test) — but it consistently improves the ordinal metrics
+(+3.18 macro-F1, +1.28 adjacent, lower MAE).** Since macro-F1 52 vs top-1 66 is the documented largest
+quality gap, the AU features are hitting the real weakness, just not the headline metric.
+
+**Non-obvious things worth not rediscovering:**
+
+- **OpenFace is CPU-only.** No CUDA in CMake, zero GPU references in the sources, OpenBLAS is the only
+  backend. Building it needs two fixes: point `OpenBLAS_INCLUDE_DIR` at OpenFace's *vendored*
+  `lib/3rdParty/OpenBLAS/include` (conda's openblas lacks `f77blas.h`, and the finder uses
+  `NO_DEFAULT_PATH` so it never sees conda), and install **`dlib-cpp`** — conda's `dlib` is Python-only
+  and installs no C++ files at all. Pin 19.24.6, not 20.x. Dropbox model URLs work; OneDrive mirrors 403.
+- **Zero-init is the correct way to add a modality to a warm-started model.** Checkpoint surgery:
+  copy the trained `classifier_1` into the AV columns of `classifier_fused` and **zero the new columns**.
+  Verified `max abs logit diff = 0.000e+00` vs the AV-only model — the model starts bit-identical to E04
+  and can only improve. Same principle as the text-v2 zero-init residual. Without this, a new random head
+  in front of a trained classifier destroys it (the 53% collapse in §15, and the legacy `av_context` bug).
+- **His `compute_baselines` leaks labels.** It baselines each subject on their **label-0** clips; splits
+  are subject-disjoint, so a test subject's baseline needs that subject's test labels. Use a
+  label-agnostic per-subject mean instead. (Per-subject baselines then measured **-1.05** — they did not
+  help, contrary to the §11 design assumption.)
+- **Sweep findings (from scratch):** learning rate dominates (3e-3 best; 5e-4 costs -5.5); cosine > step
+  (+1.24); **EMA hurts** (-2.95), EMA+grad-clip is catastrophic (-11.4) — with val swinging 8 points,
+  weight averaging blends different models, it does not smooth noise. **B overfits after ~epoch 14**
+  and ends below the control by epoch 60; the control peaks late (ep45) and is stable.
+- **Rank configs by mean-of-top-3 val epochs, not best epoch.** Single-epoch peaks are noise here.
+- **`--max_video_frames 96` vs 50 is a live confound.** The 66.36 headline was measured on 50-frame data;
+  the 2026-08-18 warm runs used 96, and the A control landed 65.47 (-0.89). A matched mvf 50 re-run is
+  the outstanding item before any of these numbers are compared to 66.36.
+- **66.36's provenance, for the record**: it came from *fixing evaluation*, not training — test/val had
+  been extracted at 15 frames while training used 50; re-extracting at 5 fps lifted E04 from 62.68 with
+  no retraining. It is a real held-out test number; the documented caveat is about *checkpoint selection*
+  (broken val set), not about the score being invalid.
+
+**Process failures on my side, both silent:** an `np.save` temp-name bug (`np.save` appends `.npy`, so
+`foo.npy.part` never existed and the rename failed) made the first 1,000 extractions report as errors
+after doing the expensive work — recovered by renaming; and a `pgrep -f "collab-test/main.py"` wait loop
+**matched the shell that created the script**, so a calibration chain idled 17 hours after training had
+finished. Both look identical to "still working". Prefer file markers over process-pattern waits.
+
+**Correction to the entry above (same session):** `--text_fusion` must **not** be described as a text
+modality. Yuvraj rejected behavior-captions-as-text on 2026-08-17 — they are computed from the video, so
+they add no information the model lacks. His branch is right to ignore the leaky v1 chat column, but its
+"text" stream is a second view of the same OpenFace features. All §16 B-arm gains are therefore
+**behavior-modality** results; the split between `--behavior` and `--text_fusion` was never ablated (C9),
+and the likeliest reading is that the numeric AUs do the work. Real text fusion waits for genuine Zoom
+chat (`LateTextFusionV2` + the label-blind v3 generated-chat proxy).
+
+## 2026-09-08 — Supervisor meeting: paper plan and data collection
+
+- **Supervisor name is Sanchita Ghose** (confirmed from Zoom record). Co-author on the paper: Akshit
+  (methodology section; owns a "visual-emphasis" fusion variant with no matched number yet).
+- **Number correction:** in the meeting the behavior result was stated as "66.36 → 65.47". The repo says
+  65.47 is the *AV control* and the behavior arm is 65.25 (−0.22 top-1, inside sd 0.45; +3.18 macro-F1,
+  +1.28 adjacent). Nothing may be compared to 66.36 until C7 (mvf 50 re-run) is done. Correct this with
+  Sanchita before it reaches the paper.
+- **Paper structure agreed:** Intro (with conceptual diagram, contributions as bullets) → Related Work
+  (15–20 cites, from surveys + recent AV multimodal work) → Preliminaries (~1 page, journal only) →
+  Methodology (blocks grouped into 4 major components) → Model Evaluation (results grouped by metric,
+  each metric explained; ablations; hard categories and why; reviewer clarifications; human survey only
+  when classroom data exists). Follow the format of `papers/research/prof papeer.pdf`.
+- **Architecture diagram must be hand-made in draw.io**, not AI-generated, and placed in the shared folder.
+- **Data collection route:** a psychology professor's asynchronous class; Sanchita meets them 2026-09-09.
+  Must-haves: breakout-room recordings, per-participant audio, Zoom chat export (the text modality is
+  blocked on real chat, §17). Classroom-data hard constraints (equal AV contribution, per-student
+  calibration, Session-1 exclusion) still apply.
+- **"Visual-emphasis" reconciliation:** defensible on EngageNet only (video-dominant corpus); the equal-
+  contribution design is reserved for the speech-rich classroom data. Say this explicitly in the paper.
+- Next review Tue 2026-09-15, 7 PM. Plan: `plan.md` §18.
+- **Paper draft convention (2026-09-08):** Sections III–V of `papers/research/paper.tex` mirror the FoleyGAN
+  paper section-for-section; Preliminaries was dropped in favour of per-metric definitions inside Model
+  Evaluation. Do not mention the audio-truncation or 15-frame defects in the paper. No LaTeX on this box.
+
+## "Take the full video and full audio" — on EngageNet the 10 s window IS the full clip (2026-09-12)
+
+Yuvraj asked to stop training on "ten seconds of video and ten seconds of audio linked separately" and use
+each clip end to end. Measured before changing anything: all 11,311 source clips are **≤ 10.06 s** (median
+10.00; 0 over 10.5 s; 249 ship shorter). The `_croppad10s.wav` suffix is a label, not a cap — the extractor
+runs ffmpeg uncapped, and `extract_faces.py --target_fps 5` reads to the last frame. Audio (431 mel frames)
+and video (50 frames) already cover 0→end and `_adaptive_align_audio_to_video` pools them onto one clock.
+
+**The only stream that was not on that clock was behavior.** The collab branch hardcoded
+`BehaviorFeatures(num_frames=15)` (RAVDESS legacy), so OpenFace AUs were fed at 1.5 fps against 5 fps
+video in every §16 number. Fixed in the worktree with `--behavior_frames` (default follows
+`--max_video_frames`; plan.md §19.2). Per-step offset to the kept video frame is now ≤ 200 ms (was 667 ms
+spacing) at every fps in the corpus, including the 1,038 clips encoded at a nominal 1000 fps.
+
+**Why it matters:** "10 s" recurs in file names, extractor defaults and docs, and reads as a truncation.
+Anyone re-auditing this should check *source* durations first — the number that looks like a cap is the
+corpus's clip length. **How to apply:** before "fixing" a window, probe the sources (the audit script is in
+the session scratchpad and the table is in plan.md §19.1); the defect class that actually bit this project
+was the *other* direction — RAVDESS defaults (3.6 s, 15 frames) applied to a longer corpus.
+
+**Seeding a warm start for any new branch is now a script, not surgery:**
+`AVTCA-collab-test/scripts/fullclip/seed_warmstart.py --behavior [--text_fusion]` copies `classifier_1` into
+the AV columns of `classifier_fused`, zeros the rest, and refuses to write if the fused model's logits
+differ from the AV model on real clips (both variants verified at 0.0). The matched A/B/C runner
+(`scripts/fullclip/run_job.sh`) re-reads every input-shape and modality flag from the run's own opts json
+at calibration time. Results: `results/fullclip/`; summary: `scripts/fullclip/collect.py`.
+
+## The OpenFace features are a second model, not a side input — late fusion beats the published best (2026-09-12)
+
+Asked how to raise top-1, four levers were measured instead of listed (plan.md §19.6). Three are dead:
+neighbour-clip smoothing (labels of consecutive clips agree 69%, but so do the model's errors — null),
+EM label-shift adaptation (hurts; probabilities too poorly calibrated), and threshold transfer (test-fit
+thresholds would give 67.82 vs 65.69, but nothing unsupervised recovers it). The fourth changes the
+project's picture: a **HistGradientBoosting classifier on 20-segment mean/std statistics of our own
+22-d OpenFace series scores 67.15 test top-1 on CPU in two minutes** — as good as the whole pixel+audio
+model (65.7–66.4) and 0.46 below the best published (67.61, which used the same layout with 98-d
+features). **Averaging its probabilities with the AV model's (w_AV 0.7, chosen on validation) gives
+70.12 test top-1**, robust across w 0.4–0.8, because the two make different mistakes (each is right on
+~10–12% of clips the other gets wrong).
+
+**Why this was missed:** the collab branch's neural behavior encoder reached ≤61 val from scratch and
+"redundant under warm start", which read as "pixels already carry the AU signal". The GBM shows the
+signal was there all along; the encoder and the raw-per-frame layout were the weak part. Segment
+statistics (mean+std over 20 windows) are the representation that works — same as the paper's baseline.
+
+**How to apply:** (1) never conclude a modality is redundant from one encoder — probe it with a shallow
+model on a sensible summary first (the E19 audio probe did this right; the behavior stream was never
+probed). (2) Diverse-representation ensembles pay on this corpus; same-representation checkpoint
+ensembles did not (65.6). (3) Keep raw OpenFace CSVs next time — only the 22-d `.npy` exist, and the
+paper's 98-d set (gaze vectors, head location, AU presence) is a ~2 CPU-hour re-extraction away.
+Single AV seed so far; replicate on `A_av_s2`/`A_av_s3` before writing it anywhere external.
+Scripts: `AVTCA-collab-test/scripts/fullclip/{behavior_only_probe,ensemble_probe,context_analysis}.py`.
+
+## Segment transformer: strong alone, unreliable as a lone fusion member; three-way fusion is the headline (2026-09-12)
+
+Built our own segment-token transformer (tokenisation credited to Singh et al.; model/loss/decoding
+ours): the val-selected config is the *smallest* swept (d64, 2 layers, ~0.1 M params) and alone scores
+67.0 test (thresholds) / 67.6 (argmax) with 22 features — the published 67.61 reproduced. But it
+overfits by epoch 2–12 and its test spread across seeds is ~3 points, so validation barely predicts
+test: two-way AV + transformer with a val-selected weight gave 68.69 ± 2.08 (seed 1 chose 0.85/0.15 and
+scored 66.31). **Three-way AV + transformer + GBM: 70.29 ± 0.14 (3 A seeds), 70.15 ± 0.25 over all 8
+neural checkpoints, weights 0.6/0.2/0.2 on 7 of 8.** The two behavior members cancel each other's seed
+noise; the sd drops 3.5× versus the two-way GBM fusion (69.86 ± 0.50) for +0.43 on the mean.
+
+**How to apply:** a member's stand-alone accuracy is not its fusion value — what matters is whether its
+validation score tracks test well enough to set a weight. Keep the boosting member; add the transformer
+on top; re-extract 98-d OpenFace before trying to make the transformer stand alone. Scripts:
+`scripts/fullclip/{segment_features,segment_transformer,sweep_segtf,gbm_member,fuse_members,fuse_all}.py`;
+results `results/fullclip/segtf/`, `results/fullclip/gbm/`. See [[project-openface-gbm-ensemble]].

@@ -1,19 +1,22 @@
 # AVTCA Progress — Current Verified Results
 **RAVDESS · 8-Class Emotion Recognition · 2026-05-28**
 
-> ## Status at a glance — 2026-08-07
+> ## Status at a glance — 2026-09-12
 >
-> **All preprocessing is now correct.** Three defects were found and fixed this period: audio truncated
-> to 3.6 s of each 10 s clip; test/validation extracted at 15 frames against 50-frame training; and 22.8%
-> of the training split at 15 frames. All three splits now sit at median 50 frames, `--target_fps 5`.
+> **Audio-visual model (EfficientFace + mel, full 10 s clip, G04 config): 66.27 ± 0.45 test top-1**
+> over 3 seeds (91.55 adjacent, 0.440 MAE, 52.31 macro-F1), bit-identical to the August G04 runs — the
+> model was already using the whole clip. Audio fusion adds +0.74 over video-only (8/9 runs ≥ 0).
 >
-> **F01 and F02 are running** (~2 h) — the first models in this project trained end-to-end under valid
-> conditions. **Three substantive questions depend on their results:** whether the 66.36% headline
-> improves, whether the audio-visual gain survives clean training, and whether temporal augmentation
-> fixes the recurring epoch-3 overfitting. Decision matrix in
-> [`plan.md` §13.10.1](plan.md).
+> **Behavior branch (OpenFace AUs, now on the 50-step video clock): no effect** — 66.08 ± 0.59 with it,
+> 66.12 ± 0.59 with caption text added, equal to the AV model at every decoder. C7/C8/C9 closed.
 >
-> **Every number recorded below F01/F02 is defect-provenance** — kept for the record, not for citation.
+> **New headline candidate: three-way late fusion AV + segment transformer + OpenFace GBM —
+> 70.29 ± 0.14 test top-1** (3 AV seeds; 70.15 ± 0.25 over all 8 neural checkpoints), weights and
+> thresholds chosen on validation, **+2.7 over the published best 67.61**. Two-way with the GBM alone:
+> 69.86 ± 0.50. Our 22-feature segment transformer alone reproduces the published 67.6. Detail and the measured-null levers (neighbour
+> smoothing, prior shift) in [`plan.md` §19.6](plan.md). Not yet in the paper or the UI.
+>
+> All numbers below this block are historical; the sections dated 2026-09-12 at the bottom are current.
 
 > **Note (2026-08-08):** `docs/` was reduced to the four canonical files. The former external-facing
 > documents — `evidence_tables.md`, `professor_progress_brief.md`, `latex.tex` and the paper-section
@@ -498,3 +501,267 @@ variant: `preprocessing/engagenet/annotations_engagement_a10.txt`.
     <tr><td>v2_h8_e100_rerun1</td><td>72.9167%</td><td>100.0000%</td><td>69.7266%</td><td>72.1371%</td><td>69.8160%</td><td>1.036233</td></tr>
   </tbody>
 </table>
+
+## Session 2026-08-12 — F01/F02 verdict, calibration defect, overnight G-sweep launched
+
+**F01/F02 finished and failed.** Neither approached the 66.36% incumbent. Best validation top-1 was
+53.59 (F01, epoch 8) and 53.97 (F02, epoch 8), against E04's 65.27. The §13.10.2 pivot criterion was
+correct: 18 epochs from the AffectNet face-recognition pretrain is too short to learn this task.
+
+**A fourth evaluation defect was found.** `scripts/exp2026_run.sh` hardcodes `--max_video_frames 96` in
+`COMMON` and does not forward each run's own override to calibration. F01 trained at 50 frames and F02
+at 40; both were tested at 96. **Their test numbers are a train/eval mismatch and must not be cited.**
+Their validation curves are unaffected (validation runs inside training at the correct cap), and the val
+curves alone support the failure verdict. Fixed in the new harness, which reads the cap back out of each
+run's own `opts*.json`.
+
+**Overnight G-sweep launched** 2026-08-12 04:11 UTC across both RTX 3090s, detached under `setsid nohup`
+so it is independent of the SSH session or the laptop sleeping. Seven matched finetunes, all warm-started
+from the E04 best checkpoint onto the corrected splits, with everything held fixed except one named
+variable per run. Design and rationale in [`plan.md` §13.13](plan.md).
+
+| Run | GPU | Epochs | Variable under test | Status |
+|---|---|---:|---|---|
+| G00 | 0 | 8 | control — E04's exact config on corrected data | running |
+| G01 | 0 | 6 | `mvf 50` (no padding waste) | queued |
+| G03 | 0 | 6 | `class_weighting sqrt_inverse` (E11r, macro-F1) | queued |
+| G02 | 1 | 8 | `mvf 40` + random crop (augmentation) | running |
+| G04 | 1 | 6 | `class_balance_sampler sqrt_inverse` | queued |
+| G05 | 1 | 6 | `lr 1e-4` + warmup-cosine | queued |
+| G06 | 1 | 6 | `spec_augment` | queued |
+
+**Phase 2 generates itself** when all seven finish: modality ablation on the top two runs (§13.10
+question b — does the AV claim survive clean training), two seed repeats of the winner (E22), and F03
+checkpoint ensembling. Estimated phase-1 completion ~09:15 UTC, phase 2 ~10:45 UTC.
+
+**New capability:** `--save_every_epoch` retains `epochs/epoch_NNN.pth`, so any epoch can be re-selected
+post-hoc against a different `--selection_metric` without retraining, and every epoch is available as an
+ensemble member.
+
+Progress at any time:
+
+```bash
+python scripts/night/collect.py
+```
+
+## Session 2026-08-12 (cont.) — Streamlit UI repointed to engagement
+
+The UI had been serving the RAVDESS 8-class emotion model. `ui/app.py` and `ui/inference.py`
+were rewritten for EngageNet engagement; the RAVDESS path was removed.
+
+| Item | Status |
+|---|---|
+| Curated checkpoint registry (E04 66.36%, V12-05 66.13%) with calibrated thresholds | ✅ Done |
+| Long-video windowing (10 s windows, optional 50% overlap) + session rollup | ✅ Done |
+| Preprocessing parity with training arrays | ✅ Verified — 0.0 mean abs frame diff, scores within 0.02 |
+| Optional audio-only / video-only modality split via `ablate_modality` | ✅ Done |
+| `facenet_pytorch` missing → blocking error instead of silent Haar fallback | ✅ Done |
+
+**Defect found and fixed during this work:** the first implementation sampled 96 frames per
+window, reading `--max_video_frames 96` as the frame budget. The stored clips are ~50 frames
+because `extract_faces.py` ran at `--target_fps 5`; the 96 cap never binds. Under the wrong
+stride only 6/12 test clips decoded to the same level as the training path. After the fix,
+scores match to within 0.02. Recorded in [memory.md](memory.md).
+
+**Run it:**
+
+```bash
+conda activate avtca && streamlit run ui/app.py
+```
+
+The `avtca` env is required — outside it `facenet_pytorch` is missing and face crops fall back
+to a Haar cascade that does not reproduce the training crops.
+
+**Follow-up:** when the overnight G-sweep produces a run above 66.36%, add it to
+`MODEL_REGISTRY` in `ui/inference.py` with its own calibrated thresholds.
+
+## Session 2026-08-12 (overnight) — G-sweep complete: 14 runs, 13 ablations, flat result
+
+**All runs finished.** Fourteen matched warm-start finetunes across two RTX 3090s, plus a fusion /
+video-only / audio-only ablation on 13 of them and a 14-member ensemble. Full analysis in
+[`plan.md` §13.14](plan.md). All numbers use the fixed decoder `refined_expected_thresholds`.
+
+**Headline: nothing beat the incumbent, and we now know why.**
+
+| Source of variation | Top-1 sd | Spread |
+|---|---:|---:|
+| 14 different configurations | **0.52** | 1.95 |
+| Same config, 3 seeds | **0.45** | 0.89 |
+
+Varying every hyperparameter tested produces about as much variation as changing the random seed. The
+corpus is the ceiling, not the model. This converges with the §12.7 encoder-free probe and is the
+empirical case for the purpose-built dataset.
+
+**The three pre-committed questions (§13.10.1), answered:**
+
+| Question | Answer | Evidence |
+|---|---|---|
+| Beats 66.36% top-1? | **No** | Best 66.67 (+0.31, inside 0.45 seed sd). Control G00 = 66.09 vs E04 66.36 — the preprocessing/selection fix changed accuracy by −0.27 |
+| Fusion still beats video-only? | **Top-1 yes, macro-F1 no** | Top-1 12/13 models positive, mean +0.67. macro-F1 4/13, mean −0.09. Audio-only never exceeds the majority baseline |
+| Augmentation holds its peak? | **No** | G02 (crop active) 64.89 vs identical G01 65.82 — second-worst run |
+
+**§13.6's macro-F1 fusion claim (+1.95) is withdrawn** — it does not reproduce on cleanly-trained
+weights. The narrow top-1 claim survives.
+
+**A mid-sweep finding was retracted within two hours.** G04 appeared to show that audio's minority-class
+contribution required class-balanced training (macro-F1 +2.65 for fusion). Seed 2 of the identical config
+gave −0.61. Seed noise. Recorded in §13.14.2 because it is exactly what E22 existed to catch.
+
+**Every past single-run comparison in this project is now suspect.** Measured noise floor is 0.45 sd on
+top-1 and ~1.1 sd on macro-F1; the old sweep tables quoted 0.5–2 point differences between single runs.
+Future comparisons need ≥3 seeds.
+
+| Status | Count |
+|---|---|
+| Training runs completed | 14 / 14 |
+| Modality ablations | 13 |
+| Failed runs | 0 |
+| 14-member ensemble | running |
+
+**New in the harness:** `scripts/night/` — memory-gated multi-worker queue driver, auto-generated phase 2,
+cross-model ablation, probability-averaged ensembling. `--save_every_epoch` in `src/config/opts.py`.
+
+**Ensembling (F03) refuted — final item closed.** 14-member ensemble scored 65.69 top-1; a top-5 variant
+scored 65.60. Dropping the weak members changed nothing, so the failure is a lack of decorrelated error
+among members that all warm-start from the same checkpoint, not dilution. Both ensembles are worse than
+the best single model (66.67) on all four metrics. Detail in [`plan.md` §13.14.5](plan.md).
+
+**All four levers from §13.7 are now closed and none produced a gain:** retraining on corrected splits
+(§13.14.2a), train-split consistency, ensembling (§13.14.5), and the two wasted settings (§13.14.3).
+The sweep is complete; the remaining contributions are the ordinal-evaluation framing, the negative audio
+result, and the noise-floor finding.
+
+**Label-granularity finding (§13.14.6).** Merging the two middle engagement levels lifts accuracy from
+64.27 to 70.70 (+6.43, ~7x the seed noise) with no retraining; binary reaches 85.95. Per-class recall at
+4 levels is 75.5 / 20.3 / 31.0 / 81.6 — the middle levels are not separable, and 28.1% of all predictions
+are off-by-one. **This challenges the planned 5-level scale in the dataset design and should be resolved
+before collection starts.**
+
+## Collaborator branch evaluation — `feat/behavior-text-fusion` (2026-08-16)
+
+First external contribution (Gakshith), evaluated in an isolated worktree. **Not merged.**
+
+| Item | Status |
+|---|---|
+| Branch reviewed (6 commits, +1595/-23, 25 files) | done |
+| Test suite on his branch (283 passed, 191 subtests) | done |
+| Isolated worktree at `/home/922933190/AVTCA-collab-test` | done |
+| Matched A/B training, 7 epochs, one arm per GPU | done |
+| A_control result — best 67.69 (UAR 56.04, adj 93.74) | done |
+| B_text_fusion result — 62.47, no `_best.pth` written | done, but **not interpretable** |
+| Root cause of B collapse identified (3 silent defects) | done |
+| C1 seed `classifier_fused` from `classifier_1`, re-run B | open |
+| C2 fix `_facecroppad` behavior filename mismatch | open |
+| C3 assert `present.mean() > 0` on absent modality | open |
+| C4 install OpenFace + extract 11,311 clips | open |
+| C5 decide transcripts vs AU captions for text fusion | open (author) |
+| C6 fix `--n_epochs` / `begin_epoch` resume semantics | open |
+
+**Headline:** the branch is well-engineered and nothing crashed, but on this machine both `--behavior` and
+`--text_fusion` are untestable — the text path is downstream of OpenFace features that do not exist here, so
+the text stream was a constant for all 11,206 clips. The 62.47 measures a randomly-initialised classifier
+relearning from scratch, not his idea. Source videos are present (11,311 `.mp4`), so a real evaluation is
+feasible once C2-C4 are done. Detail in [`plan.md` §15](plan.md).
+
+**Also uncovered (pre-existing, ours):** `--n_epochs` is overridden by `begin_epoch` on resume, so
+`--n_epochs 6` in the G-sweep trained 3 epochs — **past sweep epoch counts are overstated.**
+
+## Session 2026-08-17 — text-modality v2: label-leakage fix, behavior captions, matched A/B launched
+
+| Task | Status |
+|---|---|
+| Audit v1 chat text (`audit_text_leakage.py`) — 792 strings, 99.84% label-deterministic, BoW 97–98% held-out | done — v1 confirmed label oracle |
+| Root-cause why oracle text still hurt: random `av_context` bottleneck at init (not hash collision, not weak correlation) | done — architecture.md corrected |
+| Label-free behavior captions from OpenFace (300,22) (`behavior_caption.py`, train-only tertiles) | done — 100% coverage, 6,614 unique captions |
+| `annotations_engagement_v2{,_a10}.txt` (cols 1–4 byte-identical to v1; v1 backed up to `backup_2026-08-17/`) | done |
+| `LateTextFusionV2` zero-init residual + `--text_fusion_arch` flag; `--late_text_fusion` default flipped OFF | done — E04 loads 546/0-skipped/17-init |
+| Calibration text defaults 48/8192 → 32/4096; `run_job.sh` calibrates at run's own annotation/text config | done |
+| Tests (`tests/test_text_fusion_v2.py`) + full suite | done — 231 passed |
+| T10 (AV control) vs T11 (text residual), 3 seeds each, warm-start E04, mvf 96 | **3/6 done** (2026-08-17 20:21) — T10s3, T11s2, T11s3 all 68.07 val top-1 (arms tied; +1.7 vs warm-start). GPU-1 queue drained; T11s1/T10s2/T10s1-rerun blocked on GPU 0 behind collab S3 chain (T10s1 first attempt OOM'd in memory-gate race, requeued) |
+| Collect + decide (≥ +0.9 = claimable vs seed sd 0.45) | open — after runs finish |
+| **Generated-chat corpus (v3)** — 20 Claude subagents, 6,614 captions × 3 label-blind variants; `annotations_engagement_v3_a10.txt` 39.6% coverage weighted to quiet clips (79/35/5% by RMS tertile); audit PASSED (BoW 51.0/49.0 vs baselines 49.3/47.5) | **done 2026-08-17** — `generate_chat.py`, `chat_generation_cache.json`, `audio_rms_cache.json` |
+| AV vs AV+generated-chat A/B (3 seeds/arm, v3 annotations, LateTextFusionV2) | open — GPUs busy with T10/T11 + collab jobs |
+
+## Behavior modality — real OpenFace evaluation (2026-08-18)
+
+Continues the 2026-08-16 collaborator row. Branch **still unmerged**; all work in the worktree.
+
+| Item | Status |
+|---|---|
+| OpenFace 2.x built from source (OpenBLAS + dlib-cpp fixes) | done |
+| AU extraction, 11,311 clips | done — **0 errors, 100% resolved, 98.78% face-detected** |
+| Filename `_facecroppad` fix (C2) | done |
+| Loud-failure guard on absent modality (C3) | done |
+| Calibration script behavior flags | done |
+| Subject IDs from filenames (133 subjects) + leakage-free baselines | done |
+| From-scratch A/B, 15 ep | done — B **+1.76** mean top1, **+1.79** UAR |
+| Hyperparameter sweep, 10 runs | done — winner lr 3e-3 + cosine (60.10) |
+| Long from-scratch, 60 ep | done — B **61.25** vs A 58.64; **B overfits after ep14** |
+| Zero-init seeded warm start (C1) | done — verified **exact no-op**, max logit diff 0.0 |
+| Warm A/B + calibrated test metrics | done — see below |
+| C6 `--n_epochs`/`begin_epoch` resume semantics | open |
+| C7 **re-run warm A/B at mvf 50** (match 66.36 conditions) | **done 2026-09-12** — no effect (B 66.08 ± 0.59 vs A 66.27 ± 0.45) |
+| C8 seed-replicate A control | **done 2026-09-12** — 66.27 ± 0.45, reproduces G04 exactly |
+| C9 ablate behavior vs text separately | **done 2026-09-12** — B 66.08, C 66.12, A 66.27: neither moves any metric |
+| C10 report all fixes back to the author | open |
+
+**Headline result — test set, calibrated:**
+
+| | A control | B behavior+text |
+|---|---|---|
+| Best test top-1 | **65.47** | 65.25 |
+| Best macro-F1 | 51.98 | **53.49** |
+| Best adjacent | 91.93 | **92.64** |
+
+**Verdict:** behavior+text does **not** improve top-1 under warm start (redundant with what the trained
+model reads from pixels) but **does** improve minority-class and ordinal performance — the documented
+largest quality gap. From scratch it is worth +1.76 to +2.61 top-1.
+
+**Caveat blocking interpretation:** these ran at `--max_video_frames 96`; the 66.36 headline was measured
+at 50. The A control's 65.47 (-0.89 vs 66.36) may be the frame cap, not a reproduction failure. Single
+seed throughout. Resolve C7 before comparing any of these numbers to 66.36.
+
+## Paper writing — plan after supervisor meeting 2026-09-08 (plan only, nothing implemented)
+
+Supervisor: **Sanchita Ghose** (spelling confirmed from the Zoom meeting record; supersedes the "Goes" flag above).
+Next review **Tue 2026-09-15, 7 PM**. Full plan in [`plan.md` §18](plan.md).
+
+| # | Task | Owner | Status |
+|---|---|---|---|
+| P1 | C7 matched re-run (behavior vs AV, mvf 50) — prerequisite for the results table | Yuvraj | **done 2026-09-12** — behavior branch: no effect; the paper's behavior claim becomes the late-fusion result (plan.md §19.6) |
+| P2 | Correct meeting misstatement: 65.47 is the AV control, behavior arm 65.25 (−0.22 top-1, +3.18 macro-F1) | Yuvraj | open |
+| P3 | Related work 9 → 15–20 citations | Yuvraj | **done 2026-09-08** — 21 bib entries, all cited; 2 entries carry TODOs (author list, volume) |
+| P4 | Preliminaries (~1 page) | Yuvraj | **done** — Yuvraj's section merged as §III; later sections reference its equations |
+| P5 | Model Evaluation section, metric-grouped + ablations + hard-category discussion | Yuvraj | **drafted 2026-09-08** in `papers/research/paper.tex` (Sections III–V, 8 tables); behavior row awaits C7 |
+| P6 | draw.io architecture diagram (non-AI) → `papers/research/figures/` + shared folder | Yuvraj | open |
+| P7 | Call Akshit tonight: his visual-emphasis variant + section split | Yuvraj | open |
+| P8 | Methodology section, 4 grouped components | Akshit | **first draft written 2026-09-08** (Section III, 4 subsections, 5 equations) — Akshit to revise; visual-emphasis variant commented out |
+| P9 | Conceptual diagram for Introduction | Yuvraj | open |
+| P10 | Feasibility note: retrain behavior stream on asynchronous-class recordings | Yuvraj | open |
+| P11 | Send data-collection asks (per-participant audio, breakout rooms, chat export) before Sanchita's 09-09 meeting | Yuvraj | open |
+
+## Session 2026-09-12 — full-clip audit and matched A/B/C at the video clock
+
+**Request:** use the complete video and complete audio of every clip, mapped 0→end, then train the
+EfficientFace AV model and the behavior model and report an absolute answer. Full detail in
+[`plan.md` §19](plan.md).
+
+| Item | Status |
+|---|---|
+| Probe all 11,311 source clips vs stored face arrays and wavs | **done** — max source duration **10.06 s**; 0 clips over 10.5 s; the "10 s" window is the whole clip; audio (431 mel frames) and video (50 frames @ 5 fps) already span 0→end and are pooled onto one clock |
+| Find any stream not on the full-clip clock | **found one** — behavior (OpenFace) was resampled to **15 steps** (1.5 fps) against 50-frame video, in every §16 run |
+| `--behavior_frames` (default = `--max_video_frames`), plumbed through opts / dataset / calibration / config identity | **done** (worktree) — 40 behavior tests + 3 new pass; step-to-frame offset ≤200 ms vs 667 ms before |
+| Seeded warm starts for behavior-only (4×448) and behavior+text (4×576) | **done** — `seed_warmstart.py`, both verified **max abs logit diff 0.0** vs E04 on real batches |
+| End-to-end smoke of all three arms through the runner (train → calibrate → JSON) | **done** |
+| Arm A audio+video EfficientFace × 3 seeds (G04 config, mvf 50) | **done** — **66.27 ± 0.45** test top-1 / 91.55 adj / 0.440 MAE / 52.31 macro-F1; every epoch bit-identical to the August G04 seeds |
+| Arm B + behavior (50-step clock) × 3 seeds | **done** — **66.08 ± 0.59** / 91.62 / 0.441 / 52.16: **B − A = −0.19, no effect on any metric** (C7 answered; §16.7's +3.18 macro-F1 was seed noise) |
+| Arm C + behavior + caption-text × 3 seeds (C9) | **done** — **66.12 ± 0.59** / 91.67 / 0.439 / 52.26: equal to A and B at every decoder; the caption stream adds nothing |
+| Results table, fixed decoder `refined_expected_thresholds`, 3-seed means ± sd | **done** — plan.md §19.5; `python AVTCA-collab-test/scripts/fullclip/collect.py [--markdown]` |
+| Modality ablations, all 9 runs | **done** — fusion − video-only **+0.74** mean, 8/9 ≥ 0; audio-only ≤ majority (50.27) on every run |
+| Segment transformer (our implementation of the ICMI tokenisation; 8 configs × 3 seeds, val-selected T7 d64 L2) | **done** — alone **67.0** test (thresholds) / 67.6 (argmax) with 22 features, = published 67.61; noisy across seeds (±3) and overfits by epoch 2–12 |
+| **Three-way fusion AV + transformer + GBM** (weights/thresholds on validation) | **done** — **70.29 ± 0.14** on the 3 A seeds, **70.15 ± 0.25** over all 8 neural checkpoints (min 69.68); weights 0.6/0.2/0.2 on 7 of 8; best and most stable number in the repo (plan.md §19.7) |
+| Two-way AV + transformer | done — 68.69 ± 2.08: the transformer's validation score is a poor weight guide (seed 1 picked 0.85/0.15 → 66.31); keep the GBM in the fusion |
+| A seed 1 calibrated test | **done** — 65.78 / 92.24 adj / 53.41 macro-F1, identical to G04 seed 1 (deterministic; proves worktree AV path == main tree) |
+| **Top-1 levers measured** (plan.md §19.6) on the G04-s1 checkpoint | **done** — neighbour-clip smoothing: null (65.16 vs 65.69); EM prior shift: hurts (62.85); oracle test-fit thresholds 67.82 (bound only); confusion: 531/774 errors in classes 1–2 |
+| OpenFace-statistics GBM alone (20 segments × mean/std of the 22-d series, CPU, no NN) | **done** — **67.15 test top-1** / 53.19 macro-F1, equals the pixel model and is 0.46 below the published best |
+| **Late fusion AV + GBM** (probability averaging, weight + thresholds selected on val) | **done, seed 1** — **70.12 test top-1** / 90.69 adj / 0.408 MAE / 53.62 macro-F1; robust over w 0.4–0.8 (69.1–70.1); +4.4 over AV alone, **+2.5 over the published best 67.61**. **Seeds 2 and 3 replicate: 69.28, 70.17** → **3-seed mean 69.86 ± 0.50** vs AV alone 66.27 ± 0.45 (+3.59) and published best 67.61 (+2.25). Also holds with arm B as the neural member: `B_beh_s1` 66.80 → **69.77**, `B_beh_s2` 66.22 → **70.04**. Four members, mean **69.80**. |

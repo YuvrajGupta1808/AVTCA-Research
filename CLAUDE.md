@@ -35,8 +35,8 @@ python -m pytest tests/ -v
 # Run a single test
 python -m pytest tests/test_model.py::TestMultiModalCNN::test_forward_smoke -v
 
-# Run Streamlit UI
-streamlit run ui/app.py
+# Run Streamlit engagement UI (must be inside the avtca env — needs facenet_pytorch/MTCNN)
+conda activate avtca && streamlit run ui/app.py
 
 # Preprocess RAVDESS (run once, in order)
 python preprocessing/ravdess/extract_audios.py
@@ -63,7 +63,7 @@ AVT-CA (Audio-Video Token Cross-Attention) fuses audio and video through a two-s
 2. Stage 2: deeper Conv1D on each modality
 3. Self-attention: `audioAttention` and `visualAttention` (MultiheadAttention, self-attention despite the cross-modal naming)
 4. Final cross-attention: `audioCrossAttention` and `visualCrossAttention`
-5. MaxPool each modality → concat → `Linear(256, n_classes)`
+5. Pool each modality over time (learned masked `AttentionPool` in the default `it_fusion_mode=modern`; MaxPool only on the `legacy` path) → concat → `Linear(256, n_classes)`
 
 **Fusion variants**: `lt` (late transformer, single cross-attention after stage2), `it` (intermediate token, described above), `ia` (intermediate attention-gate, non-standard — uses raw attention weights as a multiplicative gate, not recommended).
 
@@ -76,6 +76,8 @@ AVT-CA (Audio-Video Token Cross-Attention) fuses audio and video through a two-s
 - `--test` flag during `src/main.py` loads the `_best.pth` checkpoint from `result_path`. For standalone eval without retraining, use `src/evaluate.py` instead.
 - The `ia` fusion path has a known bug: `forward_feature_2` uses attention weights as a gate rather than the attended output. It does not affect `it` or `lt` runs.
 - Temporal mismatch (~11×) exists at intermediate cross-attention: audio has ~168 time frames after stage1; video has 15. The model learns cross-modal correlations despite this, but at mismatched granularity.
+- **EngageNet clips are ≤10.06 s — the "10 s" window is the whole clip.** `_croppad10s.wav` (full-length, uncapped ffmpeg) and `_facecroppad.npy` (5 fps, 50 frames, to the last frame) already span 0→end; `_adaptive_align_audio_to_video` pools all ~431 mel frames onto the 50 video tokens. Do not "extend" past 10 s — there is nothing there (plan.md §19.1).
+- **Behavior stream (collab worktree `AVTCA-collab-test`) must run at the video clock**: pass `--behavior_frames` = `--max_video_frames` (default since 2026-09-12). The branch originally hardcoded 15 steps (1.5 fps) against 50-frame video; every pre-2026-09-12 behavior number used that. Calibration must use the trained run's value.
 
 ## Known Issues (Open)
 See [docs/plan.md](docs/plan.md) for full detail.

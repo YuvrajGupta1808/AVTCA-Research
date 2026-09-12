@@ -325,16 +325,40 @@ AV context unchanged.
 **Measured cost: 4–7.5 points** — 62.90 AV-only vs 58.73 (scratch + SpecAugment) and 55.32 (pretrained).
 Disabled in all accuracy-facing runs via `--no_late_text_fusion`.
 
-**Important caveat on interpreting that number:** the text is **synthetic**. EngageNet ships no chat
-transcripts, so text is selected from three topic banks (`schrodinger`, `crypto`, `english`, 325 lines
-each) and assigned by hash at 40% coverage (4,480 of 11,206 clips). The ablation is clean, but it
-demonstrates that synthetic hash-assigned text injects noise — **not** that real chat would fail to help.
-Two plausible mechanisms: the text is only weakly label-correlated by construction, and the gate must
-learn to no-op on the 60% of clips with no text.
+**Correction (2026-08-17) — the earlier explanation of that cost was wrong.** The v1 chat text is not
+"weakly label-correlated": `chat_text.py` indexes the phrase banks **directly by the ground-truth label**
+(`load_chat_bank(topic)[f"label_{label}"][bucket]`), producing 792 unique strings that are 99.8%
+label-deterministic — a label oracle on the 40% covered clips (a BoW logistic regression on the v1 text
+alone scores 97–98% on held-out splits). The real reason accuracy still *dropped* is architectural:
+enabling `LateTextFusion` routes the pooled 256-d AV vector through a **randomly-initialized
+`av_context` Linear(256→128) bottleneck** before the classifier, destroying the warm-started AV
+representation at init. (The suspected hash/padding collision is cleared: `_hash_token` maps to
+1..4095, bucket 0 is padding-only.)
 
-**Recommendation (see `docs/professor_progress_brief.md` §5.4):** hold this component for the
-purpose-built corpus where real Zoom chat exists, rather than publishing a synthetic-text negative that
-would over-claim a fact about our text generator as a fact about text as a modality.
+### Text v2 (2026-08-17): label-free behavior captions + LateTextFusionV2
+
+The v1 leakage is fixed at the dataset and the model layer:
+
+- **Dataset** — `preprocessing/engagenet/behavior_caption.py` generates deterministic captions from each
+  clip's OpenFace `(300, 22)` AU/gaze/pose series (`datasets/EngageNet/behavior/`): tertile-binned
+  statistics (blink-onset rate, gaze dispersion/offset, head pitch/yaw/motion, AU12 smile, AU04 furrow,
+  AU25/26 mouth, overall expressiveness) mapped to phrases like *"frequent blinking, gaze drifting, head
+  tilted down, brow furrowed, face mostly still"*. Thresholds are fitted on the **training split only**
+  (`compute_caption_stats.py` → `behavior_caption_stats.json`); the caption API takes no label argument
+  anywhere. New annotation files `annotations_engagement_v2.txt` / `_v2_a10.txt` (columns 1–4
+  byte-identical to v1; v1 files untouched, backed up in `preprocessing/engagenet/backup_2026-08-17/`).
+  100% coverage, 6,614 unique captions; audit (`audit_text_leakage.py`): BoW text→label 61–63% vs ~50–53%
+  majority — legitimate behavioral correlation, not an oracle.
+- **Model** — `LateTextFusionV2` (`--text_fusion_arch residual`, `--late_text_fusion` now defaults OFF):
+  the classifier always sees the untouched 256-d `cat(audio_pooled, video_pooled)`; text adds
+  `zero_init_Linear(128→256)(text_context)` on top (embedding → biGRU → MHA with a projected AV query).
+  Enabling text is an **exact no-op at initialization** — verified by `tests/test_text_fusion_v2.py`
+  (bit-exact output match, and the full E04 state dict loads with 0 skipped tensors). The legacy arch is
+  kept loadable via `--text_fusion_arch legacy`.
+
+Honest framing for any resulting claim: captions are derived from video (via OpenFace), so their value is
+a longer temporal horizon (all 300 frames vs ≤96 sampled) plus a denoised structured summary — "text
+helps" is claimed only from the matched-seed T10 (AV control) vs T11 (text residual) comparison.
 
 ---
 
@@ -391,3 +415,100 @@ the F01/F02 vs G01/G02 choice.*
 > carry confounds (attention heads via batch size, learning rate across datasets, loss function via
 > heads/LR, class balancing via three co-varying settings) and one — audio span — compares different
 > checkpoints with all gaps inside the confidence interval. Full table in plan.md §13.12.
+
+### Behavior stream (OpenFace AUs) — temporal contract (2026-09-12)
+
+Lives in the collab worktree (`/home/922933190/AVTCA-collab-test`, branch `feat/behavior-text-fusion`,
+unmerged). Per clip, `datasets/EngageNet/behavior/<stem>.npy` holds OpenFace 2.x output for **every source
+frame** — `(T, 22)` = 17 AU intensities + gaze (x, y) + head pose (Rx, Ry, Rz); T is 300 at 30 fps and up to
+10,000 for the 1,038 clips encoded at a nominal 1000 fps.
+
+```
+OpenFace (T,22) ──resample_time(→ behavior_frames)──► (B, S, 22)
+      ──BehaviorEncoder: Conv1d(22→128,k3)+BN+ReLU → BiGRU(64×2) ──► tokens (B, S, 128)
+AV summary cat(audio_pooled, video_pooled) (B,256) ──Linear→(B,1,128) query
+      ──MultiheadAttention(query, tokens, tokens) ──► ctx (B,128)   [absent clip → learned missing token]
+raw clip-mean AU vector (B,22) ──Linear(22→64)+ReLU ──► skip (B,64)
+classifier_fused: Linear(256 + 128 + 64 → 4)  on  cat(av_pair, ctx, skip)      (+128 more with --text_fusion)
+```
+
+**Clock.** `S` = `--behavior_frames`; since 2026-09-12 it defaults to `--max_video_frames` (50), so
+behavior step *i* covers the same 200 ms window as face frame *i* (`extract_faces.py --target_fps 5`),
+within ≤ 200 ms at every source fps (plan.md §19.2). The branch as delivered hardcoded **15** — the RAVDESS
+frame count — which fed AUs at 1.5 fps against 5 fps video; every behavior number before 2026-09-12 was
+produced that way. The encoder is length-agnostic, so old checkpoints still load; the value is written to
+the run's `opts*.json` and calibration must read it back from there.
+
+**Warm start.** Adding the branch widens the classifier (256 → 448 / 576 inputs). `scripts/fullclip/
+seed_warmstart.py` copies the trained `classifier_1` into the AV columns of `classifier_fused` and zeroes
+the new columns, so the fused model's logits equal the AV model's at step 0 (verified 0.0 on real clips)
+and the behavior branch only enters through gradients. Behavior tokens are dense (no per-step padding);
+whole-clip absence (1.2% of clips with no face detected) is handled by the missing-modality token and a
+zeroed skip.
+
+### Late fusion with an OpenFace-statistics model (2026-09-12) — inference-time, no retraining
+
+The strongest EngageNet number in this repository is not a single network. It is a probability-level
+average of the AVT-CA model with a shallow classifier on clip-level OpenFace statistics:
+
+```
+per-frame OpenFace (T, 22) ──20 uniform segments──► [mean, std] per segment (20 × 44) ⊕ clip [mean, std] (44) = 924-d
+       ──HistGradientBoostingClassifier (train split only; 3 fits averaged)──► p_GBM (4)
+AVT-CA audio-visual model (any arm A/B/C checkpoint) ──softmax──► p_AV (4)
+p = w · p_AV + (1 − w) · p_GBM      w chosen on validation (0.7 on every seed so far)
+expected level E = Σ_c c · p_c  ──thresholds fit on validation──► class
+```
+
+A second behavior member (2026-09-12 evening, plan.md §19.7): our `SegmentTransformer` over the same 20
+segment tokens — Linear(44→64) + CLS + learned positions → 2 pre-norm encoder layers (8 heads, FFN 128,
+dropout 0.3) → LayerNorm → Linear(64→4), ~0.1 M parameters, trained with `OrdinalDistanceCrossEntropy`
+(`scripts/fullclip/segment_transformer.py`). Alone it scores 67.0 test (thresholds) / 67.6 (argmax).
+Three-way fusion `0.6·p_AV + 0.2·p_TF + 0.2·p_GBM` (weights val-selected, identical on 7 of 8 members):
+**70.29 ± 0.14** on the three A seeds, 70.15 ± 0.25 over all eight neural checkpoints.
+
+Measured on the test set (plan.md §19.6): AV alone 66.27 ± 0.45, GBM alone 66.05–67.15, two-way fused
+**69.86 ± 0.50** over three AV seeds (+2.25 over the published best 67.61). The members disagree on
+~22% of test clips and each is right on roughly half of those. The neural behavior branch (arm B) does
+not remove the gain (69.77 / 70.04 with B members), so the segment-statistics representation, not the
+raw AU series, is what the pixel model lacks. Scripts: `AVTCA-collab-test/scripts/fullclip/
+{behavior_only_probe,ensemble_probe,context_analysis}.py`; cached logits per run under `context/`.
+Not yet wired into `ui/inference.py`.
+
+## Streamlit Engagement UI (2026-08-12)
+
+`ui/app.py` (presentation) + `ui/inference.py` (pipeline). Serves the EngageNet engagement
+models; the RAVDESS emotion path was removed, not kept alongside.
+
+```mermaid
+flowchart TD
+    U[Uploaded video<br/>any length] --> P[probe_video<br/>fps, frame count, duration]
+    P --> W[plan_windows<br/>10 s windows, optional 50% hop]
+
+    W --> VI[window_frame_indices<br/>stride = round fps/5<br/>cap 96 frames]
+    VI --> FC[FaceCropper<br/>MTCNN → Haar → full frame<br/>224x224, BGR retained]
+    FC --> VT[video_tensor<br/>T,3,224,224 in 0..1]
+
+    U --> AW[extract_waveform<br/>ffmpeg, mono 22050 Hz]
+    AW --> AF[window_audio_features<br/>mel 64 bins, power_to_db ref=max<br/>3.6 s centre crop only for v12_05]
+
+    VT --> FW[forward_window<br/>MultiModalCNN, fusion=it, heads=8<br/>masks all-valid, batch of 1]
+    AF --> FW
+    FW --> D[decode<br/>softmax → expected class index<br/>digitize vs refined thresholds]
+    D --> S[summarize<br/>mean score, time per level,<br/>engaged fraction, highlights]
+    S --> UI[Timeline · distributions · per-window CSV]
+```
+
+**Contract fidelity.** The frame stride, channel order and audio span are copied from
+`preprocessing/engagenet/extract_faces.py`, `extract_audios_full.py` and
+`src/data/temporal.py` rather than re-derived. Verified bit-exact against the stored
+`*_facecroppad.npy` arrays — see [plan.md §14.3](plan.md) and the memory entry on the 5 fps
+stride.
+
+**Checkpoint registry.** `MODEL_REGISTRY` in `ui/inference.py` holds the curated best runs with
+their calibrated `refined_expected_thresholds` and reported metrics. Adding a run means adding
+its entry there; the UI never scans `results/` blindly, which is what let the old emotion UI
+offer checkpoints whose decoding contract it did not know.
+
+**Single-clip forward pass.** `forward_window` builds the batch-of-one equivalent of
+`collate_variable_length_batch`: all-True audio/video masks and true lengths, so the masking
+inside `forward_feature_3` behaves exactly as it does in evaluation.
