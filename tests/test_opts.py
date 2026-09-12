@@ -43,7 +43,8 @@ def test_defaults():
         assert opt.prediction_mode == 'argmax'
         assert opt.selection_min_delta == 0.0
         assert opt.selection_metric == 'top1_accuracy'
-        assert opt.late_text_fusion is True
+        assert opt.late_text_fusion is False
+        assert opt.text_fusion_arch == 'legacy'
 
 
 def test_invalid_dataset_rejected_by_cli():
@@ -185,6 +186,12 @@ def test_selection_min_delta_override():
     with patch('sys.argv', ['opts.py', '--selection_min_delta', '0.25']):
         opt = parse_opts()
         assert opt.selection_min_delta == 0.25
+
+
+def test_late_text_fusion_can_be_enabled():
+    with patch('sys.argv', ['opts.py', '--late_text_fusion']):
+        opt = parse_opts()
+        assert opt.late_text_fusion is True
 
 
 def test_late_text_fusion_can_be_disabled():

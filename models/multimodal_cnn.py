@@ -393,6 +393,53 @@ class LateTextFusion(nn.Module):
         return refined_context
 
 
+class LateTextFusionV2(nn.Module):
+    """Strictly additive text residual on the pooled audio-visual vector.
+
+    Unlike ``LateTextFusion`` (which routes the AV vector through a
+    randomly-initialized compression layer, scrambling warm-started features),
+    this leaves the 256-d AV vector untouched and adds a zero-initialized
+    projection of the text context on top. Enabling text is therefore an exact
+    no-op at initialization: an AV-only checkpoint keeps its function and the
+    text path only moves the output once gradients justify it.
+    """
+
+    def __init__(self, av_dim, embed_dim, vocab_size, num_heads):
+        super().__init__()
+        self.embedding = nn.Embedding(vocab_size, embed_dim, padding_idx=0)
+        self.encoder = nn.GRU(
+            input_size=embed_dim,
+            hidden_size=embed_dim // 2,
+            num_layers=1,
+            batch_first=True,
+            bidirectional=True,
+        )
+        self.query_proj = nn.Linear(av_dim, embed_dim)
+        self.readout = nn.MultiheadAttention(embed_dim, num_heads, batch_first=True)
+        self.out_proj = nn.Linear(embed_dim, av_dim)
+        nn.init.zeros_(self.out_proj.weight)
+        nn.init.zeros_(self.out_proj.bias)
+
+    def forward(self, av_vector, text_tokens=None, text_mask=None):
+        if text_tokens is None or text_mask is None:
+            return av_vector
+        valid_rows = text_mask.any(dim=1)
+        if not valid_rows.any():
+            return av_vector
+
+        text_embeddings = self.embedding(text_tokens[valid_rows])
+        encoded_text, _ = self.encoder(text_embeddings)
+        attended_text, _ = self.readout(
+            query=self.query_proj(av_vector[valid_rows]).unsqueeze(1),
+            key=encoded_text,
+            value=encoded_text,
+            key_padding_mask=~text_mask[valid_rows],
+        )
+        residual = torch.zeros_like(av_vector)
+        residual[valid_rows] = self.out_proj(attended_text.squeeze(1))
+        return av_vector + residual
+
+
 class MultiModalCNN(nn.Module):
     def __init__(
         self,
@@ -407,10 +454,15 @@ class MultiModalCNN(nn.Module):
         it_fusion_mode='modern',
         text_vocab_size=4096,
         late_text_fusion=True,
+        text_fusion_arch='legacy',
     ):
         super(MultiModalCNN, self).__init__()
         if fusion not in ['ia', 'it', 'lt']:
             raise ValueError(f'Unsupported fusion method "{fusion}". Expected one of: ia, it, lt')
+        if text_fusion_arch not in ['legacy', 'residual']:
+            raise ValueError(
+                f'Unsupported text_fusion_arch "{text_fusion_arch}". Expected one of: legacy, residual'
+            )
         if it_fusion_mode not in ['modern', 'legacy']:
             raise ValueError(f'Unsupported it_fusion_mode "{it_fusion_mode}". Expected one of: legacy, modern')
 
@@ -418,6 +470,7 @@ class MultiModalCNN(nn.Module):
         self.visual_backbone = visual_backbone
         self.it_fusion_mode = it_fusion_mode
         self.late_text_fusion = late_text_fusion
+        self.text_fusion_arch = text_fusion_arch
         if visual_backbone == 'efficientface':
             self.visual_model = EfficientFaceTemporal([4, 8, 4], [29, 116, 232, 464, 1024], num_classes, seq_length)
         elif visual_backbone == 'attention_local':
@@ -471,11 +524,14 @@ class MultiModalCNN(nn.Module):
         self.audioAttention  = MultiheadAttention(e_dim, num_heads)
         self.visualAttention = MultiheadAttention(e_dim, num_heads)
         if late_text_fusion:
-            self.av_context = nn.Sequential(
-                nn.Linear(e_dim * 2, e_dim),
-                nn.ReLU(inplace=True),
-            )
-            self.text_addon = LateTextFusion(e_dim, text_vocab_size, num_heads)
+            if text_fusion_arch == 'legacy':
+                self.av_context = nn.Sequential(
+                    nn.Linear(e_dim * 2, e_dim),
+                    nn.ReLU(inplace=True),
+                )
+                self.text_addon = LateTextFusion(e_dim, text_vocab_size, num_heads)
+            else:
+                self.text_addon = LateTextFusionV2(e_dim * 2, e_dim, text_vocab_size, num_heads)
 
         self.classifier_1 = nn.Sequential(
             nn.Linear(e_dim*2, num_classes),
@@ -487,6 +543,10 @@ class MultiModalCNN(nn.Module):
         return torch.ones(x_visual.shape[0], x_visual.shape[1], dtype=torch.bool, device=x_visual.device)
 
     def _visual_backbone_features(self, x_visual):
+        if x_visual.dim() == 3:
+            # Precomputed per-clip visual features, (B, T, C). The backbone is
+            # bypassed entirely; these go straight to the temporal conv stack.
+            return x_visual
         if x_visual.dim() == 5:
             batch_size, time_steps, channels, height, width = x_visual.shape
             flattened = x_visual.reshape(batch_size * time_steps, channels, height, width)
@@ -576,12 +636,14 @@ class MultiModalCNN(nn.Module):
             return self.forward_feature_3_legacy(x_audio, x_visual)
 
         x_audio = self.audio_model.forward_stage1(x_audio)
-        if x_visual.dim() == 5:
-            x_visual = self._visual_backbone_features(x_visual)
-            x_visual = self._visual_stage1(x_visual)
-        else:
+        if x_visual.dim() == 4:
+            # Legacy pre-flattened (B*T, 3, H, W) frames.
             x_visual = self.visual_model.forward_features(x_visual)
             x_visual = self.visual_model.forward_stage1(x_visual)
+        else:
+            # (B, T, 3, H, W) raw frames, or (B, T, C) precomputed features.
+            x_visual = self._visual_backbone_features(x_visual)
+            x_visual = self._visual_stage1(x_visual)
 
         video_mask = self._ensure_video_mask(x_visual if x_visual.dim() == 3 else x_visual.permute(0, 2, 1), video_mask)
         if video_lengths is None:
@@ -693,9 +755,12 @@ class MultiModalCNN(nn.Module):
 
         x = torch.cat((audio_pooled, video_pooled), dim=-1)
         if self.late_text_fusion:
-            av_context = self.av_context(x)
-            refined_context = self.text_addon(av_context, text_tokens=text_tokens, text_mask=text_mask)
-            x = torch.cat((av_context, refined_context), dim=-1)
+            if self.text_fusion_arch == 'legacy':
+                av_context = self.av_context(x)
+                refined_context = self.text_addon(av_context, text_tokens=text_tokens, text_mask=text_mask)
+                x = torch.cat((av_context, refined_context), dim=-1)
+            else:
+                x = self.text_addon(x, text_tokens=text_tokens, text_mask=text_mask)
         x1 = self.classifier_1(x)
         return x1
 

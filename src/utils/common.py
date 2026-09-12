@@ -333,7 +333,15 @@ def save_checkpoint(state, is_best, opt):
         raise
     if is_best:
         shutil.copyfile(ckpt_path, best_path)
-    return {'checkpoint': ckpt_path, 'best': best_path if is_best else None}
+    epoch_path = None
+    if getattr(opt, 'save_every_epoch', False):
+        epoch = state.get('epoch')
+        if isinstance(epoch, int):
+            epoch_dir = os.path.join(os.path.dirname(ckpt_path), 'epochs')
+            os.makedirs(epoch_dir, exist_ok=True)
+            epoch_path = os.path.join(epoch_dir, 'epoch_{:03d}.pth'.format(epoch))
+            shutil.copyfile(ckpt_path, epoch_path)
+    return {'checkpoint': ckpt_path, 'best': best_path if is_best else None, 'epoch': epoch_path}
 
 
 def adjust_learning_rate(optimizer, epoch, opt):

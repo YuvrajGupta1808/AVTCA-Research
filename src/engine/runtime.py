@@ -73,6 +73,7 @@ CONFIG_IDENTITY_KEYS = [
     'max_text_tokens',
     'text_vocab_size',
     'late_text_fusion',
+    'text_fusion_arch',
 ]
 
 CONFIG_IDENTITY_DEFAULTS = {
@@ -95,6 +96,7 @@ CONFIG_IDENTITY_DEFAULTS = {
     'max_text_tokens': 32,
     'text_vocab_size': 4096,
     'late_text_fusion': True,
+    'text_fusion_arch': 'legacy',
     'optimizer': 'sgd',
     'momentum': 0.9,
     'dampening': 0.9,
