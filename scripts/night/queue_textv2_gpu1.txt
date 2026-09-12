@@ -1,0 +1,8 @@
+# TEXT-V2 MATCHED COMPARISON - GPU 1 (2026-08-17)
+# See queue_textv2_gpu0.txt for design. This queue holds the remaining seeds.
+
+train T11_textres_mvf96_s2 --annotation_path /home/922933190/AVTCA-Research/preprocessing/engagenet/annotations_engagement_v2_a10.txt --late_text_fusion --text_fusion_arch residual --max_video_frames 96 --learning_rate 0.00005 --lr_scheduler step --n_epochs 8 --manual_seed 2
+
+train T10_v2ctrl_mvf96_s3 --annotation_path /home/922933190/AVTCA-Research/preprocessing/engagenet/annotations_engagement_v2_a10.txt --max_video_frames 96 --learning_rate 0.00005 --lr_scheduler step --n_epochs 8 --manual_seed 3
+
+train T11_textres_mvf96_s3 --annotation_path /home/922933190/AVTCA-Research/preprocessing/engagenet/annotations_engagement_v2_a10.txt --late_text_fusion --text_fusion_arch residual --max_video_frames 96 --learning_rate 0.00005 --lr_scheduler step --n_epochs 8 --manual_seed 3

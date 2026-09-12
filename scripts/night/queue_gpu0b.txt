@@ -1,0 +1,12 @@
+# PHASE 1 - GPU 0, second worker (memory-gated: waits for room before starting)
+#
+# G08 - LOSS FUNCTION. G01 with plain cross-entropy instead of ordinal
+#       distance. plan.md 13.12 marks the existing loss table CONFOUNDED
+#       ("CE runs h4, ordinal runs h8, LRs differ; direction consistent across
+#       4 runs but not isolated"). G01 vs G08 differ in the loss and nothing
+#       else, which makes the comparison citeable for the first time.
+train G08_mvf50_loss_ce --max_video_frames 50 --learning_rate 0.00005 --lr_scheduler step --n_epochs 6 --loss ce
+
+# G13 - LABEL SMOOTHING. G01 with smoothing off. Never isolated in this repo;
+#       0.1 has been carried as an unexamined default in every run.
+train G13_mvf50_nosmooth --max_video_frames 50 --learning_rate 0.00005 --lr_scheduler step --n_epochs 6 --label_smoothing 0.0

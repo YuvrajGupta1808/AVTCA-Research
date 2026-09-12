@@ -1,0 +1,3 @@
+# PHASE 2 - GPU 1 (auto-generated)
+train G04_mvf50_balsampler_sqrt_seed3 --max_video_frames 50 --learning_rate 0.00005 --lr_scheduler step --n_epochs 6 --class_balance_sampler sqrt_inverse --manual_seed 3
+ensemble F03_ensemble

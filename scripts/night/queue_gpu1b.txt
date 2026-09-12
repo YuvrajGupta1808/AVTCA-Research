@@ -1,0 +1,12 @@
+# PHASE 1 - GPU 1, second worker (memory-gated: waits for room before starting)
+#
+# G09 - ORDINAL WEIGHT, third point. G01 uses 0.15 and G07 uses 0.35; this adds
+#       0.60. Together they give a proper three-point sweep of the ordinal
+#       distance penalty at otherwise identical settings — the ordinal loss is
+#       central to the paper's framing and has never been swept cleanly.
+train G09_mvf50_ordw060 --max_video_frames 50 --learning_rate 0.00005 --lr_scheduler step --n_epochs 6 --ordinal_distance_weight 0.60
+
+# G12 - EMA. G01 with an exponential moving average of the weights. Cheap
+#       regularisation that targets the epoch-3 overfitting seen throughout the
+#       E04 lineage, from a different direction than G02's temporal crop.
+train G12_mvf50_ema999 --max_video_frames 50 --learning_rate 0.00005 --lr_scheduler step --n_epochs 6 --ema_decay 0.999

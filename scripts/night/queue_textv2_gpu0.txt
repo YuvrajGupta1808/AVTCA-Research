@@ -1,0 +1,18 @@
+# TEXT-V2 MATCHED COMPARISON - GPU 0 (2026-08-17)
+# Question: does label-free behavior-caption text (annotations_engagement_v2_a10,
+# LateTextFusionV2 zero-init residual) beat the AV-only control?
+# Both arms: warm start from E04 (66.36) via model.pth, G00 config
+# (mvf 96, lr 5e-5, step, 8 epochs), identical except the text flags.
+# 3 seeds per arm; seed sd on this pipeline is ~0.45 (docs/memory.md).
+# NOTE: run workers with GPU_FREE_MIB=19500 — mvf 96 needs ~19.3 GB.
+
+train T10_v2ctrl_mvf96_s1 --annotation_path /home/922933190/AVTCA-Research/preprocessing/engagenet/annotations_engagement_v2_a10.txt --max_video_frames 96 --learning_rate 0.00005 --lr_scheduler step --n_epochs 8 --manual_seed 1
+
+train T11_textres_mvf96_s1 --annotation_path /home/922933190/AVTCA-Research/preprocessing/engagenet/annotations_engagement_v2_a10.txt --late_text_fusion --text_fusion_arch residual --max_video_frames 96 --learning_rate 0.00005 --lr_scheduler step --n_epochs 8 --manual_seed 1
+
+train T10_v2ctrl_mvf96_s2 --annotation_path /home/922933190/AVTCA-Research/preprocessing/engagenet/annotations_engagement_v2_a10.txt --max_video_frames 96 --learning_rate 0.00005 --lr_scheduler step --n_epochs 8 --manual_seed 2
+
+# Requeued 2026-08-17 18:2x: first attempt OOM'd in a memory-gate race while the
+# collab S3 chain stage transiently released GPU 0. run_job.sh only skips on
+# DONE, so this line reruns it cleanly.
+train T10_v2ctrl_mvf96_s1 --annotation_path /home/922933190/AVTCA-Research/preprocessing/engagenet/annotations_engagement_v2_a10.txt --max_video_frames 96 --learning_rate 0.00005 --lr_scheduler step --n_epochs 8 --manual_seed 1
