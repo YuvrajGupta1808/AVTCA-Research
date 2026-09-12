@@ -110,11 +110,14 @@ def collate_variable_length_batch(
     audio_lengths = []
     video_lengths = []
     text_list = []
+    behavior_list = []
+    behavior_present = []
     has_text_field = False
+    has_behavior_field = bool(batch) and len(batch[0]) >= 8
 
     for sample in batch:
-        if len(sample) == 6:
-            audio_features, video_frames, target, audio_len, video_len, text = sample
+        if len(sample) >= 6:
+            audio_features, video_frames, target, audio_len, video_len, text = sample[:6]
             has_text_field = True
         else:
             audio_features, video_frames, target, audio_len, video_len = sample
@@ -143,6 +146,9 @@ def collate_variable_length_batch(
         video_lengths.append(int(video.shape[0]))
         if has_text_field:
             text_list.append(_encode_text(text, max_text_tokens=max_text_tokens, text_vocab_size=text_vocab_size))
+        if has_behavior_field:
+            behavior_list.append(torch.as_tensor(sample[6], dtype=torch.float32))
+            behavior_present.append(bool(sample[7]))
 
     max_audio = max(audio_lengths) if audio_lengths else 0
     max_video = max(video_lengths) if video_lengths else 0
@@ -175,8 +181,15 @@ def collate_variable_length_batch(
         torch.stack(audio_masks, dim=0),
         torch.stack(video_masks, dim=0),
     )
+    behavior_extra = ()
+    if has_behavior_field:
+        behavior_extra = (
+            torch.stack(behavior_list, dim=0),
+            torch.tensor(behavior_present, dtype=torch.bool),
+        )
+
     if not has_text_field:
-        return collated
+        return collated + behavior_extra
 
     max_text = max((text.shape[0] for text in text_list), default=0)
     max_text = max(max_text, 1)
@@ -194,4 +207,4 @@ def collate_variable_length_batch(
     return collated + (
         torch.stack(padded_text, dim=0),
         torch.stack(text_masks, dim=0),
-    )
+    ) + behavior_extra

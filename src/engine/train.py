@@ -58,10 +58,12 @@ def build_model_ema(opt, model):
 def _unpack_multimodal_batch(batch):
     if len(batch) == 7:
         audio_inputs, visual_inputs, targets, audio_lengths, video_lengths, audio_mask, video_mask = batch
-        return audio_inputs, visual_inputs, targets, audio_lengths, video_lengths, audio_mask, video_mask, None, None
+        return audio_inputs, visual_inputs, targets, audio_lengths, video_lengths, audio_mask, video_mask, None, None, None, None
     if len(batch) == 9:
         audio_inputs, visual_inputs, targets, audio_lengths, video_lengths, audio_mask, video_mask, text_tokens, text_mask = batch
-        return audio_inputs, visual_inputs, targets, audio_lengths, video_lengths, audio_mask, video_mask, text_tokens, text_mask
+        return audio_inputs, visual_inputs, targets, audio_lengths, video_lengths, audio_mask, video_mask, text_tokens, text_mask, None, None
+    if len(batch) == 11:
+        return tuple(batch)
     raise ValueError(f'Unexpected multimodal batch size: {len(batch)}')
 
 
@@ -146,7 +148,7 @@ def train_epoch_multimodal(epoch, data_loader, model, criterion, optimizer, opt,
     optimizer.zero_grad()
     processed_batches = 0
     for i, batch in enumerate(data_loader):
-        audio_inputs, visual_inputs, targets, audio_lengths, video_lengths, audio_mask, video_mask, text_tokens, text_mask = _unpack_multimodal_batch(batch)
+        audio_inputs, visual_inputs, targets, audio_lengths, video_lengths, audio_mask, video_mask, text_tokens, text_mask, behavior_feats, behavior_present = _unpack_multimodal_batch(batch)
         if max_batches and i >= max_batches:
             break
         processed_batches += 1
@@ -169,6 +171,9 @@ def train_epoch_multimodal(epoch, data_loader, model, criterion, optimizer, opt,
                     if text_tokens is not None:
                         text_tokens = torch.cat((text_tokens, text_tokens, text_tokens), dim=0)
                         text_mask = torch.cat((text_mask, text_mask, text_mask), dim=0)
+                    if behavior_feats is not None:
+                        behavior_feats = torch.cat((behavior_feats, behavior_feats, behavior_feats), dim=0)
+                        behavior_present = torch.cat((behavior_present, behavior_present, behavior_present), dim=0)
                     shuffle = torch.randperm(audio_inputs.size()[0])
                     audio_inputs = audio_inputs[shuffle]
                     visual_inputs = visual_inputs[shuffle]
@@ -180,7 +185,10 @@ def train_epoch_multimodal(epoch, data_loader, model, criterion, optimizer, opt,
                     if text_tokens is not None:
                         text_tokens = text_tokens[shuffle]
                         text_mask = text_mask[shuffle]
-                    
+                    if behavior_feats is not None:
+                        behavior_feats = behavior_feats[shuffle]
+                        behavior_present = behavior_present[shuffle]
+
                 elif opt.mask == 'softhard':
                     coefficients = torch.randint(low=0, high=100,size=(audio_inputs.size(0),1,1))/100
                     vision_coefficients = 1 - coefficients
@@ -198,6 +206,9 @@ def train_epoch_multimodal(epoch, data_loader, model, criterion, optimizer, opt,
                     if text_tokens is not None:
                         text_tokens = torch.cat((text_tokens, text_tokens, text_tokens, text_tokens), dim=0)
                         text_mask = torch.cat((text_mask, text_mask, text_mask, text_mask), dim=0)
+                    if behavior_feats is not None:
+                        behavior_feats = torch.cat((behavior_feats, behavior_feats, behavior_feats, behavior_feats), dim=0)
+                        behavior_present = torch.cat((behavior_present, behavior_present, behavior_present, behavior_present), dim=0)
                     shuffle = torch.randperm(audio_inputs.size()[0])
                     audio_inputs = audio_inputs[shuffle]
                     visual_inputs = visual_inputs[shuffle]
@@ -209,8 +220,11 @@ def train_epoch_multimodal(epoch, data_loader, model, criterion, optimizer, opt,
                     if text_tokens is not None:
                         text_tokens = text_tokens[shuffle]
                         text_mask = text_mask[shuffle]
-   
-  
+                    if behavior_feats is not None:
+                        behavior_feats = behavior_feats[shuffle]
+                        behavior_present = behavior_present[shuffle]
+
+
         audio_inputs  = audio_inputs.to(opt.device)
         visual_inputs = visual_inputs.to(opt.device)
         audio_lengths = audio_lengths.to(opt.device)
@@ -220,6 +234,9 @@ def train_epoch_multimodal(epoch, data_loader, model, criterion, optimizer, opt,
         if text_tokens is not None:
             text_tokens = text_tokens.to(opt.device)
             text_mask = text_mask.to(opt.device)
+        if behavior_feats is not None:
+            behavior_feats = behavior_feats.to(opt.device)
+            behavior_present = behavior_present.to(opt.device)
 
         if i == 0 and epoch == 1:
             print(f'  [shape] audio={tuple(audio_inputs.shape)}  '
@@ -237,6 +254,8 @@ def train_epoch_multimodal(epoch, data_loader, model, criterion, optimizer, opt,
             video_lengths=video_lengths,
             text_tokens=text_tokens,
             text_mask=text_mask,
+            behavior_feats=behavior_feats,
+            behavior_present=behavior_present,
         )
         loss = criterion(outputs, targets)
         if not torch.isfinite(loss):

@@ -384,7 +384,7 @@ def evaluate_model(
     with torch.no_grad():
         max_batches = getattr(opt, 'max_val_batches', 0) if split_name == 'validation' else 0
         for batch_idx, batch in enumerate(data_loader):
-            inputs_audio, inputs_visual, targets, audio_lengths, video_lengths, audio_mask, video_mask, text_tokens, text_mask = _unpack_multimodal_batch(batch)
+            inputs_audio, inputs_visual, targets, audio_lengths, video_lengths, audio_mask, video_mask, text_tokens, text_mask, behavior_feats, behavior_present = _unpack_multimodal_batch(batch)
             if max_batches and batch_idx >= max_batches:
                 break
             if modality == 'audio':
@@ -420,6 +420,9 @@ def evaluate_model(
             if text_tokens is not None:
                 text_tokens = text_tokens.to(opt.device)
                 text_mask = text_mask.to(opt.device)
+            if behavior_feats is not None:
+                behavior_feats = behavior_feats.to(opt.device)
+                behavior_present = behavior_present.to(opt.device)
             outputs = model(
                 inputs_audio,
                 inputs_visual,
@@ -429,6 +432,8 @@ def evaluate_model(
                 video_lengths=video_lengths,
                 text_tokens=text_tokens,
                 text_mask=text_mask,
+                behavior_feats=behavior_feats,
+                behavior_present=behavior_present,
             )
             loss = criterion(outputs, targets)
 
