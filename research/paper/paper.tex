@@ -93,7 +93,7 @@ Engagement recognition from video has been reviewed in \cite{qarbal2025review}, 
 
 \subsection{Engagement Recognition on EngageNet}
 
-The EngageNet baselines \cite{singh2023engagenet} are an LSTM, a CNN-LSTM and a TCN on OpenFace gaze, head-pose and action-unit features (61.84, 65.16 and 65.60\% test accuracy), a Transformer on the same features (67.61\%), a Transformer on MARLIN features (65.2\%), and a Transformer that fuses both (66.5\%). The Transformer tokenizes each clip into 20 uniform segments and describes each segment by the mean and standard deviation of its features. Validation accuracy is 1.5--5.2 points higher than test accuracy for the same baseline model. Later work reports validation accuracy only: TCCT-Net, a two-stream convolution-transformer network on OpenFace head-pose signals, reports 68.91\% \cite{vedernikov2024tcct}; an ordinal spatial-temporal graph network on facial landmarks reports 71.24\% \cite{abedi2024stgcn}; PriorNet, a prior-guided face-video model, reports 73.58\% \cite{vedernikov2026priornet}; and a variational encoder with multiple decoders, which has an audio branch for other datasets, reports 68.98\% on EngageNet with video only \cite{augusma2026vemd}. Vision-language models have been used to refine noisy EngageNet labels, improving three of six feature settings by up to 1.21 points \cite{vedernikov2025vlmnoise}. In our work, we report accuracy on the official test split, which makes our results comparable with the six baselines, and we add the audio track, which none of these studies uses.
+The EngageNet baselines \cite{singh2023engagenet} are an LSTM, a CNN-LSTM and a TCN on OpenFace gaze, head-pose and action-unit features (61.84, 65.16 and 65.60\% test accuracy), a Transformer on the same features (67.61\%), a Transformer on MARLIN features (65.2\%), and a Transformer that fuses both (66.5\%). The Transformer tokenizes each clip into 20 uniform segments and describes each segment by the mean and standard deviation of its features. With gaze, head-pose and action-unit features, validation accuracy is 1.5--5.2 points higher than test accuracy for the same baseline model. Later work reports validation accuracy only: TCCT-Net, a two-stream convolution-transformer network on OpenFace head-pose signals, reports 68.91\% \cite{vedernikov2024tcct}; an ordinal spatial-temporal graph network on facial landmarks reports 71.24\% \cite{abedi2024stgcn}; PriorNet, a prior-guided face-video model, reports 73.58\% \cite{vedernikov2026priornet}; and a variational encoder with multiple decoders, which has an audio branch for other datasets, reports 68.98\% on EngageNet with video only \cite{augusma2026vemd}. Vision-language models have been used to refine noisy EngageNet labels, improving three of six feature settings by up to 1.21 points \cite{vedernikov2025vlmnoise}. In our work, we report accuracy on the official test split, which makes our results comparable with the six baselines, and we add the audio track, which none of these studies uses.
 
 \subsection{Audio-Visual Multimodal Learning}
 
@@ -271,7 +271,7 @@ Top-1 accuracy is the fraction of test clips whose predicted level matches the a
 \begin{equation}
 \mathrm{Top\text{-}1} = \frac{1}{N} \sum_{i=1}^{N} \mathbf{1}\!\left[\hat{y}_i = y_i\right].
 \end{equation}
-It is the metric reported by every EngageNet study reviewed in Section~\ref{sec:relwork}, and it is therefore the metric used for the comparison in Table~\ref{tab_baselines}. A high value is preferred. It scores a prediction one level from the truth in the same way as a prediction three levels from the truth.
+It is the metric reported by every EngageNet study reviewed in Section~\ref{sec:relwork}, and it is therefore the metric used for the comparison in Fig.~\ref{fig_results}. A high value is preferred. It scores a prediction one level from the truth in the same way as a prediction three levels from the truth.
 
 \subsection{Adjacent Accuracy}
 
@@ -299,41 +299,14 @@ where $P_k$ and $R_k$ are the precision and recall of level $k$. Because it weig
 
 \subsection{Quantitative Study Result Analysis}
 
-\begin{table}[!t]
-\setlength{\tabcolsep}{3pt}
-\renewcommand{\arraystretch}{1.2}
-\caption{Test Top-1 Accuracy on EngageNet Compared With the Published Test-Split Baselines. G, HP and AU Denote Gaze, Head Pose and Action-Unit Features}
-\label{tab_baselines}
-\centering
-\begin{tabular}{llc}
-\hline
-Model & Input features & Top-1 (\%)\\
-\hline
-Majority-class predictor & -- & 50.27\\
-LSTM \cite{singh2023engagenet} & G+HP+AU & 61.84\\
-CNN-LSTM \cite{singh2023engagenet} & G+HP+AU & 65.16\\
-Transformer \cite{singh2023engagenet} & MARLIN & 65.2\\
-TCN \cite{singh2023engagenet} & G+HP+AU & 65.60\\
-Transformer fusion \cite{singh2023engagenet} & G+HP+AU+MARLIN & 66.5\\
-Transformer \cite{singh2023engagenet} & G+HP+AU & 67.61\\
-\hline
-Network, video only & frames & 65.28 $\pm$ 0.53\\
-Audio-visual net. (A) & frames + audio & 66.27 $\pm$ 0.45\\
-Gradient boosting (B) & AU+G+HP & 66.27\\
-Segment Transformer (B) & AU+G+HP & 66.99 $\pm$ 0.93\\
-\textbf{\ournet} (A+B+C) & all & \textbf{70.29 $\pm$ 0.14}\\
-\hline
-\end{tabular}
-\end{table}
-
 \begin{figure}[!t]
 \centering
 \input{figures/fig_results}
-\caption{Test top-1 accuracy on EngageNet. Grey: published baselines \cite{singh2023engagenet}; the dashed line marks the best of them (67.61\%). Blue: our single models. Orange: probability-level fusions. Error bars are standard deviations over three seeds; the gradient-boosting model is a single averaged model.}
+\caption{Test top-1 accuracy on EngageNet compared with the published test-split baselines. Grey: baselines as reported in \cite{singh2023engagenet}, all video-only (we did not re-run them); G, HP and AU denote gaze, head-pose and action-unit features, and the Transformer fusion uses G+HP+AU and MARLIN features. For the LSTM we show the G+HP+AU result used in the comparison of \cite{singh2023engagenet}; its best test result there is 62.46\% with head pose only. The dashed line marks the best baseline (67.61\%). Blue: our single models. Orange: probability-level fusions of our models, the last being \ournet. Error bars are standard deviations over three seeds; the gradient-boosting model is a single averaged model.}
 \label{fig_results}
 \end{figure}
 
-As mentioned in the above subsections, we compared \ournet{} and its components with the six baselines released with EngageNet and present the results in Table~\ref{tab_baselines} and Fig.~\ref{fig_results}. These baselines are the published EngageNet results on the official test split; the later results reviewed in Section~\ref{sec:relwork} are on the validation split and are not comparable. \ournet{} achieves the highest top-1 accuracy, 70.29 $\pm$ 0.14\%, which is 2.68 points above the best baseline (67.61\%). The audio-visual network alone reaches 66.27 $\pm$ 0.45\%, which is above the LSTM, CNN-LSTM, TCN and MARLIN-Transformer baselines and 1.34 points below the best baseline. The gradient-boosting model and the segment Transformer, which use a 22-dimensional subset of the 98-dimensional OpenFace features of the best baseline, reach 66.27\% and 66.99\%, the same range as the whole network. The fusion gain comes from errors that the models do not share: on seed 1 the network is wrong on 35.9\% of the test clips and the gradient-boosting model on 33.5\%, but both are wrong on only 23.5\%.
+As mentioned in the above subsections, we compared \ournet{} and its components with the six baselines released with EngageNet and present the results in Fig.~\ref{fig_results}. These baselines are the published EngageNet results on the official test split; the later results reviewed in Section~\ref{sec:relwork} are on the validation split and are not comparable. \ournet{} achieves the highest top-1 accuracy, 70.29 $\pm$ 0.14\%, which is 2.68 points above the best baseline (67.61\%). The audio-visual network alone reaches 66.27 $\pm$ 0.45\%, which is above the LSTM, CNN-LSTM, TCN and MARLIN-Transformer baselines and 1.34 points below the best baseline. The gradient-boosting model and the segment Transformer, which use a 22-dimensional subset of the 98-dimensional OpenFace features of the best baseline, reach 66.27\% and 66.99\%, the same range as the whole network. The fusion gain comes from errors that the models do not share: on seed 1 the network is wrong on 35.9\% of the test clips and the gradient-boosting model on 33.5\%, but both are wrong on only 23.5\%.
 
 \begin{table}[!t]
 \setlength{\tabcolsep}{3pt}
