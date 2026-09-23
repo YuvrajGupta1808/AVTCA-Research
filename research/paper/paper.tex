@@ -13,6 +13,8 @@
 \usepackage{amsmath}
 \usepackage{amssymb}
 \usepackage{algorithmic}
+\renewcommand{\algorithmicrequire}{\textbf{Input:}}
+\renewcommand{\algorithmicensure}{\textbf{Output:}}
 \usepackage{algorithm}
 \usepackage{tikz}
 \usetikzlibrary{positioning,calc,decorations.pathreplacing}
@@ -107,44 +109,44 @@ The four engagement levels are ordered. CMOSE proposes MocoRank, a training mech
 \subsection{Multi-Head Cross-Attention}
 \label{sec:prelim_mha}
 
-Let the audio stream be $X_a \in \mathbb{R}^{T_a \times d_a}$ and the video stream be $X_v \in \mathbb{R}^{T_v \times d_v}$, where $T_a$ and $T_v$ are the number of time steps produced by each encoder and $d_a$ and $d_v$ are their feature sizes. Scaled dot-product attention maps a query matrix $Q$, a key matrix $K$ and a value matrix $V$ to
+Cross-attention, as used for audio-visual fusion in AVT-CA \cite{venkatraman2025avtca}, lets the time steps of one stream attend to the time steps of the other stream. Let the audio stream be $X_a \in \mathbb{R}^{T_a \times d_a}$ and the video stream be $X_v \in \mathbb{R}^{T_v \times d_v}$, where $T_a$ and $T_v$ are the number of time steps produced by each encoder and $d_a$ and $d_v$ are their feature sizes. Scaled dot-product attention maps a query matrix $Q$, a key matrix $K$ and a value matrix $V$ to an output using the following equation,
 \begin{equation}
 \mathrm{Att}(Q,K,V) = \mathrm{softmax}\!\left(\frac{QK^{\top}}{\sqrt{d_h}}\right) V
 \end{equation}
-where $d_h = d_o / h$ is the size of one of the $h$ attention heads and $d_o$ is the output size. Multi-head attention applies this operation $h$ times with separate learned projections and concatenates the results,
+Here, $d_h = d_o / h$ is the size of one of the $h$ attention heads and $d_o$ is the output size. Multi-head attention, which applies this operation $h$ times with separate learned projections and concatenates the results, is calculated as,
 \begin{equation}
 \mathrm{head}_i = \mathrm{Att}\!\left(X_q W_i^{Q},\; X_k W_i^{K},\; X_k W_i^{V}\right)
 \end{equation}
 \begin{equation}
 \mathrm{MHA}(X_q, X_k) = \left[\mathrm{head}_1, \ldots, \mathrm{head}_h\right] W^{O}
 \end{equation}
-where $X_q$ supplies the queries and $X_k$ supplies the keys and the values. The projections are $W_i^{Q} \in \mathbb{R}^{d_q \times d_h}$, $W_i^{K}, W_i^{V} \in \mathbb{R}^{d_k \times d_h}$ and $W^{O} \in \mathbb{R}^{d_o \times d_o}$, so the two streams may enter with different feature sizes. In cross-attention the queries and the keys come from different streams, and the two directions with residual connections are
+Here, $X_q$ supplies the queries, $X_k$ supplies the keys and the values, and $\left[\mathrm{head}_1, \ldots, \mathrm{head}_h\right]$ denotes the concatenation of the $h$ head outputs. The projections are $W_i^{Q} \in \mathbb{R}^{d_q \times d_h}$, $W_i^{K}, W_i^{V} \in \mathbb{R}^{d_k \times d_h}$ and $W^{O} \in \mathbb{R}^{d_o \times d_o}$, so the two streams may enter with different feature sizes. In cross-attention, the queries and the keys come from different streams, and the two directions with residual connections are calculated as,
 \begin{align}
 \tilde{X}_a &= X_a + \mathrm{MHA}(X_a, X_v) \label{eq:xattn_a}\\
 \tilde{X}_v &= X_v + \mathrm{MHA}(X_v, X_a) \label{eq:xattn_v}
 \end{align}
-The attention matrix in (\ref{eq:xattn_a}) has shape $T_a \times T_v$, so the two lengths do not have to match for the operation to be defined; they do have to describe the same span of time.
+Here, $\tilde{X}_a$ and $\tilde{X}_v$ are the audio and video streams after the exchange. The attention matrix in (\ref{eq:xattn_a}) has shape $T_a \times T_v$, so the two lengths do not have to match for the operation to be defined; they do have to describe the same span of time. In this work, we use multi-head attention with $h = 8$ heads in both directions at each of the three cross-modal attention stages of the audio-visual network, and before the first exchange we pool the audio tokens of each clip onto the visual frame grid of the same clip (Section~\ref{sec:method_av}).
 
 \subsection{Ordinal Decoding}
 \label{sec:prelim_ordinal}
 
-We write the label set as $\mathcal{L} = \{0, 1, \ldots, K-1\}$ with $K = 4$, where larger values mean higher engagement. For a clip with label $y$, the model produces logits $z \in \mathbb{R}^{K}$ and class probabilities $p_k = \exp(z_k) / \sum_{j} \exp(z_j)$. The usual decision rule takes the largest probability,
+The four engagement levels are ordered, and this order can be used when the class probabilities are decoded and when the network is trained. We write the label set as $\mathcal{L} = \{0, 1, \ldots, K-1\}$ with $K = 4$, where larger values mean higher engagement. For a clip with label $y$, the model produces logits $z \in \mathbb{R}^{K}$ and class probabilities $p_k = \exp(z_k) / \sum_{j} \exp(z_j)$. The usual decision rule takes the largest probability,
 \begin{equation}
 \hat{y} = \arg\max_{k} \; p_k \label{eq:argmax}
 \end{equation}
-which uses the value of each probability but not the position of each class on the scale. An ordered alternative first reduces the probability vector to the expected level
+Here, $\hat{y}$ is the predicted level. This rule uses the value of each probability but not the position of each class on the scale. In order to use the position of each class, an ordered alternative first reduces the probability vector to the expected level using the following equation,
 \begin{equation}
 \mu = \sum_{k=0}^{K-1} k \, p_k \label{eq:mu}
 \end{equation}
-and then cuts it with increasing thresholds $\tau_1 < \tau_2 < \tau_3$,
+Here, $\mu$ is a continuous value in $[0, K-1]$. The expected level is then cut with increasing thresholds $\tau_1 < \tau_2 < \tau_3$, and the predicted level is calculated as,
 \begin{equation}
 \hat{y} = \sum_{m=1}^{K-1} \mathbf{1}\!\left[\mu \geq \tau_m\right] \label{eq:thresh}
 \end{equation}
-where $\mathbf{1}[\cdot]$ is the indicator function. The thresholds are fitted on the validation split and are not learned during training. During training, the order can be used by adding to the cross-entropy loss $\mathcal{L}_{\mathrm{CE}}$ a penalty that grows with the distance between the predicted and the true level,
+Here, $\mathbf{1}[\cdot]$ is the indicator function, so $\hat{y}$ is the number of thresholds that $\mu$ reaches. The thresholds are fitted on the validation split and are not learned during training. During training, the order can be used by adding to the cross-entropy loss $\mathcal{L}_{\mathrm{CE}}$ a penalty that grows with the distance between the predicted and the true level, using the following equation,
 \begin{equation}
 \mathcal{L} = \mathcal{L}_{\mathrm{CE}} + \lambda \sum_{k} p_k \left| c_k - c_y \right|, \qquad c_k = \frac{k}{K-1} \label{eq:loss}
 \end{equation}
-where the class positions $c_k$ are normalized to $[0,1]$ and $\lambda$ sets the weight of the distance term.
+Here, $c_y$ is the position of the true level $y$, the class positions $c_k$ are normalized to $[0,1]$, and $\lambda$ sets the weight of the distance term. In this work, we train the audio-visual network ($\lambda = 0.15$) and the segment-Transformer model with (\ref{eq:loss}), and we decode the fused class probabilities with (\ref{eq:mu}) and (\ref{eq:thresh}) instead of (\ref{eq:argmax}) (Section~\ref{sec:method}).
 
 \section{Proposed Research Method}
 \label{sec:method}
@@ -162,28 +164,28 @@ We separate \ournet{} into three blocks: A) an audio-visual cross-attention netw
 \subsection{Audio-Visual Cross-Attention Network}
 \label{sec:method_av}
 
-The audio-visual network predicts the engagement level from the face frames and the audio track of a clip. It follows the intermediate cross-attention fusion of AVT-CA \cite{venkatraman2025avtca} with multi-head attention ($h = 8$) throughout. The detailed methods are explained in the following paragraphs.
+We pick the intermediate cross-attention fusion of AVT-CA \cite{venkatraman2025avtca} for the audio-visual network because in this fusion each modality attends to the other at three stages of the network. The audio-visual network predicts the engagement level of a clip from its face frames and its audio track, and it uses multi-head attention ($h = 8$) throughout. The detailed methods are explained in the following paragraphs.
 
 1) \emph{Audio Encoder:} The audio track of each clip is resampled to 22.05\,kHz and converted to a 64-bin log-mel spectrogram $\mathbf{X}_a \in \mathbb{R}^{64 \times 431}$ for a full-length clip. Two two-dimensional convolution blocks (convolution, batch normalization, ReLU and $2 \times 2$ max pooling) with 64 and 128 channels operate over frequency and time, and the frequency axis is then averaged, which gives the first-stage audio tokens $\mathbf{A}_1 \in \mathbb{R}^{128 \times 107}$.
 
-2) \emph{Visual Encoder:} Each clip is sampled at 5 frames per second, which gives up to 50 face crops of $224 \times 224$ pixels detected with MTCNN. An EfficientFace backbone \cite{zhao2021efficientface}, initialized from weights trained on AffectNet-7, maps each frame to a 1024-dimensional embedding. Two one-dimensional convolutions (1024$\to$64$\to$64) over the stacked embeddings give the first-stage visual tokens $\mathbf{V}_1 \in \mathbb{R}^{64 \times T_v}$ with $T_v \le 50$.
+2) \emph{Visual Encoder:} Each clip is sampled at 5 frames per second, which gives up to 50 face crops of $224 \times 224$ pixels detected with MTCNN. We use an EfficientFace backbone \cite{zhao2021efficientface} to map each frame to a 1024-dimensional embedding. In order to start the visual encoder from a face-specific representation, the backbone is initialized from weights trained for facial expression recognition on AffectNet-7. Two one-dimensional convolutions (1024$\to$64$\to$64) over the stacked embeddings give the first-stage visual tokens $\mathbf{V}_1 \in \mathbb{R}^{64 \times T_v}$ with $T_v \le 50$. For the complete architecture of the EfficientFace backbone, we direct readers to the original paper \cite{zhao2021efficientface}.
 
-3) \emph{Per-Sample Temporal Alignment:} If $\mathbf{A}_1$ were passed directly to cross-attention, each visual token would attend over about two audio tokens that describe the same instant. We therefore pool the valid audio steps of every sample onto the valid visual length of the same sample,
+3) \emph{Per-Sample Temporal Alignment:} Our intuition is to make each audio token describe the same span of the clip as one visual token before the two streams exchange information. If $\mathbf{A}_1$ were passed directly to cross-attention, each visual token would attend over about two audio tokens that describe the same instant. Therefore, we pool the valid audio steps of every sample onto the valid visual length of the same sample using the following equation:
 \begin{equation}
-\tilde{\mathbf{A}}_1[:, j] = \frac{1}{|S_j|}\sum_{t \in S_j} \mathbf{A}_1[:, t], \qquad j = 1,\dots,T_v^{(i)},
+\tilde{\mathbf{A}}_1[:, j] = \frac{1}{|S_j|}\sum_{t \in S_j} \mathbf{A}_1[:, t], \qquad j = 1,\dots,T_v^{(i)}.
 \end{equation}
-where $S_j$ is the $j$-th of $T_v^{(i)}$ equal-width windows over the valid audio steps of sample $i$. Padding steps are excluded before pooling and masked afterwards, so the alignment holds for clips of any length, and $\tilde{\mathbf{A}}_1 \in \mathbb{R}^{128 \times 50}$ for a full clip. We did not train a matched network without this step, so its effect on accuracy is not measured in this paper.
+Here, $\tilde{\mathbf{A}}_1[:, j]$ is the $j$-th aligned audio token, $T_v^{(i)}$ is the valid visual length of sample $i$, and $S_j$ is the $j$-th of $T_v^{(i)}$ equal-width windows over the valid audio steps of that sample. Padding steps are excluded before pooling and masked afterwards, so the alignment holds for clips of any length, and $\tilde{\mathbf{A}}_1 \in \mathbb{R}^{128 \times 50}$ for a full clip. We did not train a matched network without this step, so its effect on accuracy is not measured in this paper.
 
 4) \emph{Cross-Attention Fusion:} In the first exchange the aligned audio tokens query the visual tokens and the visual tokens query the audio tokens, as in (\ref{eq:xattn_a}) and (\ref{eq:xattn_v}) with $X_a = \tilde{\mathbf{A}}_1$ and $X_v = \mathbf{V}_1$. Each stream then passes through a second convolutional stage: two one-dimensional convolution blocks with max pooling bring the audio tokens to $\mathbf{A}_2 \in \mathbb{R}^{128 \times 12}$, and two convolutions (64$\to$128$\to$128) bring the visual tokens to $\mathbf{V}_2 \in \mathbb{R}^{128 \times 50}$. In the second exchange a multi-head attention layer in each direction, with residual dropout of 0.1, lets the 12 audio tokens attend to the 50 visual tokens and the reverse. A third exchange is formed by a final pair of cross-attention blocks. Each stream is then reduced over time to a 128-dimensional vector by masked attention pooling, in which a linear layer scores each valid time step and the tokens are averaged under the softmax of these scores. The two vectors are concatenated into the audio-visual summary $\mathbf{z} \in \mathbb{R}^{256}$, and a linear layer maps $\mathbf{z}$ to the four class probabilities $p_{\mathrm{AV}}$.
 
-5) \emph{Modality Dropout:} During training, the entire token sequence of each modality is set to zero with probability $p = 0.15$ per sample, independently for audio and video, at the point where the first exchange begins. Its purpose is to prevent the network from relying on only one stream; we did not train a network without it, so its effect is not measured in this paper. It also makes the inference-time modality ablation of Section~\ref{sec:ablation} a condition that the network has seen in training.
+5) \emph{Modality Dropout:} In order to prevent the network from relying on only one stream, during training we set the entire token sequence of each modality to zero with probability $p = 0.15$ per sample, independently for audio and video, at the point where the first exchange begins. We did not train a network without this step, so its effect is not measured in this paper. It also makes the inference-time modality ablation of Section~\ref{sec:ablation} a condition that the network has seen in training.
 
 6) \emph{Ordinal Training Objective:} The network is trained with the objective of (\ref{eq:loss}), with label smoothing of 0.1 in $\mathcal{L}_{\mathrm{CE}}$ and $\lambda = 0.15$, so that probability mass placed three levels from the true level costs more than mass placed one level away. In the fourth ablation study of Section~\ref{sec:ablation}, replacing this objective with plain cross-entropy changes top-1 accuracy by less than the seed noise.
 
 \subsection{Facial-Behavior Models}
 \label{sec:method_beh}
 
-The second block predicts the engagement level from explicit facial-behavior descriptors of the same clip.
+The second block predicts the engagement level from explicit facial-behavior descriptors of the same clip. We pick OpenFace descriptors for this block because the best EngageNet baseline uses them \cite{singh2023engagenet}, and gradient boosting on OpenFace action units has been reported to outperform an end-to-end convolutional network on DAiSEE \cite{das2025optimizing}. The detailed methods are explained in the following paragraphs.
 
 1) \emph{Segment Statistics:} OpenFace 2.2 \cite{baltrusaitis2018openface} is run on the source video of each clip and gives, per frame, 17 action-unit intensities, two gaze angles and three head-pose rotations, a 22-channel series $\mathbf{B} \in \mathbb{R}^{T \times 22}$. Following the best EngageNet baseline \cite{singh2023engagenet}, the series is divided into 20 segments of equal length, and each segment is described by the mean and standard deviation of every channel, which gives a $20 \times 44$ token sequence $\mathbf{S}$.
 
@@ -194,11 +196,13 @@ The second block predicts the engagement level from explicit facial-behavior des
 \subsection{Late Fusion and Ordinal Decoding}
 \label{sec:method_fusion}
 
-1) \emph{Probability-Level Fusion:} The three probability vectors are combined by a weighted average,
+The third block combines the class-probability vectors of the three models and converts the result into one engagement level. The detailed methods are explained in the following paragraphs.
+
+1) \emph{Probability-Level Fusion:} The three probability vectors are combined by a weighted average, which is calculated as,
 \begin{equation}
-p = w_{\mathrm{AV}}\, p_{\mathrm{AV}} + w_{\mathrm{TF}}\, p_{\mathrm{TF}} + w_{\mathrm{GBM}}\, p_{\mathrm{GBM}}, \label{eq:late}
+p = w_{\mathrm{AV}}\, p_{\mathrm{AV}} + w_{\mathrm{TF}}\, p_{\mathrm{TF}} + w_{\mathrm{GBM}}\, p_{\mathrm{GBM}}. \label{eq:late}
 \end{equation}
-with the fixed weights $(0.6, 0.2, 0.2)$. We fuse at the probability level because the three models are trained on different inputs with different learners, and in Section~\ref{sec:eval} their errors overlap less than the errors of several networks fine-tuned from one checkpoint. The equal-weight setting and validation-selected weights are reported in Section~\ref{sec:ablation}.
+Here, $p_{\mathrm{AV}}$, $p_{\mathrm{TF}}$ and $p_{\mathrm{GBM}}$ are the class-probability vectors of the audio-visual network, the segment Transformer and the gradient-boosting model, and the weights $(w_{\mathrm{AV}}, w_{\mathrm{TF}}, w_{\mathrm{GBM}})$ are fixed to $(0.6, 0.2, 0.2)$. We fuse at the probability level because the three models are trained on different inputs with different learners, and in Section~\ref{sec:eval} their errors overlap less than the errors of several networks fine-tuned from one checkpoint. The equal-weight setting and validation-selected weights are reported in Section~\ref{sec:ablation}.
 
 2) \emph{Calibrated Ordinal Decoding:} The fused vector $p$ is reduced to the expected level of (\ref{eq:mu}) and cut by the three thresholds of (\ref{eq:thresh}). The thresholds are fitted by grid search on the validation split only and applied unchanged to the test split. For the network alone we compare four decoders: argmax (\ref{eq:argmax}), argmax after a per-class logit bias fitted on validation, expected-level thresholds fitted on a grid with step 0.05, and refined expected-level thresholds obtained by a local search with radius 0.15 and step 0.005.
 
@@ -229,7 +233,7 @@ with the fixed weights $(0.6, 0.2, 0.2)$. We fuse at the probability level becau
 \subsection{Dataset}
 \label{sec:dataset}
 
-We evaluate on EngageNet \cite{singh2023engagenet}. The participants, aged 18 to 37, used a web-based platform with their own computer and webcam at sites such as computer labs, dorm rooms and open spaces; the videos were recorded at 640$\times$480 pixels or higher, and some contain background noise. The recordings are divided into 11,311 ten-second clips (31\,h) of 127 participants. The official subject-independent split assigns 90, 11 and 26 participants to training, validation and test (7,983, 1,071 and 2,257 clips). Every source clip is at most 10.06\,s long (median 10.00\,s), so the full clip is used for both modalities. We exclude the 105 clips that the dataset labels as ``subject not present'' (104 training clips and 1 test clip), since they carry no engagement level; the split used in this paper is shown in Table~\ref{tab_dataset}. The \emph{highly engaged} level accounts for 50.27\% of the test clips (1,134 of 2,256), so a constant majority-class predictor scores 50.27\% top-1 accuracy and 16.73 macro-F1; every result in this paper is read against this reference.
+In the context of recognizing student engagement from webcam recordings of online learning, we evaluate \ournet{} on EngageNet \cite{singh2023engagenet}, the online-learning engagement dataset with the largest number of participants. In EngageNet, the participants, aged 18 to 37, used a web-based platform with their own computer and webcam at sites such as computer labs, dorm rooms and open spaces; the videos were recorded at 640$\times$480 pixels or higher, and some contain background noise. The recordings are divided into 11,311 ten-second clips (31\,h) of 127 participants. In all experiments, we use the official subject-independent split, which assigns 90, 11 and 26 participants to training, validation and test (7,983, 1,071 and 2,257 clips). Every source clip is at most 10.06\,s long (median 10.00\,s), so the full clip is used for both modalities. We exclude the 105 clips that the dataset labels as ``subject not present'' (104 training clips and 1 test clip), since they carry no engagement level. In Table~\ref{tab_dataset}, we show the number of clips of each engagement level in the three splits used in this paper and the share of each level in the test split. The \emph{highly engaged} level accounts for 50.27\% of the test clips (1,134 of 2,256), so a constant majority-class predictor scores 50.27\% top-1 accuracy and 16.73 macro-F1; every result in this paper is read against this reference.
 
 \begin{table}[!t]
 \setlength{\tabcolsep}{3pt}
@@ -252,9 +256,9 @@ Test share (\%) & & 20.3 & 10.9 & 18.6 & 50.3\\
 
 \subsection{Experimental Protocols}
 
-All clips are processed identically across the three splits. Faces are detected with MTCNN, cropped and resized to $224 \times 224$; a clip shorter than 50 frames is padded with masked frames. OpenFace 2.2 detects a face in 98.8\% of the frames.
+We trained the audio-visual network, the gradient-boosting model and the segment Transformer separately. All clips are processed identically across the three splits. We sampled the face frames at 5 frames per second, detected the faces with MTCNN, and cropped and resized them to $224 \times 224$ pixels; a clip shorter than 50 frames is padded with masked frames. We collected the facial-behavior series with OpenFace 2.2 \cite{baltrusaitis2018openface}, which detects a face in 98.8\% of the frames.
 
-The audio-visual network is trained with stochastic gradient descent (momentum 0.9, weight decay $10^{-3}$). The reported fine-tuning uses a batch size of 8, the objective of (\ref{eq:loss}), and a class-balanced sampler that draws each clip with probability proportional to the inverse square root of its class frequency. Before the reported fine-tuning, the network was trained on EngageNet in three stages starting from the AffectNet-7 initialization of the visual backbone, with the audio and fusion modules initialized randomly: 10 epochs at a learning rate of $10^{-2}$, a stage at $5 \times 10^{-4}$ with the ordinal objective and the class-balanced sampler, and 8 epochs at $5 \times 10^{-5}$ with the ordinal objective. All reported networks are fine-tuned from the resulting checkpoint for 6 epochs at a learning rate of $5 \times 10^{-5}$ with a step schedule and three random seeds, and the checkpoint with the best validation top-1 accuracy is kept. One fine-tuning run takes about 32 minutes on one NVIDIA RTX 3090 GPU (24\,GB), in PyTorch 2.5. The two behavior models are trained on the training split only; the gradient-boosting model trains on a CPU in minutes. The fusion weights are fixed in advance, and only the decoding thresholds are fitted on the validation split, so each reported test result is computed once.
+To implement the audio-visual network, we used stochastic gradient descent with momentum 0.9 and weight decay $10^{-3}$. In the reported fine-tuning, the minibatch size was 8, the training objective was (\ref{eq:loss}), and a class-balanced sampler drew each clip with probability proportional to the inverse square root of its class frequency. Before the reported fine-tuning, the network was trained on EngageNet in three stages starting from the AffectNet-7 initialization of the visual backbone, with the audio and fusion modules initialized randomly: 10 epochs at a learning rate of $10^{-2}$, a stage at $5 \times 10^{-4}$ with the ordinal objective and the class-balanced sampler, and 8 epochs at $5 \times 10^{-5}$ with the ordinal objective. All reported networks are fine-tuned from the resulting checkpoint for 6 epochs at a learning rate of $5 \times 10^{-5}$ with a step schedule and three random seeds, and the checkpoint with the best validation top-1 accuracy is kept. Each fine-tuning run was completed in about 32 minutes on a single NVIDIA RTX 3090 GPU of 24\,GB VRAM. The two behavior models were trained on the training split only. To implement the segment Transformer, we used 8 attention heads, a dropout rate of 0.3 and the AdamW optimizer with a weight decay of 0.05; the minibatch size was 64, the learning rate was $10^{-3}$, and the training ran for 60 epochs, of which the epoch with the best validation top-1 accuracy was kept. The gradient-boosting model was trained on a CPU in minutes. The networks were implemented in PyTorch 2.5 and the gradient-boosting model in scikit-learn. The fusion weights are fixed in advance, and only the decoding thresholds are fitted on the validation split. Therefore, each reported test result is computed once.
 
 \section{Model Evaluation}
 \label{sec:eval}

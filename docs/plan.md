@@ -2043,6 +2043,19 @@ Ordinal Decoding", VI-G "Error Analysis"). Findings and fixes:
 **Open (would turn two design statements into results):** matched 3-seed runs without alignment and without
 modality dropout (needs a code flag for the no-alignment path; ~32 min per run per GPU).
 
+### 18.15 Sections III–V restyled on FoleyGAN via a verified review workflow (2026-09-23)
+
+3 reviewers (one per section, each reading our section and the FoleyGAN counterpart) proposed 27 exact edits;
+each was checked by an independent verifier (edit unique, no unverifiable fact, no dropped caveat/label, and
+actually closer to FoleyGAN). 26 applied (7 in a verifier-corrected form); 1 rejected (a roadmap opener for
+Section III — FoleyGAN's Section III has none). Patterns adopted: technique named with its source at the
+start of III; equations introduced with "using the following equation" / "calculated as"; "Here, ..."
+symbol explanations after equations; "In this work, we use ..." closing lines; purpose-first subsection
+openers and "The detailed methods are explained in the following paragraphs" in IV; "In Table I, we show"
+and a per-model protocol paragraph in V. The only new fact (segment Transformer: weight decay 0.05, batch 64,
+lr 1e-3, 60 epochs) matches `results/fullclip/segtf/T7_d64_L2_lr1e3_s1/results.json`. Open reviewer note:
+$\mathcal{L}$ denotes both the label set and the loss in §III — rename one.
+
 ### 18.10 Paper-vs-code check on the behavior stream (2026-09-08)
 
 Checked §IV-B/C of the paper against `AVTCA-collab-test/models/multimodal_cnn.py::_behavior_fusion` and
