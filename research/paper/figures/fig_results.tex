@@ -1,0 +1,26 @@
+% Fig. — test top-1 on EngageNet. Error bars: sd over 3 seeds (ours). Grey = published (Singh et al., ICMI 2023).
+\begin{tikzpicture}
+\begin{axis}[
+  xbar, bar shift=0pt, scale only axis, width=0.5\columnwidth, height=6.2cm, bar width=5pt,
+  xmin=48, xmax=74, xlabel={Test top-1 accuracy (\%)}, xlabel style={font=\scriptsize},
+  ytick={maj,lstm,cnnlstm,marlin,tcn,tffus,tfbest,vonly,av,gbm,tf,eq3,av2,w3}, yticklabel style={font=\scriptsize, align=right}, xticklabel style={font=\scriptsize},
+  symbolic y coords={maj,lstm,cnnlstm,marlin,tcn,tffus,tfbest,vonly,av,gbm,tf,eq3,av2,w3},
+  yticklabels={Majority class,LSTM {\tiny G+HP+AU},CNN-LSTM {\tiny G+HP+AU},Transformer {\tiny MARLIN},TCN {\tiny G+HP+AU},Transformer fusion,Transformer {\tiny G+HP+AU},Ours: video only,Ours: audio-visual net,Ours: GBM (22-d),Ours: seg.\ Transformer,Fusion: equal thirds,Fusion: AV + GBM 0.5/0.5,Fusion: 0.6/0.2/0.2},
+  y dir=reverse, enlarge y limits=0.04,
+  axis x line*=bottom, axis y line*=left, xmajorgrids, grid style={draw=black!8},
+  nodes near coords, nodes near coords style={font=\tiny, text=black, anchor=west, xshift=9pt},
+  point meta=explicit symbolic,
+  error bars/x dir=both, error bars/x explicit, error bars/error bar style={black!70},
+  extra x ticks={67.61}, extra x tick labels={}, extra x tick style={grid=major, grid style={dashed, published, thick}},
+]
+\addplot[fill=published, draw=none] coordinates {
+  (50.27,maj)[50.27] (61.84,lstm)[61.84] (65.16,cnnlstm)[65.16] (65.20,marlin)[65.2]
+  (65.60,tcn)[65.60] (66.50,tffus)[66.5] (67.61,tfbest)[67.61]};
+\addplot[fill=ours, draw=none] coordinates {
+  (65.28,vonly) +- (0.53,0) [65.28] (66.27,av) +- (0.45,0) [66.27]
+  (66.27,gbm)[66.27] (66.99,tf) +- (0.93,0) [66.99]};
+\addplot[fill=fused, draw=none] coordinates {
+  (69.28,eq3) +- (0.23,0) [69.28] (69.95,av2) +- (0.20,0) [69.95] (70.29,w3) +- (0.14,0) [70.29]};
+\node[font=\tiny, text=inkmuted, anchor=south, fill=white, inner sep=1pt] at (axis cs:67.61,maj) {best published (test)};
+\end{axis}
+\end{tikzpicture}

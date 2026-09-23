@@ -61,7 +61,7 @@ AVT-CA (Audio-Video Token Cross-Attention) fuses audio and video through a two-s
 **`it` fusion** (`forward_feature_3`):
 1. Early cross-attention: `av1` (audio queries video) and `va1` (video queries audio) — residual added back
 2. Stage 2: deeper Conv1D on each modality
-3. Self-attention: `audioAttention` and `visualAttention` (MultiheadAttention, self-attention despite the cross-modal naming)
+3. Second cross-modal exchange: `audioAttention` (audio queries video) and `visualAttention` (video queries audio) — `MultiheadAttention` called with the *other* stream as key/value, so it is cross-attention, not self-attention (verified by forward-pass trace 2026-09-23). Audio is at 12 tokens here (stage-2 MaxPool ×2), video at 50
 4. Final cross-attention: `audioCrossAttention` and `visualCrossAttention`
 5. Pool each modality over time (learned masked `AttentionPool` in the default `it_fusion_mode=modern`; MaxPool only on the `legacy` path) → concat → `Linear(256, n_classes)`
 
