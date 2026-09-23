@@ -80,8 +80,8 @@ H, R = 40, 56                     # box height, row pitch
 y = lambda r: 40 + r * R
 
 group(20, 18, 530, 598, '(A) Audio-visual cross-attention network', BLUE, '#F8FBFE')
-group(590, 18, 300, 272, '(B) Facial-behavior statistics models', GREY, '#FAFAF9')
-group(20, 628, 870, 148, '(A) ordinal head  ·  (C) late fusion and calibrated ordinal decoding', ORANGE, '#FFFBF9', valign='bottom')
+group(590, 18, 300, 272, '(B) Facial-behavior models', GREY, '#FAFAF9')
+group(20, 628, 870, 148, '(A) ordinal head  ·  (C) late fusion and ordinal decoding', ORANGE, '#FFFBF9', valign='bottom')
 
 # inputs
 v0 = box(VX, y(0.3), W, H, 'Face crops, MTCNN, 5 fps', '(B, 50, 3, 224, 224)', 'io')

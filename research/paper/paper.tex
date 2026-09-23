@@ -70,18 +70,17 @@ Fig.~\ref{fig_overview} shows the proposed \ournet{} model, which consists of th
 \label{fig_overview}
 \end{figure}
 
-We chose these components for the following reasons. The EfficientFace backbone is initialized from weights trained for facial expression recognition on AffectNet-7, which is related to the facial cues of engagement. The audio sequence of a full clip has 107 time steps after the first convolutional stage while the video sequence has 50, so we pool the audio steps of each clip onto the video steps of the same clip before the first attention exchange. The segment statistics follow the tokenization of the best EngageNet baseline \cite{singh2023engagenet}, which allows the behavior models to be compared directly with it. Finally, because the four levels are ordered, we decode the probabilities through the expected level rather than through the largest probability, and we measure the effect of this choice on identical weights.
+We chose these components for the following reasons. The EfficientFace backbone is initialized from weights trained for facial expression recognition on AffectNet-7, so that the visual encoder starts from a face-specific representation. The audio sequence of a full clip has 107 time steps after the first convolutional stage while the video sequence has 50, so we pool the audio steps of each clip onto the video steps of the same clip before the first attention exchange. The segment statistics follow the tokenization of the best EngageNet baseline \cite{singh2023engagenet}, which allows the behavior models to be compared directly with it. Finally, because the four levels are ordered, we decode the probabilities through the expected level rather than through the largest probability, and we measure the effect of this choice on identical weights.
 
 The significant contributions made by this paper are:
 \begin{itemize}
-\item We present, to our knowledge, the first audio-visual result on EngageNet. Audio alone is no better than the majority-class predictor on this dataset, yet removing the audio stream from the trained network lowers top-1 accuracy in eight of nine trained networks, by 0.74 points on average.
-\item We introduce a per-sample temporal alignment that pools the audio token sequence of each clip onto the visual frame grid of the same clip (107 audio steps onto 50 video steps for a full clip) before the first cross-attention exchange.
+\item We present, to our knowledge, the first audio-visual result on EngageNet, with the audio token sequence of each clip pooled onto the visual frame grid of the same clip before cross-attention. Audio alone is no better than the majority-class predictor on this dataset, yet removing the audio stream from the trained network lowers top-1 accuracy in eight of nine trained networks, by 0.74 points on average.
 \item We decode the four ordered levels with thresholds on the expected level fitted on the validation split, which adds 2.00 points of top-1 accuracy over argmax decoding on the same weights (mean of three seeds).
 \item We combine the network with two models on segment statistics of 22 OpenFace features by fixed-weight probability averaging, which reaches 70.29 $\pm$ 0.14\% top-1 accuracy, and we show that a behavior branch trained inside the network instead changes no metric.
 \item For the performance analysis we report top-1 accuracy, adjacent accuracy, mean absolute class error and macro-F1 over three seeds with the seed noise floor, perform four ablation studies, analyze where the remaining errors lie, and define a human survey protocol for the same task.
 \end{itemize}
 
-This paper is structured as follows. In Sections~\ref{sec:relwork} and~\ref{sec:prelim}, we present related works and a brief review of cross-attention and ordinal decoding. In Section~\ref{sec:method}, we describe the detailed methodology and present the complete algorithm. In Sections~\ref{sec:exp} and~\ref{sec:eval}, we describe the EngageNet dataset, the training details, and the model evaluation through numerical, ablation and error analyses, together with the human survey protocol. Finally, Section~\ref{sec:conclusion} concludes with a summary of the results and the future directions of this work.
+This paper is structured as follows. In Sections~\ref{sec:relwork} and~\ref{sec:prelim}, we present related works and the preliminaries on cross-attention and ordinal decoding. In Section~\ref{sec:method}, we describe the detailed methodology and present the complete algorithm. In Sections~\ref{sec:exp} and~\ref{sec:eval}, we describe the EngageNet dataset, the training details, and the model evaluation through numerical, ablation and error analyses, together with the human survey protocol. Finally, Section~\ref{sec:conclusion} concludes with a summary of the results and the future directions of this work.
 
 \section{Related Work}
 \label{sec:relwork}
@@ -102,7 +101,7 @@ Audio-visual fusion has been studied extensively in emotion recognition. AVT-CA 
 
 The four engagement levels are ordered. CMOSE proposes MocoRank, a training mechanism for the ordinal pattern of engagement levels \cite{wu2024cmose}; CORE-Net uses ordinal supervision for engagement in collaborative learning \cite{tran2026ordinal}; ordinal models over affect and OpenFace behavior features have been applied to DAiSEE \cite{abedi2024affect,safa2025sclordinal}; and on EngageNet an ordinal graph network reports 71.24\% validation accuracy against 69.37\% for its non-ordinal counterpart \cite{abedi2024stgcn}. These methods build the order of the levels into training. In our work, we also train with an ordinal penalty, and in addition we decode the class probabilities through the expected level and measure how much this decoding step alone changes accuracy on the same trained weights.
 
-\section{Cross-Attention and Ordinal Decoding Basics}
+\section{Preliminaries}
 \label{sec:prelim}
 
 \subsection{Multi-Head Cross-Attention}
@@ -150,7 +149,7 @@ where the class positions $c_k$ are normalized to $[0,1]$ and $\lambda$ sets the
 \section{Proposed Research Method}
 \label{sec:method}
 
-We separate \ournet{} into three blocks: A) an audio-visual cross-attention network, B) two facial-behavior statistics models, and C) a late fusion and calibrated ordinal decoding stage. We explain these blocks in the following subsections. The graphical representation of the complete architecture, with the tensor shape at every stage, is presented in Fig.~\ref{fig_arch}, and the complete procedure is given in Algorithm~\ref{alg:ournet}.
+We separate \ournet{} into three blocks: A) an audio-visual cross-attention network, B) two facial-behavior models, and C) a late fusion and ordinal decoding stage. We explain these blocks in the following subsections. The graphical representation of the complete architecture, with the tensor shape at every stage, is presented in Fig.~\ref{fig_arch}, and the complete procedure is given in Algorithm~\ref{alg:ournet}.
 
 % Source: figures/architecture.drawio (edit in draw.io, export PDF with "crop" to figures/architecture.pdf).
 \begin{figure*}[!t]
@@ -173,15 +172,15 @@ The audio-visual network predicts the engagement level from the face frames and 
 \begin{equation}
 \tilde{\mathbf{A}}_1[:, j] = \frac{1}{|S_j|}\sum_{t \in S_j} \mathbf{A}_1[:, t], \qquad j = 1,\dots,T_v^{(i)},
 \end{equation}
-where $S_j$ is the $j$-th of $T_v^{(i)}$ equal-width windows over the valid audio steps of sample $i$. Padding steps are excluded before pooling and masked afterwards, so the alignment holds for clips of any length, and $\tilde{\mathbf{A}}_1 \in \mathbb{R}^{128 \times 50}$ for a full clip.
+where $S_j$ is the $j$-th of $T_v^{(i)}$ equal-width windows over the valid audio steps of sample $i$. Padding steps are excluded before pooling and masked afterwards, so the alignment holds for clips of any length, and $\tilde{\mathbf{A}}_1 \in \mathbb{R}^{128 \times 50}$ for a full clip. We did not train a matched network without this step, so its effect on accuracy is not measured in this paper.
 
 4) \emph{Cross-Attention Fusion:} In the first exchange the aligned audio tokens query the visual tokens and the visual tokens query the audio tokens, as in (\ref{eq:xattn_a}) and (\ref{eq:xattn_v}) with $X_a = \tilde{\mathbf{A}}_1$ and $X_v = \mathbf{V}_1$. Each stream then passes through a second convolutional stage: two one-dimensional convolution blocks with max pooling bring the audio tokens to $\mathbf{A}_2 \in \mathbb{R}^{128 \times 12}$, and two convolutions (64$\to$128$\to$128) bring the visual tokens to $\mathbf{V}_2 \in \mathbb{R}^{128 \times 50}$. In the second exchange a multi-head attention layer in each direction, with residual dropout of 0.1, lets the 12 audio tokens attend to the 50 visual tokens and the reverse. A third exchange is formed by a final pair of cross-attention blocks. Each stream is then reduced over time to a 128-dimensional vector by masked attention pooling, in which a linear layer scores each valid time step and the tokens are averaged under the softmax of these scores. The two vectors are concatenated into the audio-visual summary $\mathbf{z} \in \mathbb{R}^{256}$, and a linear layer maps $\mathbf{z}$ to the four class probabilities $p_{\mathrm{AV}}$.
 
-5) \emph{Modality Dropout:} During training, the entire token sequence of each modality is set to zero with probability $p = 0.15$ per sample, independently for audio and video, at the point where the first exchange begins. This keeps each encoder individually predictive, and it makes the inference-time modality ablation of Section~\ref{sec:ablation} a condition that the network has seen in training.
+5) \emph{Modality Dropout:} During training, the entire token sequence of each modality is set to zero with probability $p = 0.15$ per sample, independently for audio and video, at the point where the first exchange begins. Its purpose is to prevent the network from relying on only one stream; we did not train a network without it, so its effect is not measured in this paper. It also makes the inference-time modality ablation of Section~\ref{sec:ablation} a condition that the network has seen in training.
 
-6) \emph{Ordinal Training Objective:} The network is trained with the objective of (\ref{eq:loss}), with label smoothing of 0.1 in $\mathcal{L}_{\mathrm{CE}}$ and $\lambda = 0.15$, so that probability mass placed three levels from the true level costs more than mass placed one level away.
+6) \emph{Ordinal Training Objective:} The network is trained with the objective of (\ref{eq:loss}), with label smoothing of 0.1 in $\mathcal{L}_{\mathrm{CE}}$ and $\lambda = 0.15$, so that probability mass placed three levels from the true level costs more than mass placed one level away. In the fourth ablation study of Section~\ref{sec:ablation}, replacing this objective with plain cross-entropy changes top-1 accuracy by less than the seed noise.
 
-\subsection{Facial-Behavior Statistics Models}
+\subsection{Facial-Behavior Models}
 \label{sec:method_beh}
 
 The second block predicts the engagement level from explicit facial-behavior descriptors of the same clip.
@@ -192,14 +191,14 @@ The second block predicts the engagement level from explicit facial-behavior des
 
 3) \emph{Segment-Transformer Model:} A pre-norm Transformer encoder with a class token and learned positional embeddings reads the 20 tokens of $\mathbf{S}$ and outputs $p_{\mathrm{TF}}$. It is trained with the objective of (\ref{eq:loss}), the AdamW optimizer with a warm-up cosine schedule, and random dropout of segment tokens. Its size (two layers, model width 64, feed-forward width 128) was selected from eight candidate configurations by mean validation accuracy over three seeds.
 
-\subsection{Late Fusion and Calibrated Ordinal Decoding}
+\subsection{Late Fusion and Ordinal Decoding}
 \label{sec:method_fusion}
 
 1) \emph{Probability-Level Fusion:} The three probability vectors are combined by a weighted average,
 \begin{equation}
 p = w_{\mathrm{AV}}\, p_{\mathrm{AV}} + w_{\mathrm{TF}}\, p_{\mathrm{TF}} + w_{\mathrm{GBM}}\, p_{\mathrm{GBM}}, \label{eq:late}
 \end{equation}
-with the fixed weights $(0.6, 0.2, 0.2)$. We fuse at the probability level because the three models are trained on different inputs with different learners, so their errors are less correlated than the errors of several checkpoints of one network. The equal-weight setting and validation-selected weights are reported in Section~\ref{sec:ablation}.
+with the fixed weights $(0.6, 0.2, 0.2)$. We fuse at the probability level because the three models are trained on different inputs with different learners, and in Section~\ref{sec:eval} their errors overlap less than the errors of several networks fine-tuned from one checkpoint. The equal-weight setting and validation-selected weights are reported in Section~\ref{sec:ablation}.
 
 2) \emph{Calibrated Ordinal Decoding:} The fused vector $p$ is reduced to the expected level of (\ref{eq:mu}) and cut by the three thresholds of (\ref{eq:thresh}). The thresholds are fitted by grid search on the validation split only and applied unchanged to the test split. For the network alone we compare four decoders: argmax (\ref{eq:argmax}), argmax after a per-class logit bias fitted on validation, expected-level thresholds fitted on a grid with step 0.05, and refined expected-level thresholds obtained by a local search with radius 0.15 and step 0.005.
 
@@ -230,7 +229,7 @@ with the fixed weights $(0.6, 0.2, 0.2)$. We fuse at the probability level becau
 \subsection{Dataset}
 \label{sec:dataset}
 
-We evaluate on EngageNet \cite{singh2023engagenet}. The participants, aged 18 to 37, used a web-based platform with their own computer and webcam at sites such as computer labs, dorm rooms and open spaces; the videos were recorded at 640$\times$480 pixels or higher, and some contain background noise. The recordings are divided into 11,311 ten-second clips (31\,h) of 127 participants. The official subject-independent split assigns 90, 11 and 26 participants to training, validation and test (7,983, 1,071 and 2,257 clips). Every source clip is at most 10.06\,s long (median 10.00\,s), so the full clip is used for both modalities. After discarding clips whose audio track or face sequence could not be read, the split used in this paper is shown in Table~\ref{tab_dataset}. The \emph{highly engaged} level accounts for 50.27\% of the test clips (1,134 of 2,256), so a constant majority-class predictor scores 50.27\% top-1 accuracy and 16.73 macro-F1; every result in this paper is read against this reference.
+We evaluate on EngageNet \cite{singh2023engagenet}. The participants, aged 18 to 37, used a web-based platform with their own computer and webcam at sites such as computer labs, dorm rooms and open spaces; the videos were recorded at 640$\times$480 pixels or higher, and some contain background noise. The recordings are divided into 11,311 ten-second clips (31\,h) of 127 participants. The official subject-independent split assigns 90, 11 and 26 participants to training, validation and test (7,983, 1,071 and 2,257 clips). Every source clip is at most 10.06\,s long (median 10.00\,s), so the full clip is used for both modalities. We exclude the 105 clips that the dataset labels as ``subject not present'' (104 training clips and 1 test clip), since they carry no engagement level; the split used in this paper is shown in Table~\ref{tab_dataset}. The \emph{highly engaged} level accounts for 50.27\% of the test clips (1,134 of 2,256), so a constant majority-class predictor scores 50.27\% top-1 accuracy and 16.73 macro-F1; every result in this paper is read against this reference.
 
 \begin{table}[!t]
 \setlength{\tabcolsep}{3pt}
@@ -255,7 +254,7 @@ Test share (\%) & & 20.3 & 10.9 & 18.6 & 50.3\\
 
 All clips are processed identically across the three splits. Faces are detected with MTCNN, cropped and resized to $224 \times 224$; a clip shorter than 50 frames is padded with masked frames. OpenFace 2.2 detects a face in 98.8\% of the frames.
 
-The audio-visual network is trained with stochastic gradient descent (momentum 0.9, weight decay $10^{-3}$, batch size 8), the objective of (\ref{eq:loss}), and a class-balanced sampler that draws each clip with probability proportional to the inverse square root of its class frequency. Before the reported fine-tuning, the network was trained on EngageNet in three stages starting from the AffectNet-7 initialization of the visual backbone, with the audio and fusion modules initialized randomly: 10 epochs at a learning rate of $10^{-2}$, a stage at $5 \times 10^{-4}$ with the ordinal objective and the class-balanced sampler, and 8 epochs at $5 \times 10^{-5}$ with the ordinal objective. All reported networks are fine-tuned from the resulting checkpoint for 6 epochs at a learning rate of $5 \times 10^{-5}$ with a step schedule and three random seeds, and the checkpoint with the best validation top-1 accuracy is kept. One fine-tuning run takes about 32 minutes on one NVIDIA RTX 3090 GPU (24\,GB), in PyTorch 2.5. The two behavior models are trained on the training split only; the gradient-boosting model trains on a CPU in minutes. The fusion weights are fixed in advance, and only the decoding thresholds are fitted on the validation split, so each reported test result is computed once.
+The audio-visual network is trained with stochastic gradient descent (momentum 0.9, weight decay $10^{-3}$). The reported fine-tuning uses a batch size of 8, the objective of (\ref{eq:loss}), and a class-balanced sampler that draws each clip with probability proportional to the inverse square root of its class frequency. Before the reported fine-tuning, the network was trained on EngageNet in three stages starting from the AffectNet-7 initialization of the visual backbone, with the audio and fusion modules initialized randomly: 10 epochs at a learning rate of $10^{-2}$, a stage at $5 \times 10^{-4}$ with the ordinal objective and the class-balanced sampler, and 8 epochs at $5 \times 10^{-5}$ with the ordinal objective. All reported networks are fine-tuned from the resulting checkpoint for 6 epochs at a learning rate of $5 \times 10^{-5}$ with a step schedule and three random seeds, and the checkpoint with the best validation top-1 accuracy is kept. One fine-tuning run takes about 32 minutes on one NVIDIA RTX 3090 GPU (24\,GB), in PyTorch 2.5. The two behavior models are trained on the training split only; the gradient-boosting model trains on a CPU in minutes. The fusion weights are fixed in advance, and only the decoding thresholds are fitted on the validation split, so each reported test result is computed once.
 
 \section{Model Evaluation}
 \label{sec:eval}
@@ -473,7 +472,7 @@ Average of all 14 & 65.69 & -- & -- & --\\
 \end{tabular}
 \end{table}
 
-\subsection{Error Analysis on the Middle Engagement Levels}
+\subsection{Error Analysis}
 
 To show where the remaining errors lie, Fig.~\ref{fig_confusion} presents the row-normalized test confusion matrices of the audio-visual network and of \ournet, pooled over the three seeds. The network recognizes the two extreme levels at 79\% and 85\%, and the two middle levels, \emph{barely engaged} and \emph{engaged}, at 12\% and 30\%. Of its errors, 75.0\% are off by exactly one level, and 65.8\% are on clips whose true level is one of the two middle levels, although these levels make up 29.5\% of the test set. \ournet{} raises recall on \emph{highly engaged} from 85\% to 94\% and on \emph{engaged} from 30\% to 38\%, lowers it on \emph{not engaged} from 79\% to 73\%, and leaves \emph{barely engaged} at 11\%; 71.8\% of its errors are on the two middle levels.
 

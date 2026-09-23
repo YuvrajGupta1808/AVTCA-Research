@@ -1868,7 +1868,7 @@ adjacent +1.28. The paper claim is therefore "behavior stream improves minority-
 Yuvraj's own explanation in the meeting (more epochs) is the C7 confound — the matched re-run at mvf 50 (§16.11 C7) is
 the single experiment that must finish before the results table is written.
 
-### 18.2 Paper structure (journal target, IEEE template at `papers/research/paper.tex`)
+### 18.2 Paper structure (journal target; source now at `research/paper/paper.tex`, moved from gitignored `papers/research/` on 2026-09-23)
 
 Order agreed: Introduction → Related Work → **Preliminaries (~1 page, journal only)** → Methodology → Experimental
 Results / Model Evaluation → Conclusion. Follow the format of Sanchita's previous paper (`papers/research/prof papeer.pdf`).
@@ -1921,15 +1921,15 @@ Answer to give Tuesday, with the reasoning:
 
 | # | Task | Owner | Due | Depends on |
 |---|---|---|---|---|
-| P1 | Finish C7 matched re-run (behavior vs AV at mvf 50) so the results table is confound-free | Yuvraj | before P5 | **running 2026-09-12 (§19)** |
+| P1 | Finish C7 matched re-run (behavior vs AV at mvf 50) so the results table is confound-free | Yuvraj | before P5 | **done 2026-09-12 (§19.5): behavior branch null; paper updated 2026-09-23** |
 | P2 | Correct the 65.47/65.25 framing with Sanchita (email or Tuesday) | Yuvraj | 2026-09-15 | — |
 | P3 | Related work → 15–20 citations, bib entries verified | Yuvraj | **done** (21 entries; verify `dan2026multimodal` authors and `li2025mersurvey` volume) | — |
 | P4 | Preliminaries section | Yuvraj | **done** (Yuvraj wrote it; merged 2026-09-08 as §III with eq labels; Method/Eval now cite its equations instead of re-deriving) | — |
-| P5 | Model Evaluation section: metric-grouped tables + ablation + hard-category discussion | Yuvraj | 2026-09-15 | P1 |
-| P6 | draw.io architecture diagram, SVG/PDF in `papers/research/figures/`, copy to shared folder | Yuvraj | 2026-09-15 | — |
+| P5 | Model Evaluation section: metric-grouped tables + ablation + hard-category discussion | Yuvraj | 2026-09-15 | **done 2026-09-23 (§18.11)**; open: alignment ablation re-run, human study |
+| P6 | draw.io architecture diagram, SVG/PDF in `research/paper/figures/`, copy to shared folder | Yuvraj | 2026-09-15 | **done 2026-09-23** — `architecture.drawio` (editable) + `.pdf`/`.svg`; shapes traced from a forward pass; **shared-folder upload still to do (Yuvraj)** |
 | P7 | Call Akshit; capture his variant + agree section split | Yuvraj | 2026-09-08 | — |
 | P8 | Methodology section grouped into 4 components | Akshit | 2026-09-15 | P6, P7 |
-| P9 | Conceptual diagram for the Introduction | Yuvraj | 2026-09-15 | — |
+| P9 | Conceptual diagram for the Introduction | Yuvraj | 2026-09-15 | **done 2026-09-23** (`figures/fig_concept.tex`, Fig. 1) |
 | P10 | Feasibility note on personalized retraining (18.6) ready to present | Yuvraj | 2026-09-15 | Sanchita's 09-09 meeting outcome |
 | P11 | Data-collection asks list (18.5) sent to Sanchita before her 09-09 meeting | Yuvraj | 2026-09-09 AM | — |
 
@@ -1960,6 +1960,88 @@ removed from §IV/§VI and replaced by `\ref` to the Preliminaries labels `eq:xa
 boilerplate comments stripped; `graphicx` enabled with `\graphicspath{{figures/}}`. My earlier standalone
 draft is kept as `paper_claude_draft_2026-09-08.tex`. Static check: 8 tables, 9 equations, 2 align blocks, 21
 bib entries all cited, only `fig_arch` unresolved (P6).
+
+### 18.11 Paper aligned with the §19 results + figures (2026-09-23)
+
+`papers/research/paper.tex` revised so every number traces to `results/fullclip/` (3 seeds, refined decoder):
+abstract and contributions rewritten; majority class corrected to *highly engaged* (1,134/2,256); split table
+corrected to 7,879 / 1,071 / 2,256 with per-level counts; fine-tune protocol corrected (6 epochs, sqrt-inverse
+sampler, 3 seeds); decoder, ordinal, modality (9 runs, +0.74, 8/9) tables replaced with 3-seed values; the
+behavior-stream "+3.18 macro-F1" claim withdrawn (§19.5) and the branch moved to an ablation; new method
+subsection IV-E and results for the OpenFace segment-statistics members + late fusion (70.29 ± 0.14 fixed
+weights, selection-rule table, 98-d result); the alignment ablation table **removed** (measured on the
+15-frame test set) with a TODO to re-run; "role-aware" claim in Research Gap removed (nothing role-aware is
+implemented — the **title still says "Role-Aware"**, supervisor's call); human study marked as not yet run.
+Literature check (2026-09-23): 13 bib entries corrected (authors of `zhao2026multimodal` and
+`venkatraman2025avtca`, vol./art. of `li2026mersurvey`, DOIs), 9 new 2024–2026 citations added (30 total);
+**67.61 is only the best published *test-split* number** — later EngageNet papers report validation only
+(TCCT-Net 68.91, ordinal ST-GCN 71.24, VE-MD 68.98, PriorNet 73.58) because test labels were not released;
+no published audio or audio-visual EngageNet result was found. "Largest dataset" reworded (CMOSE has more
+clips; EngageNet has more participants/hours). Four figures, now in `research/paper/figures/` (concept, architecture, results bars, confusion
+matrices; confusion generated from `A_av_s*/context/logits.npz` + `segtf/fusion_A_av_s*_3way.json`).
+Preamble now uses plain `\usepackage{graphicx}` — the template's `\ifCLASSINFOpdf` branch loads the dvips
+driver under XeLaTeX and breaks pgfplots. Compiles cleanly with tectonic (12 pages). The TikZ architecture
+figure stands in for the draw.io one (P6); swap if the "not AI-generated" rule applies to the final figure.
+
+### 18.12 Paper moved under version control, retitled, draw.io architecture figure (2026-09-23)
+
+- **Location:** `research/paper/` (tracked; `.gitignore` there drops LaTeX build products and `paper.pdf`).
+  `papers/` stays gitignored — it holds other authors' PDFs, the template and Sanchita's paper.
+- **Title:** "Audio-Visual Cross-Attention and Facial-Behavior Fusion for Ordinal Student Engagement
+  Recognition" — names the three contributions that have evidence; drops "Role-Aware" (not implemented)
+  and "Collaborative" (EngageNet is not collaborative). Spelling normalised to American ("behavior").
+- **Architecture figure (§18.3 spec):** `figures/architecture.drawio`, editable in draw.io, exported to
+  `architecture.pdf` (used by the paper) and `architecture.svg`. Every tensor shape comes from a forward
+  pass of `MultiModalCNN` (it/modern, 8 heads) on a 431-frame mel clip + 50 frames; the modality-dropout
+  and alignment points and the other evaluated components are marked in orange. The file is generated
+  by `figures/src/make_architecture_drawio.py`; after the first manual edit in draw.io, treat the
+  `.drawio` as the source and stop using the script. The TikZ `fig_arch.tex` was deleted.
+- **Code-vs-paper correction found while tracing:** the middle attention pair (`audioAttention`,
+  `visualAttention`) is cross-modal (other stream = key/value), not self-attention as the paper and
+  CLAUDE.md said. Both fixed. The network therefore has three cross-modal exchanges.
+- Export without a display: draw.io's `export3.html` in headless Chrome (puppeteer), as the
+  draw-image-export2 server does; the Electron CLI segfaults without X. Tools were set up in a scratch dir.
+
+### 18.13 Paper rewritten on the FoleyGAN structure (2026-09-23)
+
+Yuvraj: Sanchita's FoleyGAN paper (`papers/research/prof papeer.pdf`, IEEE TMM 2023) is the only format
+benchmark; every statement must be specific and true. `research/paper/paper.tex` was rewritten section
+for section on it (previous version kept in git, commit 9e5adca):
+
+| FoleyGAN | Ours |
+|---|---|
+| I Intro: application → problem → named model → Fig. 1 "Problem description" → Fig. 2 overview → "significant contributions" bullets → section roadmap | same; model named `\ournet` = **AVB-Engage** (one-line macro, placeholder — Yuvraj/Sanchita to confirm) |
+| II Related Work A–D, each ending "In our work, we …" | A engagement recognition, B EngageNet, C audio-visual learning, D ordinal modeling; old "Research Gap" subsection removed |
+| III GAN Basics | III Cross-Attention and Ordinal Decoding Basics (metric equations moved to VI A–D) |
+| IV Method: "two networks A) B)", numbered steps 1) 2), Fig. 3 detailed, Algorithm 1 | three blocks A network / B behavior-statistics models / C late fusion + decoding; Fig. 3 = `architecture.drawio`; Algorithm 1 added; neural behavior branch moved to ablation 2 |
+| V Dataset (Table I) + Protocols (epochs, GPU, time, optimizer) | same; training stages stated exactly (1e-2 10 ep → 5e-4 ordinal+sampler → 5e-5 8 ep → final 6-ep fine-tune, ~32 min on one RTX 3090) |
+| VI A–D one metric each with equation + "high/low is preferred", E quantitative, F "we performed N separate ablation studies" with "we kept X unchanged", G visual analysis, H human survey | same; F has 4 studies (modality, behavior branch, fusion weights + 98-d, training sweep); G confusion matrices + label granularity; H protocol, stated as not yet conducted |
+| VII Conclusion and Future Scope with "One shortcoming …" | written |
+| Tables: horizontal rules only, best in bold | converted |
+
+Corrections made while rewriting: the "light/dark/neutral lighting, dormitories, labs, libraries" text in
+the EngageNet PDF describes **DAiSEE**, not EngageNet (EngageNet: web platform, own webcam, computer labs,
+dorm rooms, open spaces, ≥640×480, some background noise); modality dropout is per **sample**, not per
+batch; unverified content claims about cited papers reduced to what their titles/abstracts support;
+RAVDESS dropped (no RAVDESS result is reported). New `figures/overview.drawio` (Fig. 2). 11 pages, clean
+compile.
+
+### 18.14 Sections III–V audited for statements without results (2026-09-23)
+
+Section III renamed "Preliminaries"; headings shortened (IV-B "Facial-Behavior Models", IV-C "Late Fusion and
+Ordinal Decoding", VI-G "Error Analysis"). Findings and fixes:
+
+| Statement | Evidence | Fix |
+|---|---|---|
+| Per-sample alignment listed as a separate contribution | no valid ablation (the old one used the 15-frame test set) | folded into contribution 1; §IV-A3 now says its effect is not measured |
+| Modality dropout "keeps each encoder individually predictive" | contradicted: audio alone ≤ majority | replaced by its purpose + "effect not measured" |
+| 105 clips dropped because audio/face "could not be read" | wrong: they are labeled **SNP (Subject Not Present)** (104 train, 1 test) | corrected |
+| "batch size 8" for all training | stage 2 (v12_03) used batch 2 | batch size stated for the reported fine-tuning only |
+| EfficientFace "related to the facial cues of engagement" | no evidence | reworded as the reason for the choice only |
+| Ordinal objective and late-fusion rationale | CE vs ordinal null in the sweep; fusion errors overlap less than a 14-checkpoint average | pointers to that evidence added |
+
+**Open (would turn two design statements into results):** matched 3-seed runs without alignment and without
+modality dropout (needs a code flag for the no-alignment path; ~32 min per run per GPU).
 
 ### 18.10 Paper-vs-code check on the behavior stream (2026-09-08)
 
@@ -2342,3 +2424,64 @@ Three-way adjacent 90.4–91.7, MAE 0.392–0.417, macro-F1 51.1–56.5. Reading
 both behavior members; (b) stabilise the transformer (fewer epochs, stronger regularisation, or seed
 averaging of its logits) so it can carry the fusion without the GBM; (c) wire the three-way fusion into
 `ui/inference.py`; (d) the same protocol on DAiSEE as a second-corpus check.
+
+### 19.8 98-feature OpenFace re-extraction and fusion rerun (2026-09-13) — in flight
+
+Yuvraj asked to re-extract OpenFace with the paper's full feature set and rerun the fusion.
+`preprocessing/engagenet/extract_behavior_full.py` keeps 49 numbers per frame (gaze vectors + angles 8,
+head position + rotation 6, AU intensities 17, AU presence 18) plus `confidence`/`success`, into
+`datasets/EngageNet/behavior98/` (gitignored; column order in `_columns.json`). 20 segments × [mean, std]
+of the 49 gives exactly the paper's 98-d tokens. Single-threaded BLAS per process, 18 workers,
+~31 clips/min → ~6 h for 11,311 clips (started 01:54). The feature/member/transformer/fusion scripts
+take `--features {22,98}`; the 22-d path was regression-checked (GBM member 66.53 test argmax, unchanged).
+
+`scripts/fullclip/run_f98_pipeline.sh` runs unattended when extraction reports DONE: (1) cache
+`features_S20_f98.npz`; (2) raw-signal probe; (3) GBM98 member → `results/fullclip/gbm98/probs.npz`;
+(4) transformer sweep, same 8 configs × 3 seeds, selection on mean validation → `results/fullclip/segtf_f98/`;
+(5a) 3-way AV + TF98 + GBM98 for all nine neural checkpoints; (5b) 2-way AV + GBM98; (5c) 5-way
+AV + TF22 + GBM22 + TF98 + GBM98 (simplex grid, step 0.1) on the three A seeds. Same pre-registered
+protocol as §19.4/§19.7.
+
+**Results (pipeline finished 2026-09-13 14:51; recorded 2026-09-23 from `results/fullclip/f98_pipeline.log`):**
+
+| Member / fusion (test) | 22-d | 98-d |
+|---|---:|---:|
+| GBM alone, argmax / E-thresholds | 66.53 / 66.27 | **68.13 / 68.88** (above published 67.61 on the paper's own features) |
+| Segment transformer, val-selected config | T7: 67.0 (3 seeds) | T6 meanpool: val 66.70; test 66.0–67.5 |
+| 2-way AV + GBM, val-selected | 69.86 ± 0.50 | 68.56 (68.79 / 68.22 / 68.66) |
+| 2-way AV + GBM, fixed 0.5/0.5 | 69.95 ± 0.20 | 68.54 (68.53 / 68.13 / 68.97) |
+| 3-way AV + TF + GBM, val-selected (8 members) | 70.15 ± 0.25 | 69.15 ± 0.83 |
+| 3-way equal thirds (A seeds) | 69.28 ± 0.23 | 68.93 (69.99 / 68.04 / 68.75) |
+| 5-way AV + TF22 + GBM22 + TF98 + GBM98 | — | 69.46 (69.77 / 68.88 / 69.73) |
+
+**Reading:** the 98-d GBM is the strongest single model in the repository and beats the published
+Transformer on the same features, but the 98-d members do **not** improve the fusion — validation picks
+low AV weights (0.3) and test drops ~1 point. The headline stays the 22-d three-way fusion (70.29 ± 0.14
+fixed 0.6/0.2/0.2). Step 5d's fixed 0.6/0.2/0.2 row for 98-d failed on a `sed` bug in the runner (not re-run).
+
+#### 19.7.1 Selection-rule sensitivity of the fused numbers (2026-09-13, before the 98-d rerun)
+
+The §19.6 two-way GBM table used `ensemble_probe.py`, which picks the weight by validation *argmax*
+accuracy on a 0.1 grid; the §19.7 three-way table used `fuse_members.py`, which picks by validation
+*threshold-decoded* accuracy on a 0.05/0.1 grid. Re-running the A seeds under every rule, plus weights
+fixed a priori (no selection; only the thresholds are fit on validation):
+
+| Fusion | Rule | s1 | s2 | s3 | mean ± sd |
+|---|---|---:|---:|---:|---:|
+| AV + GBM22 | val argmax, 0.1 grid (§19.6) | 70.12 | 69.28 | 70.17 | 69.86 ± 0.50 |
+| AV + GBM22 | val argmax, 0.05 grid | 69.46 | 70.26 | 69.99 | 69.90 ± 0.41 |
+| AV + GBM22 | val threshold, 0.05 grid | 69.46 | 70.48 | 67.42 | 69.12 ± 1.55 |
+| AV + GBM22 | **fixed 0.5 / 0.5** | 69.77 | 70.17 | 69.90 | **69.95 ± 0.20** |
+| AV + GBM22 | fixed 0.7 / 0.3 | 69.86 | 70.26 | 69.99 | 70.04 ± 0.20 |
+| AV + TF22 + GBM22 | val threshold, simplex 0.1 (§19.7) | 70.17 | 70.26 | 70.43 | 70.29 ± 0.14 |
+| AV + TF22 + GBM22 | val argmax, simplex 0.1 | 69.99 | 68.17 | 70.12 | 69.43 ± 1.09 |
+| AV + TF22 + GBM22 | **fixed equal (⅓ each)** | 69.15 | 69.15 | 69.55 | **69.28 ± 0.23** |
+| AV + TF22 + GBM22 | fixed 0.6 / 0.2 / 0.2 | 70.17 | 70.26 | 70.43 | 70.29 ± 0.14 |
+
+Reading: every rule and every seed lands between 67.4 and 70.5, 17 of 18 selected numbers above the
+published 67.61; the outliers (67.42, 68.17) are cases where validation chose an extreme weight
+(0.85 / 0.8 on the AV member) for one seed. **The claim that survives any rule is the fixed-weight
+one: equal-weight averaging of the audio-visual network with the two OpenFace-statistics members
+scores 69.3 ± 0.2, and the conventional 0.6/0.2/0.2 scores 70.3 ± 0.1; validation-selected weights sit
+in the same band.** Report the fixed-weight rows as the headline and the selected rows as a check,
+not the other way round. `fuse_members.py` now has `--select {ethr,argmax}` and `--fixed w1,w2,...`.
