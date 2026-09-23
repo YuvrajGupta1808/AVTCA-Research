@@ -3,7 +3,7 @@
 %% supervisor: S. Ghose and J. J. Prevost, "FoleyGAN", IEEE Trans. Multimedia, vol. 25, 2023
 %% (papers/research/prof papeer.pdf): I Introduction, II Related Work, III Basics, IV Proposed Research
 %% Method, V Experimental Details, VI Model Evaluation, VII Conclusion and Future Scope.
-%% Every number in this file is traced to results/fullclip/ (see docs/plan.md §19 and §18.11-18.13).
+%% Every number in this file is traced to results/fullclip/ (see docs/plan.md Sec. 19 and Sec. 18.11-18.13).
 
 \documentclass[journal]{IEEEtran}
 
@@ -482,7 +482,7 @@ We think there are two reasons for this behavior. First, the two middle levels d
 \subsection{Qualitative Study: Human Survey}
 
 A human survey is required to judge whether the middle levels that are hard for the model are also hard for people, since the engagement labels are themselves human judgements. The survey follows the annotation of the dataset. A stratified sample of 200 test clips, 50 per level, will be shown to raters with teaching experience, who will assign one of the four levels using the same level descriptions given to the EngageNet annotators and will also mark whether the student appears to be speaking or listening. We will compute inter-rater agreement (Krippendorff's $\alpha$ with ordinal weighting), agreement between the raters and the labels, and the confusion matrix of the raters against the labels, which will be compared level by level with Fig.~\ref{fig_confusion}. If the raters confuse the two middle levels at a rate similar to the model, the remaining error is a property of the labels; if they separate the middle levels better, the difference identifies information visible to people that the model does not yet use. This survey has not yet been conducted, and no survey result is reported in this paper.
-% TODO: add the survey results table once the study is complete (docs/plan.md §18.5).
+% TODO: add the survey results table once the study is complete (docs/plan.md Sec. 18.5).
 
 \section{Conclusion and Future Scope}
 \label{sec:conclusion}
