@@ -79,9 +79,9 @@ BX, BW = 610, 260                 # behavior column
 H, R = 40, 56                     # box height, row pitch
 y = lambda r: 40 + r * R
 
-group(20, 18, 530, 598, 'Audio-visual network  (A) audio  ·  (B) video  ·  (C) alignment and cross-attention', BLUE, '#F8FBFE')
-group(590, 18, 300, 272, '(E) facial-behavior statistics members', GREY, '#FAFAF9')
-group(20, 628, 870, 148, '(D) ordinal head and calibrated decoding  ·  (E) late fusion of the three members', ORANGE, '#FFFBF9', valign='bottom')
+group(20, 18, 530, 598, '(A) Audio-visual cross-attention network', BLUE, '#F8FBFE')
+group(590, 18, 300, 272, '(B) Facial-behavior statistics models', GREY, '#FAFAF9')
+group(20, 628, 870, 148, '(A) ordinal head  ·  (C) late fusion and calibrated ordinal decoding', ORANGE, '#FFFBF9', valign='bottom')
 
 # inputs
 v0 = box(VX, y(0.3), W, H, 'Face crops, MTCNN, 5 fps', '(B, 50, 3, 224, 224)', 'io')
@@ -89,9 +89,9 @@ a0 = box(AX, y(0.3), W, H, 'Log-mel spectrogram, 64 bins', '(B, 64, 431)', 'io')
 b0 = box(BX, y(0.3), BW, H, 'OpenFace 2.2 per source frame', '(B, T, 22): 17 AU, gaze 2, pose 3', 'io')
 
 # (B) video encoder, (A) audio encoder
-v1 = box(VX, y(1.3), W, H, '(B) EfficientFace, AffectNet-7 init.', 'per frame → (B, 50, 1024)')
+v1 = box(VX, y(1.3), W, H, 'EfficientFace, AffectNet-7 init.', 'per frame → (B, 50, 1024)')
 v2 = box(VX, y(2.3), W, H, 'Stage-1 Conv1D ×2, 1024→64→64', 'V₁ (B, 64, 50)')
-a1 = box(AX, y(1.3), W, H, '(A) Conv2D block ×2, MaxPool 2×2', '(B, 128, 16, 107)')
+a1 = box(AX, y(1.3), W, H, 'Conv2D block ×2, MaxPool 2×2', '(B, 128, 16, 107)')
 a2 = box(AX, y(2.3), W, H, 'Mean over frequency', 'A₁ (B, 128, 107)')
 a3 = box(AX, y(3.3), W, H, '★ Per-sample adaptive alignment', 'Ã₁ (B, 128, 50)', 'key', bold=True)
 
@@ -139,10 +139,10 @@ edge(b2, mix, exit_=(0, 0.5), entry=(0.35, 0), pts=((570, y(2.5) + 20), (570, y(
 edge(b3, mix, exit_=(0.5, 1), entry=(0.75, 0), pts=((BX + BW / 2, y(10.3)), (540, y(10.3))))
 
 text(606, 318, 280, 150,
-     '★ orange: the contributions evaluated in the paper.\n'
+     '★ orange: the components evaluated in Section VI.\n'
      'Shapes are traced from a forward pass of the trained configuration (B = batch). '
      'Audio: 22.05 kHz, full clip (≤ 10.06 s). Heads h = 8 in every attention block. '
-     'Every attention block in (C) is cross-modal: the other stream supplies keys and values (dashed arrows, drawn for the first exchange).', size=10)
+     'Every attention block in (A) is cross-modal: the other stream supplies keys and values (dashed arrows, drawn for the first exchange).', size=10)
 
 xml = ('<mxfile host="drawio" agent="make_architecture_drawio.py"><diagram id="arch" name="Architecture">'
        '<mxGraphModel dx="900" dy="900" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" '
