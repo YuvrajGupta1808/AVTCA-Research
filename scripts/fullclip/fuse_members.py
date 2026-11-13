@@ -1,6 +1,8 @@
 #!/usr/bin/env python
 """Late fusion of N members' class probabilities. Weights AND thresholds chosen on validation only.
 
+Any number of members: 2 -> weight grid step 0.05; 3+ -> simplex grid at --step (default 0.1).
+
 Each member is an .npz with validation_/testing_ logits or probs and targets, in annotation order
 (context_analysis.py, segment_transformer.py, gbm_member.py all write this layout).
 Two members: weight grid 0..1 step 0.05. Three: simplex grid step 0.1.
@@ -56,6 +58,9 @@ def main():
     ap.add_argument('--names', nargs='+', default=None)
     ap.add_argument('--out', default='')
     ap.add_argument('--quiet', action='store_true')
+    ap.add_argument('--step', type=float, default=0.1, help='simplex grid step for 3+ members')
+    ap.add_argument('--select', choices=['ethr', 'argmax'], default='ethr', help='validation criterion for the weight: threshold-decoded top-1 (default) or argmax top-1')
+    ap.add_argument('--fixed', default='', help='comma-separated weights fixed a priori (no weight selection; thresholds still fit on validation)')
     a = ap.parse_args()
     ms = [load(p) for p in a.members]
     names = a.names or [os.path.basename(os.path.dirname(p)) for p in a.members]
@@ -64,20 +69,26 @@ def main():
         assert np.array_equal(m['validation_y'], yv) and np.array_equal(m['testing_y'], yt), 'member order mismatch'
     cls = np.arange(4)
     n = len(ms)
-    if n == 2:
+    if a.fixed:
+        grid = [tuple(float(x) for x in a.fixed.split(','))]
+        assert len(grid[0]) == n and abs(sum(grid[0]) - 1) < 1e-6, 'fixed weights must match member count and sum to 1'
+    elif n == 2:
         grid = [(w, 1 - w) for w in np.arange(0, 1.0001, 0.05)]
-    elif n == 3:
-        grid = [(w1, w2, 1 - w1 - w2) for w1 in np.arange(0, 1.0001, 0.1) for w2 in np.arange(0, 1.0001 - w1, 0.1)]
     else:
-        raise SystemExit('2 or 3 members supported')
+        # simplex grid at the given step (0.1 by default): all non-negative weight vectors summing to 1
+        step = a.step
+        k = int(round(1 / step))
+        grid = [tuple(c / k for c in combo) for combo in itertools.product(range(k + 1), repeat=n - 1)
+                if sum(combo) <= k for combo in [combo + (k - sum(combo),)]]
     rows = []
     for w in grid:
         pv = sum(wi * m['validation'] for wi, m in zip(w, ms)); pt = sum(wi * m['testing'] for wi, m in zip(w, ms))
         Ev, Et = (pv * cls).sum(1), (pt * cls).sum(1)
         th = fit_thresholds(Ev, yv)
-        rows.append(dict(w=[round(float(x), 2) for x in w], val=metrics(np.digitize(Ev, th), yv),
+        rows.append(dict(w=[round(float(x), 2) for x in w], val=metrics(np.digitize(Ev, th), yv), val_argmax=metrics(pv.argmax(1), yv),
                          test=metrics(np.digitize(Et, th), yt), test_argmax=metrics(pt.argmax(1), yt), th=th.tolist()))
-    sel = max(rows, key=lambda r: (r['val']['top1'], r['val']['adj']))
+    key = (lambda r: (r['val']['top1'], r['val']['adj'])) if a.select == 'ethr' else (lambda r: (r['val_argmax']['top1'], r['val_argmax']['adj']))
+    sel = max(rows, key=key)
     singles = []
     for i, r in enumerate(rows):
         if sum(1 for x in r['w'] if x > 0) == 1:

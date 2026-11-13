@@ -16,16 +16,20 @@ from concurrent.futures import ThreadPoolExecutor
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 ANN = f'{ROOT}/preprocessing/engagenet/annotations_engagement_a10.txt'
-BEH = f'{ROOT}/datasets/EngageNet/behavior'
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from segment_features import FEATURE_SETS  # noqa: E402
+FS = sys.argv[sys.argv.index('--features') + 1] if '--features' in sys.argv else '22'
+BEH, NF = FEATURE_SETS[FS]
 NSEG = 20
 
 
 def feats(stem):
-    x = np.load(os.path.join(BEH, stem + '.npy'))
+    p = os.path.join(BEH, stem + '.npy')
+    x = np.load(p)[:, :NF] if os.path.isfile(p) else np.zeros((0, NF), np.float32)
     if x.shape[0] == 0:
-        return np.zeros(NSEG * 44 + 44, np.float32), False
+        return np.zeros(NSEG * 2 * NF + 2 * NF, np.float32), False
     segs = np.array_split(x, NSEG)
-    seg = np.concatenate([np.concatenate([s.mean(0), s.std(0)]) if len(s) else np.zeros(44, np.float32) for s in segs])
+    seg = np.concatenate([np.concatenate([s.mean(0), s.std(0)]) if len(s) else np.zeros(2 * NF, np.float32) for s in segs])
     glob = np.concatenate([x.mean(0), x.std(0)])
     return np.concatenate([seg, glob]).astype(np.float32), True
 

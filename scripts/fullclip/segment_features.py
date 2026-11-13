@@ -16,16 +16,22 @@ import numpy as np
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 ANN = f'{ROOT}/preprocessing/engagenet/annotations_engagement_a10.txt'
-BEH = f'{ROOT}/datasets/EngageNet/behavior'
+FEATURE_SETS = {
+    # name: (directory of per-clip (T, K) arrays, number of leading columns used as features)
+    '22': (f'{ROOT}/datasets/EngageNet/behavior', 22),
+    '98': (f'{ROOT}/datasets/EngageNet/behavior98', 49),  # 49 per frame -> 98 after [mean, std]
+}
+BEH = FEATURE_SETS['22'][0]
 KEY = re.compile(r'(subject_\d+_[a-z0-9]+)_vid_(\d+)_(\d+)')
 
 
-def cache_path(n_seg):
-    return f'{ROOT}/results/fullclip/segtf/features_S{n_seg}.npz'
+def cache_path(n_seg, features='22'):
+    return f'{ROOT}/results/fullclip/segtf/features_S{n_seg}.npz' if features == '22' else f'{ROOT}/results/fullclip/segtf/features_S{n_seg}_f{features}.npz'
 
 
-def build(n_seg, force=False):
-    path = cache_path(n_seg)
+def build(n_seg, force=False, features='22'):
+    beh_dir, n_feat = FEATURE_SETS[features]
+    path = cache_path(n_seg, features)
     if os.path.isfile(path) and not force:
         z = np.load(path, allow_pickle=True)
         return {k: z[k] for k in z.files}
@@ -33,11 +39,12 @@ def build(n_seg, force=False):
     stems = [re.sub(r'_facecroppad\.npy$', '', os.path.basename(r[0])) for r in rows]
 
     def feats(stem):
-        x = np.load(os.path.join(BEH, stem + '.npy'))
+        p = os.path.join(beh_dir, stem + '.npy')
+        x = np.load(p)[:, :n_feat] if os.path.isfile(p) else np.zeros((0, n_feat), np.float32)
         if x.shape[0] == 0:
-            return np.zeros((n_seg, 44), np.float32)
+            return np.zeros((n_seg, 2 * n_feat), np.float32)
         segs = np.array_split(x, n_seg)
-        return np.stack([np.concatenate([s.mean(0), s.std(0)]) if len(s) else np.zeros(44, np.float32)
+        return np.stack([np.concatenate([s.mean(0), s.std(0)]) if len(s) else np.zeros(2 * n_feat, np.float32)
                          for s in segs]).astype(np.float32)
 
     with ThreadPoolExecutor(8) as ex:
@@ -53,4 +60,5 @@ def build(n_seg, force=False):
 
 if __name__ == '__main__':
     n = int(sys.argv[1]) if len(sys.argv) > 1 else 20
-    build(n, force='--force' in sys.argv)
+    fs = sys.argv[sys.argv.index('--features') + 1] if '--features' in sys.argv else '22'
+    build(n, force='--force' in sys.argv, features=fs)

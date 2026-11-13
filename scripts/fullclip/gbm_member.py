@@ -14,21 +14,24 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from segment_features import build  # noqa: E402
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-OUT = f'{ROOT}/results/fullclip/gbm/probs.npz'
+FS = sys.argv[sys.argv.index('--features') + 1] if '--features' in sys.argv else '22'
+OUT = f'{ROOT}/results/fullclip/gbm/probs.npz' if FS == '22' else f'{ROOT}/results/fullclip/gbm{FS}/probs.npz'
+from segment_features import FEATURE_SETS  # noqa: E402
+BEH, NF = FEATURE_SETS[FS]
 
-d = build(20)
+d = build(20, features=FS)
 X = np.concatenate([d['X'].reshape(len(d['X']), -1), d['X'].mean(1), d['X'].std(1)], 1)
 # clip-level mean/std of the raw series ~ mean of segment means / std across segments; ensemble_probe
 # used the raw-series stats — recompute those exactly for parity.
 import csv, re  # noqa: E402
 ANN = f'{ROOT}/preprocessing/engagenet/annotations_engagement_a10.txt'
-BEH = f'{ROOT}/datasets/EngageNet/behavior'
 rows = [r for r in csv.reader(open(ANN), delimiter=';') if r]
 stems = [re.sub(r'_facecroppad\.npy$', '', os.path.basename(r[0])) for r in rows]
 from concurrent.futures import ThreadPoolExecutor  # noqa: E402
 def clipstat(stem):
-    x = np.load(os.path.join(BEH, stem + '.npy'))
-    return np.concatenate([x.mean(0), x.std(0)]).astype(np.float32) if len(x) else np.zeros(44, np.float32)
+    p = os.path.join(BEH, stem + '.npy')
+    x = np.load(p)[:, :NF] if os.path.isfile(p) else np.zeros((0, NF), np.float32)
+    return np.concatenate([x.mean(0), x.std(0)]).astype(np.float32) if len(x) else np.zeros(2 * NF, np.float32)
 with ThreadPoolExecutor(8) as ex:
     C = np.stack(list(ex.map(clipstat, stems)))
 X = np.concatenate([d['X'].reshape(len(d['X']), -1), C], 1)

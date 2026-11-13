@@ -31,6 +31,7 @@ def parse():
     p = argparse.ArgumentParser()
     p.add_argument('--out_dir', required=True)
     p.add_argument('--n_segments', type=int, default=20)
+    p.add_argument('--features', default='22', choices=['22', '98'], help='OpenFace feature set (see segment_features.FEATURE_SETS)')
     p.add_argument('--d_model', type=int, default=128)
     p.add_argument('--n_layers', type=int, default=4)
     p.add_argument('--n_heads', type=int, default=8)
@@ -102,7 +103,7 @@ def main():
     a = parse()
     torch.manual_seed(a.seed); np.random.seed(a.seed)
     os.makedirs(a.out_dir, exist_ok=True)
-    d = build(a.n_segments)
+    d = build(a.n_segments, features=a.features)
     X, y, split = d['X'], d['y'], d['split']
     tr, va, te = split == 'training', split == 'validation', split == 'testing'
     mu, sd = X[tr].reshape(-1, X.shape[-1]).mean(0), X[tr].reshape(-1, X.shape[-1]).std(0) + 1e-6

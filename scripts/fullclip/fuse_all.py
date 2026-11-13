@@ -14,20 +14,21 @@ ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)
 PY = '/home/user/.conda/envs/avtca/bin/python'
 HERE = os.path.dirname(os.path.abspath(__file__))
 cfg = sys.argv[1]
+segtf_dir = sys.argv[sys.argv.index('--segtf_dir') + 1] if '--segtf_dir' in sys.argv else f'{ROOT}/results/fullclip/segtf'
 neural_arms = ['A_av'] + (sys.argv[sys.argv.index('--members') + 1].split(',') if '--members' in sys.argv else [])
-gbm = f'{ROOT}/results/fullclip/gbm/probs.npz'
+gbm = sys.argv[sys.argv.index('--gbm') + 1] if '--gbm' in sys.argv else f'{ROOT}/results/fullclip/gbm/probs.npz'
 rows = []
 for arm in neural_arms:
     for seed in (1, 2, 3):
         neural = f'{ROOT}/results/fullclip/{arm}_s{seed}/context/logits.npz'
-        tf = f'{ROOT}/results/fullclip/segtf/{cfg}_s{seed}/logits.npz'
+        tf = f'{segtf_dir}/{cfg}_s{seed}/logits.npz'
         if not (os.path.isfile(neural) and os.path.isfile(tf)):
             print(f'skip {arm}_s{seed}: missing logits'); continue
         for label, members in ((f'{arm}_s{seed} + T_s{seed}', [neural, tf]),
                                (f'{arm}_s{seed} + T_s{seed} + GBM', [neural, tf, gbm] if os.path.isfile(gbm) else None)):
             if members is None:
                 continue
-            out = f'{ROOT}/results/fullclip/segtf/fusion_{arm}_s{seed}_{len(members)}way.json'
+            out = f'{segtf_dir}/fusion_{arm}_s{seed}_{len(members)}way.json'
             subprocess.run([PY, f'{HERE}/fuse_members.py', '--members'] + members + ['--out', out, '--quiet'],
                            check=True, capture_output=True)
             r = json.load(open(out))

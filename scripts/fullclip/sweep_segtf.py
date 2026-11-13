@@ -12,9 +12,10 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 
 WT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-OUT = '/home/user/AVTCA-Research/results/fullclip/segtf'
+FS = sys.argv[sys.argv.index('--features') + 1] if '--features' in sys.argv else '22'
+OUT = '/home/user/AVTCA-Research/results/fullclip/segtf' + ('' if FS == '22' else f'_f{FS}')
 PY = '/home/user/.conda/envs/avtca/bin/python'
-BASE = ['--n_segments', '20', '--n_heads', '8', '--dropout', '0.3', '--weight_decay', '0.05',
+BASE = ['--features', FS, '--n_segments', '20', '--n_heads', '8', '--dropout', '0.3', '--weight_decay', '0.05',
         '--ordinal_weight', '0.15', '--label_smoothing', '0.1', '--epochs', '60', '--batch_size', '64']
 CONFIGS = {
     'T1_d128_L4_lr1e3':        ['--d_model', '128', '--n_layers', '4', '--ffn', '256', '--lr', '1e-3'],
