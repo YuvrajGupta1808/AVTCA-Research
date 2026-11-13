@@ -3040,7 +3040,7 @@ Commit it with the paper so every number traces to committed code.
 | JF5 | Paired significance tests for the supplement (21.5) | Claude | **done 2026-11-13** (Section S13, Tables S11–S12; 21.10) — committed `ed6d2c4` |
 | JF6 | Cleanup steps 2–6 of 21.7, with the archive commit | Claude | **done 2026-11-13** (archive `c2827d2`; fixes + cleanup `2461716`) |
 | JF7 | Commit the paper's analysis scripts | Claude | **done 2026-11-13** (`c2827d2`) |
-| JF8 | Submission bundle (A3); upload the fixed folder to Overleaf | Claude / Yuvraj | bundle and Overleaf **done 2026-11-13** (21.14); the journal upload itself waits for JF4; 5 unused old files in Overleaf wait for Yuvraj's OK to delete |
+| JF8 | Submission bundle (A3); upload the fixed folder to Overleaf | Claude / Yuvraj | bundle and Overleaf **done 2026-11-13** (21.14); the journal upload itself waits for JF4; unused old Overleaf files deleted |
 
 ### 21.9 Applied (2026-11-13, Yuvraj: "Yes, fixes + cleanup")
 - **Archive commit `c2827d2`** (before any change): the Overleaf download as received, `research/paper_springer/`
@@ -3195,9 +3195,9 @@ Fig2.eps after the redraw.
   levels" at the first three `\bmhead`s; the template's `\bmhead` is a level-5 `\@startsection` following a level-1
   section, so only the PDF bookmark tree is affected); supplement 11 pp, 0 errors, 0 warnings; cover letter 1 p. Pages
   2, 4 and 10–12 were inspected: Figs. 1–3 and the back matter look as in the local build.
-- **Left in Overleaf, unused:** `SpringerNature/figures/{architecture.pdf, overview.pdf, fig_concept.tex,
-  fig_confusion.tex, fig_results.tex}` (figures of the pre-fix version, also in archive commit `c2827d2`). Overleaf's
-  dialog calls the deletion permanent, so they wait for Yuvraj's OK.
+- **Removed from Overleaf** (Yuvraj: "Yes, delete them"): `SpringerNature/figures/{architecture.pdf, overview.pdf,
+  fig_concept.tex, fig_confusion.tex, fig_results.tex}`, unused figures of the pre-fix version (copies in archive
+  commit `c2827d2`). Recompiled afterwards: still 12 pp, 0 errors, the same 3 bookmark warnings.
 - **Not changed:** a few reference lines with long DOIs are stretched, because the DOI suffix cannot break. The manual
   asks "Wherever possible please do not add further packages to the template", so `xurl` was not added; Springer
   re-typesets accepted papers.
