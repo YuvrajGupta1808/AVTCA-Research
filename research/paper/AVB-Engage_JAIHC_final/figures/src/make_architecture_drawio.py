@@ -17,6 +17,7 @@ FS = 12.5
 BLUE, BLUE_FILL = '#2A78D6', '#EAF2FC'
 ORANGE, ORANGE_FILL = '#EB6834', '#FDEDE6'
 GREY = '#6E6D68'
+TITLE = {BLUE: '#1D5FAF', ORANGE: '#B4471A', GREY: '#5A5954'}   # panel-title text, >= 4.5:1 on the panel fill
 P = lambda s: f'<i>p</i><sub>{s}</sub>'
 cells, _id = [], [1]
 
@@ -48,7 +49,7 @@ def box(x, y, w, h, title, *lines, kind='net', bold=False):
 def group(x, y, w, h, label, stroke, fill, valign='top'):
     cells.append(f'<mxCell id="{nid()}" value="{attr(label)}" style="rounded=1;arcSize=3;whiteSpace=wrap;html=1;dashed=1;'
                  f'strokeColor={stroke};fillColor={fill};verticalAlign={valign};align=left;spacingLeft=8;spacingTop=2;'
-                 f'spacingBottom=3;fontFamily=Helvetica;fontSize={FS};fontStyle=1;fontColor={stroke};" vertex="1" parent="1">'
+                 f'spacingBottom=3;fontFamily=Helvetica;fontSize={FS};fontStyle=1;fontColor={TITLE.get(stroke, stroke)};" vertex="1" parent="1">'
                  f'<mxGeometry x="{x}" y="{y}" width="{w}" height="{h}" as="geometry"/></mxCell>')
 
 

@@ -11,6 +11,7 @@ from xml.sax.saxutils import escape
 OUT = Path(__file__).resolve().parent / 'overview.drawio'
 FS = 12.5
 C = {'net': ('#2A78D6', '#EAF2FC'), 'beh': ('#6E6D68', '#FFFFFF'), 'key': ('#EB6834', '#FDEDE6'), 'io': ('#6E6D68', '#FFFFFF')}
+TITLE = {'net': '#1D5FAF', 'beh': '#5A5954', 'key': '#B4471A'}   # panel-title text, >= 4.5:1 on the panel fill
 GROUP_FILL = {'net': '#F8FBFE', 'beh': '#FAFAF9', 'key': '#FFFBF9'}
 P = lambda s: f'<i>p</i><sub>{s}</sub>'          # p_AV, p_TF, p_GBM with a real subscript
 cells, n = [], [1]
@@ -40,7 +41,7 @@ def group(x, y, w, h, label, kind, valign='top'):
     s, _ = C[kind]
     cells.append(f'<mxCell id="{nid()}" value="{attr(label)}" style="rounded=1;arcSize=4;whiteSpace=wrap;html=1;dashed=1;'
                  f'strokeColor={s};fillColor={GROUP_FILL[kind]};verticalAlign={valign};align=left;spacingLeft=6;spacingTop=1;'
-                 f'spacingBottom=2;fontFamily=Helvetica;fontSize={FS};fontStyle=1;fontColor={s};" vertex="1" parent="1">'
+                 f'spacingBottom=2;fontFamily=Helvetica;fontSize={FS};fontStyle=1;fontColor={TITLE[kind]};" vertex="1" parent="1">'
                  f'<mxGeometry x="{x}" y="{y}" width="{w}" height="{h}" as="geometry"/></mxCell>')
 
 

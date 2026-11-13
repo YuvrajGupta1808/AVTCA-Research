@@ -1,0 +1,35 @@
+%% DRAFT cover letter for the JAIHC submission. Replace every [bracketed] field before submitting; build with
+%% pdfLaTeX (or tectonic) to cover_letter.pdf. Facts match paper.tex (2026-11-13).
+\documentclass[11pt]{letter}
+\usepackage[a4paper,margin=25mm]{geometry}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\AtBeginDocument{\setlength{\indentedwidth}{\textwidth}}% letter.cls sets the signature block at half width
+\signature{{[Corresponding author's full name]}\\{}[Department, Institution, City, Country]\\{}[e-mail] $\cdot$ ORCID [0000-0000-0000-0000]\\on behalf of all authors}
+\begin{document}
+\begin{letter}{Editor-in-Chief\\Journal of Ambient Intelligence and Humanized Computing}
+\opening{Dear Editor,}
+
+We submit the manuscript ``AVB-Engage: Audio-Visual and Facial-Behavior Fusion for Ordinal Student Engagement
+Recognition'' for consideration as an original research article in the \emph{Journal of Ambient Intelligence and
+Humanized Computing}.
+
+The paper addresses automatic recognition of student engagement in online learning from a webcam recording. It
+combines an audio-visual cross-attention network with two models on facial-behavior statistics and decodes the four
+ordered engagement levels through the expected level. On the official test split of the EngageNet dataset it reaches
+70.29\% top-1 accuracy over three training seeds, against 67.61\% for the best published result on that split, and it
+measures on the same clips how much of the gain comes from the decoding rule, from combining models that make different
+errors, and from the audio track.
+
+The manuscript follows the journal's instructions: it is prepared with the Springer Nature \LaTeX{} template in the
+two-column layout, is 12 pages long including the references, and contains the Statements and Declarations. Supplementary material is provided as Online Resource~1 (ESM\_1.pdf). Figures~1 and~2 were drawn with
+draw.io and Figure~3 with TikZ in \LaTeX; all are supplied as EPS files.
+
+This work is original, has not been published elsewhere, and is not under consideration by another journal. All
+authors have approved the manuscript and its submission. The manuscript contains no previously published material
+that requires permission. The use of generative AI tools is described in the Methods and in the Statements and
+Declarations. [Optional: we suggest the following independent reviewers: name, institution, institutional e-mail.]
+
+\closing{Sincerely,}
+\end{letter}
+\end{document}
