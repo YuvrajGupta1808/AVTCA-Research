@@ -1,8 +1,8 @@
-"""Writes figures/overview.drawio — the single-column model overview (Fig. 2), editable in draw.io."""
+"""Writes figures/src/overview.drawio — the single-column model overview (Fig. 2), editable in draw.io."""
 from pathlib import Path
 from xml.sax.saxutils import escape
 
-OUT = Path(__file__).resolve().parents[1] / 'overview.drawio'
+OUT = Path(__file__).resolve().parent / 'overview.drawio'
 C = {'net': ('#2A78D6', '#EAF2FC'), 'beh': ('#6E6D68', '#FFFFFF'), 'key': ('#EB6834', '#FDEDE6'), 'io': ('#6E6D68', '#FFFFFF')}
 cells, n = [], [1]
 

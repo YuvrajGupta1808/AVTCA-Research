@@ -1,6 +1,7 @@
-%% Supplementary Information for the AVB-Engage manuscript (JAIHC). Compile with pdfLaTeX alongside sn-jnl.cls.
-%% Holds the material moved out of the main text on 2026-11-03: the decoding rules and training objective
-%% (main-text Section 3.1) the evaluation metrics (main-text Section 4.4), and, on 2026-11-09, the threshold search, the pre-training stages, the training-variable sweep, the training configuration, the per-level results and the behavior-branch table.
+%% Supplementary Information (Online Resource 1, ESM_1.pdf) for the AVB-Engage manuscript (JAIHC). Compile with
+%% pdfLaTeX alongside sn-jnl.cls. Holds the material moved out of the main text on 2026-11-03 and 2026-11-09 (decoding
+%% rules and training objective, metrics, threshold search, pre-training stages, training sweep, configuration,
+%% per-level and ablation tables); checked against the code and the result files on 2026-11-13 (docs/plan.md Sec. 21).
 \documentclass[pdflatex,sn-basic]{sn-jnl}
 
 \usepackage{amsmath,amssymb,amsfonts}
@@ -33,7 +34,7 @@
 \author[1]{\fnm{Third} \sur{Author}}
 \affil*[1]{\orgdiv{Department}, \orgname{Organization}, \orgaddress{\city{City}, \state{State}, \country{Country}}}
 
-\abstract{Online Resource 1 for the article ``\ournet: Audio-Visual and Facial-Behavior Fusion for Ordinal Student Engagement Recognition'', submitted to the \emph{Journal of Ambient Intelligence and Humanized Computing}. This document supplements the main article. Section~S1 gives the decoding rules and the training objective summarized in Section~3.1 of the main text; Section~S2 defines the four evaluation metrics named in Section~4.4; Section~S3 gives the layer-by-layer configuration of the cross-attention fusion of Section~3.2.4; Section~S4 lists the training and inference procedure; and Sections~S5 to S7 hold the full tables of the segment-count and training-variable ablations, the fusion-weight sweep, the computational cost, and the label-granularity analysis referred to in Section~5.}
+\abstract{Online Resource 1 for the article ``\ournet: Audio-Visual and Facial-Behavior Fusion for Ordinal Student Engagement Recognition'', submitted to the \emph{Journal of Ambient Intelligence and Humanized Computing}. This document supplements the main article. Section~S1 gives the decoding rules and the training objective summarized in Section~3 of the main text; Section~S2 defines the four evaluation metrics named in Section~5; Section~S3 gives the layer-by-layer configuration of the cross-attention fusion of Section~3.1.4; Section~S4 lists the training and inference procedure; Sections~S5 to S7 hold the segment-count and training-variable ablations, the fusion-weight sweep, the computational cost and the label-granularity analysis of Section~5; and Sections~S8 to S12 give the training configuration, the per-level results, and the behavior-branch, dataset, modality and fusion-weight tables.}
 
 \maketitle
 
@@ -51,7 +52,7 @@ Here, $\mu$ is a continuous value in $[0, K-1]$. The expected level is then cut 
 \begin{equation}
 \hat{y} = \sum_{m=1}^{K-1} \mathbf{1}\!\left[\mu \geq \tau_m\right] \label{eq:s_thresh}
 \end{equation}
-Here, $\mathbf{1}[\cdot]$ is the indicator function, so $\hat{y}$ is the number of thresholds that $\mu$ reaches. The thresholds are fitted on the validation split and are not learned during training. The fit is a coordinate search: starting from $(0.5, 1.5, 2.5)$, each threshold in turn is moved over a window of $\pm 1.0$ in steps of 0.01 while the other two are held fixed and the order of the thresholds is kept, for three rounds, and the setting with the highest validation top-1 accuracy is retained, with ties broken by adjacent accuracy and then by mean absolute error.
+Here, $\mathbf{1}[\cdot]$ is the indicator function, so $\hat{y}$ is the number of thresholds that $\mu$ reaches. The thresholds are fitted on the validation split and are not learned during training.
 
 During training, the order of the levels is used by adding to the cross-entropy loss $\mathcal{L}_{\mathrm{CE}}$ a penalty that grows with the distance between the predicted and the true level,
 \begin{equation}
@@ -106,7 +107,7 @@ Here, $\tilde{\mathbf{A}}_1[:, j]$ is the $j$-th aligned audio token for $j = 1,
 
 \section{Training and inference procedure}\label{sec:s_alg}
 
-Algorithm~\ref{alg:s_ournet} lists the training and inference steps of \ournet{} in order. Before the fine-tuning reported in the main text, the audio-visual network was trained on EngageNet in three stages starting from the AffectNet initialization of the visual backbone, with the audio and fusion modules initialized randomly: 30 epochs with the cross-entropy loss at a learning rate of $10^{-2}$ and batch size 2, then 25 epochs with the ordinal objective at $10^{-4}$ and batch size 2, and then 8 epochs with the ordinal objective at $5 \times 10^{-5}$ and batch size 8, each stage starting from the weights of the previous one. These stages read every face frame of a clip; the class-balanced sampler was used in the reported fine-tuning only. All reported networks are fine-tuned from the resulting checkpoint with three random seeds, about 32 minutes per run on one NVIDIA RTX 3090 GPU with 24\,GB of memory; the segment Transformer was trained on the same GPU and the gradient-boosting model on the CPU, both on the training split only.
+Algorithm~\ref{alg:s_ournet} lists the training and inference steps of \ournet{} in order. Before the fine-tuning reported in the main text, the audio-visual network was trained on EngageNet in three stages starting from the AffectNet initialization of the visual backbone, with the audio and fusion modules initialized randomly: 30 epochs with the cross-entropy loss at a learning rate of $10^{-2}$ and batch size 2, then 25 epochs with the ordinal objective at $10^{-4}$ and batch size 2, and then 8 epochs with the ordinal objective at $5 \times 10^{-5}$ and batch size 8, each stage starting from the weights of the previous one. These stages read every face frame of a clip; the square-root class-balanced sampler of Table~\ref{tab:config} was used in the reported fine-tuning only. All reported networks are fine-tuned from the resulting checkpoint with three random seeds, about 32 minutes per run on one NVIDIA RTX 3090 GPU with 24\,GB of memory; the segment Transformer was trained on the same GPU and the gradient-boosting model on the CPU, both on the training split only.
 
 \begin{algorithm}[t]
 \caption{\ournet{} training and inference}\label{alg:s_ournet}
@@ -130,7 +131,7 @@ Algorithm~\ref{alg:s_ournet} lists the training and inference steps of \ournet{}
 
 \section{Additional ablation results}\label{sec:s_abl}
 
-Table~\ref{tab:segments} gives the full results of the segment-count ablation (Section~5.4.4 of the main text), Table~\ref{tab:sweep} the single-variable training sweep summarized in Section~5.4 of the main text, and Fig.~\ref{fig:sensitivity} the sensitivity of the fused accuracy to the fusion weights (Section~5.4.3).
+Table~\ref{tab:segments} gives the full results of the segment-count ablation (Section~5.4.4 of the main text), Table~\ref{tab:sweep} the training sweep summarized in Section~5.4 of the main text, and Fig.~\ref{fig:sensitivity} the sensitivity of the fused accuracy to the fusion weights (Section~5.4.3).
 
 \begin{table}[t]
 \tablebodyfont
@@ -151,11 +152,11 @@ $S$ & Dims & Argmax & Thresholds & Macro-F1 & + GBM (0.5/0.5) & 3-way (0.6/0.2/0
 \end{tabular*}
 \end{table}
 
-\emph{Training variables of the network.} This ablation asks whether a better training recipe for the network alone could have produced the gains that the decoding rule and the fusion provide. Fourteen fine-tuning runs were started from the same checkpoint: a control, three seeds of the class-balanced sampler, nine runs that each change one variable (the loss type, the ordinal penalty weight at two values, label smoothing, an exponential moving average of the weights, the learning-rate schedule, SpecAugment on the spectrogram, the video frame cap, and a class-weighted loss), and one run that adds synchronized random temporal cropping with a frame cap of 40 (Table~\ref{tab:sweep}). The standard deviation across the fourteen runs (0.52 points) is close to the seed spread of one configuration (0.45 points), no change raises accuracy by more than that spread, and only the class-weighted loss (64.72\%) and the cropping run (64.89\%) fall more than one point below the control. Averaging the logits of all fourteen networks gives 65.69\%, below the best single network, which is consistent with networks fine-tuned from one checkpoint making similar errors. For a single network on this dataset, the training variables we tested do not raise top-1 accuracy beyond the seed noise; the gains in this paper come from the decoding rule and from combining different models.
+\emph{Training variables of the network.} This ablation asks whether a better training recipe for the network alone could have produced the gains that the decoding rule and the fusion provide. Fourteen fine-tuning runs were started from the same checkpoint (Table~\ref{tab:sweep}): a control that reads every frame for 8 epochs; a run with a frame cap of 50 and 6 epochs; eleven runs that keep this cap and epoch count and change one further setting (three seeds of the square-root class-balanced sampler, the loss type, the ordinal penalty weight at two values, label smoothing, an exponential moving average of the weights, the learning rate together with its schedule, SpecAugment on the spectrogram, and a class-weighted loss); and one run with synchronized random temporal cropping and a frame cap of 40. The standard deviation across the fourteen runs (0.52 points) is close to the seed spread of one configuration (0.45 points), no change raises accuracy by more than that spread once the three sampler seeds are averaged (66.27\%, 0.18 points above the control), and only the class-weighted loss (64.72\%) and the cropping run (64.89\%) fall more than one point below the control. Averaging the logits of all fourteen networks gives 65.69\%, below the best single network, which is consistent with networks fine-tuned from one checkpoint making similar errors. For a single network on this dataset, the training variables we tested do not raise top-1 accuracy beyond the seed noise; the gains in this paper come from the decoding rule and from combining different models.
 
 \begin{table}[t]
 \setlength{\tabcolsep}{3pt}
-\caption{Single-variable fine-tuning sweep from one checkpoint (test, refined thresholds).}\label{tab:sweep}
+\caption{Fine-tuning sweep from one checkpoint (test, refined thresholds). The control reads every frame for 8 epochs; every other run except the cropping run uses a frame cap of 50 and 6 epochs. Balanced sampler: inverse-square-root class frequency}\label{tab:sweep}
 \begin{tabular*}{0.8\textwidth}{@{\extracolsep\fill}lcccc}
 \toprule
 Variable & Top-1 & Adj. & MAE & Macro-F1\\
@@ -171,11 +172,11 @@ No label smoothing & 65.91 & 91.44 & 0.445 & 51.01\\
 EMA 0.999 & 65.96 & 91.22 & 0.446 & 50.93\\
 LR $10^{-4}$, cosine & 65.69 & 91.36 & 0.448 & 50.72\\
 SpecAugment & 65.34 & 91.22 & 0.453 & 50.59\\
-Frame cap 50 & 65.82 & 91.40 & 0.446 & 50.76\\
+Frame cap 50, 6 epochs & 65.82 & 91.40 & 0.446 & 50.76\\
 Cap 40 + random crop & 64.89 & 91.53 & 0.450 & 50.42\\
 Class-weighted loss & 64.72 & 91.71 & 0.452 & 50.41\\
 \midrule
-Mean of the 14 runs & 65.69 & -- & -- & --\\
+Logit average of the 14 networks & 65.69 & -- & -- & --\\
 \botrule
 \end{tabular*}
 \end{table}
@@ -207,7 +208,7 @@ Table~\ref{tab:cost} reports the size and inference cost of every component of \
 
 \begin{table}[t]
 \setlength{\tabcolsep}{3pt}
-\caption{Size and inference cost per 10\,s clip (batch size 1). GPU: NVIDIA RTX 3090; CPU timings use eight threads except OpenFace, which runs on one thread (median over 30 test clips; GPU time 21.5 $\pm$ 5.1\,ms). FLOPs count one multiply-add as two operations}\label{tab:cost}
+\caption{Size and inference cost per 10\,s clip (batch size 1). GPU: NVIDIA RTX 3090, mean over 110 test clips (21.5 $\pm$ 5.1\,ms); CPU: eight threads, mean over 30 test clips; OpenFace: one thread, median over 30 test clips. FLOPs count one multiply-add as two operations}\label{tab:cost}
 \begin{tabular*}{0.8\textwidth}{@{\extracolsep\fill}lccl}
 \toprule
 Component & Params & FLOPs & Time\\
@@ -215,6 +216,7 @@ Component & Params & FLOPs & Time\\
 Audio-visual network & 2.38\,M & 16.0\,G & 21.5\,ms GPU\\
  & & & 271\,ms CPU\\
 \quad Frame encoder & 1.26\,M & -- & --\\
+\quad Visual temporal conv. & 0.28\,M & -- & --\\
 \quad Audio encoder & 0.27\,M & -- & --\\
 \quad Cross-attention & 0.55\,M & 0.04\,G & --\\
 Segment Transformer & 71.6\,k & 0.11\,M & 0.7\,ms CPU\\
@@ -264,7 +266,7 @@ Label smoothing & 0.1 & 0.1 & --\\
 Sampling & inverse-sqrt class frequency & uniform & uniform\\
 Dropout & modality 0.15 & 0.3, token 0.1 & --\\
 Tree size & -- & -- & $\le$ 15 leaves\\
-Seeds & 3 & 3 & 3 fits averaged\\
+Seeds & 3 & 3 & deterministic\\
 \botrule
 \end{tabular*}
 \end{table}
@@ -339,7 +341,7 @@ Table~\ref{tab:modality} summarizes the inference-time modality ablation (Sectio
 \toprule
 Input at inference & Mean top-1 & A+V higher in\\
 \midrule
-Audio + video & \textbf{66.16} & --\\
+Audio + video & \textbf{66.15} & --\\
 Video only & 65.41 & 7 of 9 (1 tie)\\
 Audio only & 48.60 & 9 of 9\\
 \botrule
@@ -347,17 +349,21 @@ Audio only & 48.60 & 9 of 9\\
 \end{table}
 
 \begin{table}[t]
-\caption{Late fusion under different weight rules (test top-1, \%, three seeds). AV: audio-visual network; TF: segment Transformer; GBM: gradient boosting}\label{tab:fusion}
-\begin{tabular*}{0.6\textwidth}{@{\extracolsep\fill}llc}
+\caption{Late fusion under different weight rules (test top-1, \%, mean $\pm$ standard deviation over the three network seeds). AV: audio-visual network; TF: segment Transformer; GBM: gradient boosting. A validation rule selects the weights on a grid of the given step by the validation accuracy after threshold or argmax decoding}\label{tab:fusion}
+\begin{tabular*}{0.8\textwidth}{@{\extracolsep\fill}llc}
 \toprule
 Members & Weight rule & Top-1\\
 \midrule
-AV + GBM & 0.5 / 0.5 & 69.95 $\pm$ 0.20\\
-AV + GBM & 0.7 / 0.3 & 70.04 $\pm$ 0.20\\
-AV + GBM & validation-selected & 69.86 $\pm$ 0.50\\
-AV + TF + GBM & equal thirds & 69.28 $\pm$ 0.23\\
-AV + TF + GBM & \textbf{0.6 / 0.2 / 0.2} & \textbf{70.29 $\pm$ 0.14}\\
-AV + TF + GBM & validation-selected & 69.43--70.29\\
+AV + GBM & fixed 0.5 / 0.5 & 69.95 $\pm$ 0.20\\
+AV + GBM & fixed 0.7 / 0.3 & 70.04 $\pm$ 0.20\\
+AV + GBM & validation, argmax, step 0.1 & 69.86 $\pm$ 0.50\\
+AV + GBM & validation, argmax, step 0.05 & 69.90 $\pm$ 0.41\\
+AV + GBM & validation, thresholds, step 0.05 & 69.12 $\pm$ 1.55\\
+AV + TF & validation, thresholds, step 0.05 & 68.69 $\pm$ 2.08\\
+AV + TF + GBM & fixed, equal thirds & 69.28 $\pm$ 0.23\\
+AV + TF + GBM & \textbf{fixed 0.6 / 0.2 / 0.2} & \textbf{70.29 $\pm$ 0.14}\\
+AV + TF + GBM & validation, thresholds, step 0.1 & 70.29 $\pm$ 0.14\\
+AV + TF + GBM & validation, argmax, step 0.1 & 69.43 $\pm$ 1.09\\
 \botrule
 \end{tabular*}
 \end{table}

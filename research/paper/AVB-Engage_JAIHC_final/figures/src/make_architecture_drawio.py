@@ -1,4 +1,4 @@
-"""Writes figures/architecture.drawio — the editable draw.io source of the architecture figure.
+"""Writes figures/src/architecture.drawio — the editable draw.io source of the architecture figure.
 
 Every tensor shape is the output of a forward pass of models/multimodal_cnn.py::MultiModalCNN
 (fusion='it', it_fusion_mode='modern', num_heads=8, 4 classes) on one 431-frame mel clip and 50 face
@@ -12,7 +12,7 @@ from xml.sax.saxutils import escape
 def attr(s):
     return escape(s, {'"': '&quot;'})
 
-OUT = Path(__file__).resolve().parents[1] / 'architecture.drawio'
+OUT = Path(__file__).resolve().parent / 'architecture.drawio'
 
 BLUE, BLUE_FILL = '#2A78D6', '#EAF2FC'
 ORANGE, ORANGE_FILL = '#EB6834', '#FDEDE6'
