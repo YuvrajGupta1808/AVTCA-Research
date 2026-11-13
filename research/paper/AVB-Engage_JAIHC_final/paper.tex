@@ -7,18 +7,23 @@
 %% the result files on 2026-11-13 (docs/plan.md Sec. 21).
 %% Section pattern follows the two Springer exemplars (J Ambient Intell Humaniz Comput 17:1579-1598, 2026; J Signal
 %% Process Syst 97:269-280, 2025); prose follows the FoleyGAN style (Ghose & Prevost, IEEE TMM 2023).
-%% Numbers trace to results/fullclip/ and results/paper_springer/ (scripts/paper/*.py), except the training sweep and
-%% the 12-of-13 audio check (results/night/, docs/plan.md Sec. 13.14), the 67.82 threshold oracle (Sec. 19.6), the
+%% Numbers trace to results/fullclip/, results/paper_springer/ and results/paper_jaihc/ (scripts/paper/*.py), except the training sweep and
+%% the 9-of-10 audio check of the earlier sweep (results/night/, docs/plan.md Sec. 13.14), the 67.82 threshold oracle (Sec. 19.6), the
 %% fusion weight rules (Sec. 19.7.1), the OpenFace timing (Sec. 18.16) and the pre-training stages (Sec. 18.18):
 %% results/engagenet_h8_uniform_fullaudio_v96 (CE, 1e-2, 30 ep) -> results/v12_05_* (ordinal, 1e-4, 25 ep) ->
 %% results/exp2026/E04_* (ordinal, 5e-5, 8 ep).
-%% Before submission: if the editorial system asks for one .tex file, replace \input{figures/fig_confusion} by its
-%% compiled PDF (Fig3.pdf); the bibliography is already inline.
+%% Follows the Springer Nature template user manual (v3.1): figures are single image files Fig1-Fig3 on the same level
+%% as this file (manual Sec. 7.3; Fig3.pdf is compiled from figures/Fig3_source.tex, Fig1/Fig2 are draw.io exports
+%% with sources in figures/src/: make_*_drawio.py write the .drawio files at final size, 84/174 mm with 9-pt lettering,
+%% and export_drawio.js exports them), references are in references.bib and formatted by sn-basic.bst (Sec. 8.3), back-matter
+%% heads use \bmhead (Sec. 8.1). Not [referee]: JAIHC's own 12-page two-column rule takes precedence (manual Sec. 1).
+%% Each figure exists as FigN.pdf and FigN.eps (manual Sec. 7.3: "LaTeX compiler accepts only .eps"); \includegraphics{FigN}
+%% has no extension, so pdfLaTeX uses the PDF and latex/dvips the EPS. After changing a PDF, regenerate its EPS with
+%% Ghostscript: gs -q -dNOPAUSE -dBATCH -dSAFER -sDEVICE=eps2write -sOutputFile=FigN.eps FigN.pdf
 
 \documentclass[pdflatex,iicol,sn-basic]{sn-jnl}
 
 \usepackage{graphicx}
-\graphicspath{{figures/}}
 \usepackage{multirow}
 \usepackage{amsmath,amssymb,amsfonts}
 \usepackage{xcolor}
@@ -26,11 +31,6 @@
 \usepackage{algorithm}
 \usepackage{algorithmicx}
 \usepackage{algpseudocode}
-\usepackage{tikz}
-\usetikzlibrary{positioning,calc,decorations.pathreplacing}
-\usepackage{pgfplots}
-\pgfplotsset{compat=1.17}
-\input{figures/fig_colors}
 
 % Model name used throughout. Change it here only.
 \newcommand{\ournet}{AVB-Engage}
@@ -47,7 +47,7 @@
 \author[1]{\fnm{Third} \sur{Author}}
 \affil*[1]{\orgdiv{Department}, \orgname{Organization}, \orgaddress{\city{City}, \state{State}, \country{Country}}}
 
-\abstract{Automatic engagement recognition estimates from a webcam recording how engaged a student is during online learning. The task is harder than its four classes suggest: the engagement levels are ordered and imbalanced, the two middle levels look alike within a ten-second clip, and the audio track of a student watching an educational video carries a weak signal, so recent methods read the visual stream only. In this paper, we present \ournet{} (audio, video and behavior), which fuses three sources of evidence. An audio-visual cross-attention network lets the face frames and the log-mel spectrogram attend to each other after the audio steps are pooled onto the video frames, and two models built on segment statistics of OpenFace action units, gaze and head pose read the facial behavior of the same clip. The class probabilities of the three models are averaged and decoded through the expected engagement level with thresholds fitted on the validation split, so that the order of the levels is used at prediction time. We evaluated \ournet{} on the official EngageNet test split over three training seeds. Adding audio to video raises top-1 accuracy in seven of nine trained networks, decoding through the expected level adds 2.00 points over argmax decoding on identical weights, and averaging the network with the two behavior models adds about four points more because the models make different errors. \ournet{} reaches 70.29\% top-1 accuracy and a mean absolute error of 0.401 levels, against 67.61\% for the best published test-split result.}
+\abstract{Automatic engagement recognition estimates from a webcam recording how engaged a student is during online learning. The task is harder than its four classes suggest: the engagement levels are ordered and imbalanced, the two middle levels look alike within a ten-second clip, and the audio track of a student watching an educational video carries a weak signal, so recent methods read the visual stream only. In this paper, we present \ournet{} (audio, video and behavior), which fuses three sources of evidence. An audio-visual cross-attention network lets the face frames and the log-mel spectrogram attend to each other after the audio steps are pooled onto the video frames, and two models built on segment statistics of OpenFace action units, gaze and head pose read the facial behavior of the same clip. The class probabilities of the three models are averaged and decoded through the expected engagement level with thresholds fitted on the validation split, so that the order of the levels is used at prediction time. We evaluated \ournet{} on the official EngageNet test split over three training seeds. Adding audio to video raises top-1 accuracy in seven of nine trained networks, decoding through the expected level adds 1.99 points over argmax decoding on identical weights, and averaging the network with the two behavior models adds about four points more because the models make different errors. \ournet{} reaches 70.29\% top-1 accuracy and a mean absolute error of 0.401 levels, against 67.61\% for the best published test-split result.}
 
 
 \keywords{Student engagement recognition, Audio-visual fusion, Cross-attention, Facial action units, Ordinal classification, Online learning}
@@ -62,7 +62,7 @@ In this paper, we propose \ournet{} (audio, video and behavior), which predicts 
 
 \begin{figure}[t]
 \centering
-\includegraphics[width=\columnwidth]{overview}
+\includegraphics[width=\columnwidth]{Fig1}
 \caption{Overview of \ournet. (A) The audio-visual network produces class probabilities $p_{\mathrm{AV}}$ from face frames and audio; (B) two models on segment statistics of the OpenFace descriptor produce $p_{\mathrm{TF}}$ and $p_{\mathrm{GBM}}$; (C) the three vectors are averaged and decoded into one of four ordered levels}
 \label{fig:overview}
 \end{figure}
@@ -89,8 +89,8 @@ We separate \ournet{} into three blocks: A) an audio-visual cross-attention netw
 % Source: figures/src/architecture.drawio (edit in draw.io, export PDF with "crop").
 \begin{figure*}[t]
 \centering
-\includegraphics[width=\textwidth]{architecture}
-\caption{Proposed \ournet{} architecture in detail. Tensor shapes are traced from a forward pass of the trained configuration ($B$ = batch). (A) Audio tokens are pooled onto the 50-step visual clock of the same clip before the first cross-attention exchange; after the second convolutional stage the audio stream has 12 tokens and the video stream 50; every attention block is cross-modal, and the final pair has no residual connection. (B) Two models on segment statistics of the per-frame OpenFace descriptor. (C) The three class-probability vectors are averaged with fixed weights, reduced to an expected level, and cut by thresholds fitted on the validation split. Orange blocks mark the components evaluated in Section~\ref{sec:results}}
+\includegraphics[width=\textwidth]{Fig2}
+\caption{Proposed \ournet{} architecture in detail. Tensor shapes are traced from a forward pass of the trained configuration ($B$ = batch). (A) Audio tokens are pooled onto the 50-step visual clock of the same clip before the first cross-attention exchange; after the second convolutional stage the audio stream has 12 tokens and the video stream 50; every attention block is cross-modal, and the final pair has no residual connection. (B) Two models on segment statistics of the per-frame OpenFace descriptor. (C) The three class-probability vectors are averaged with fixed weights, reduced to an expected level, and cut by thresholds fitted on the validation split. Orange blocks marked with a star are the components evaluated in Section~\ref{sec:results}; dashed arrows show the keys and values that each stream takes from the other in the first exchange}
 \label{fig:arch}
 \end{figure*}
 
@@ -137,7 +137,7 @@ The 20 tokens are flattened and extended with the clip-level mean and standard d
 
 \subsubsection{Segment-Transformer model}\label{sec:segtf}
 
-A pre-norm Transformer encoder \citep{vaswani2017attention} with a class token and learned positional embeddings reads the 20 tokens of $\mathbf{S}$ and outputs $p_{\mathrm{TF}}$. It is trained with the same ordinal objective, AdamW with a warm-up cosine schedule, and random dropout of segment tokens; its size (two layers, width 64, eight heads, feed-forward width 128) was selected from eight candidates by validation accuracy.
+A pre-norm Transformer encoder \citep{vaswani2017attention} with a class token and learned positional embeddings reads the 20 tokens of $\mathbf{S}$ and outputs $p_{\mathrm{TF}}$. It is trained with the same ordinal objective, AdamW with a warm-up cosine schedule, and random dropout of segment tokens; its configuration (two layers, width 64, eight heads, feed-forward width 128, learning rate $10^{-3}$) was selected from eight candidates by validation accuracy.
 
 \subsection{Late fusion and ordinal decoding}\label{sec:method_fusion}
 
@@ -171,7 +171,7 @@ We report four metrics on the 2,256 test clips: top-1 accuracy, adjacent accurac
 
 \begin{table*}[t]
 \tablebodyfont
-\caption{Comparison of \ournet{} with published results on EngageNet. G, HP, AU: OpenFace gaze, head-pose and action-unit features; rPPG: physiological signals estimated from the video. Only the test-split rows are directly comparable. $^{a}$EmotiW 2023 data \citep{dhall2023emotiw}, re-partitioned by the authors}\label{tab:related}
+\caption{Comparison of \ournet{} with published results on EngageNet. G, HP, AU: OpenFace gaze, head-pose and action-unit features; rPPG: physiological signals estimated from the video. Only the test-split rows are directly comparable}\label{tab:related}
 \begin{tabular*}{\textwidth}{@{\extracolsep\fill}llllr}
 \toprule
 Work & Model & Input & Split & Top-1 (\%)\\
@@ -191,16 +191,19 @@ Work & Model & Input & Split & Top-1 (\%)\\
 Ours & \ournet & Face, audio, G+HP+AU & Test & 70.29\\
 \botrule
 \end{tabular*}
+\begin{tablenotes}
+\item $^{a}$EmotiW 2023 data \citep{dhall2023emotiw}, re-partitioned by the authors
+\end{tablenotes}
 \end{table*}
 
 
-Table~\ref{tab:related} lists the published results on EngageNet together with \ournet{} and its components; the six baselines read OpenFace features, MARLIN video features \citep{cai2023marlin}, or both. The baselines are reported on the official test split; the later methods report validation accuracy, on which the same baseline model scores 1.5--5.2 points higher, or use a split of their own, so their rows are listed for context and are not compared directly. \ournet{} achieves the highest top-1 accuracy on the test split, 70.29 $\pm$ 0.14\%, against 67.61\% for the best baseline. The audio-visual network alone reaches 66.27 $\pm$ 0.45\%, above four of the six baselines but below the best one. The gradient-boosting model and the segment Transformer, which read only 22 of the 49 per-frame OpenFace channels behind the 98 features of the best baseline, reach the same range as the network (66.27\% and 66.99\%). The fusion gain comes from errors that the models do not share: the network and the gradient-boosting model are each wrong on about 34\% of the test clips, but both are wrong on only about 22\%.
+Table~\ref{tab:related} lists the published results on EngageNet together with \ournet{} and its components; the six baselines read OpenFace features, MARLIN video features \citep{cai2023marlin}, or both. The baselines are reported on the official test split; the later methods report validation accuracy, on which the same baseline model scores 1.5--5.2 points higher, or use a split of their own, so their rows are listed for context and are not compared directly. \ournet{} achieves the highest top-1 accuracy on the test split, 70.29 $\pm$ 0.14\%, against 67.61\% for the best baseline. The audio-visual network alone reaches 66.27 $\pm$ 0.45\%, above four of the six baselines but below the best one. The gradient-boosting model and the segment Transformer, which read only 22 of the 49 per-frame OpenFace channels behind the 98 features of the best baseline, reach the same range as the network (66.27\% and 66.99\%). The fusion gain comes from errors that the models do not share: the network and the gradient-boosting model are each wrong on about 34\% of the test clips, but both are wrong on only about 22\%. Tested on the same clips, \ournet{} is more accurate than each of its members for every seed (exact McNemar test, $p \le 0.006$; Online Resource~1, Table~S11).
 
 Two points qualify this comparison. It is not like-for-like, since \ournet{} averages three models and fits its thresholds on the validation split, whereas each baseline is a single model decoded from its softmax output; and the best baseline is not a strong bound for its own features, since a gradient-boosting model on the same 98 OpenFace features reaches 68.13\% with argmax decoding and 68.88\% with expected-level thresholds (Section~\ref{sec:abl_fusion}), so part of the margin comes from the learner and the decoding rule rather than from the audio-visual network.
 
 \subsection{Per-seed and per-level results}\label{sec:res_seed}
 
-Table~\ref{tab:seeds} reports every model per seed with the four metrics. \ournet{} has the highest top-1 accuracy and macro-F1 and the lowest mean absolute error of all trained models, and the smallest seed spread of the seeded models; only the adjacent accuracy of the audio-visual network is slightly higher. For every trained model the adjacent accuracy is more than 20 points above the top-1 accuracy, so most errors are one-level errors.
+Table~\ref{tab:seeds} reports every model per seed with the four metrics. \ournet{} has the highest top-1 accuracy and macro-F1 and the lowest mean absolute error of all trained models, and the smallest seed spread of the seeded models; only the adjacent accuracy of the audio-visual network is slightly higher. For every model that sees the face, most errors are one-level errors: its adjacent accuracy is more than 20 points above its top-1 accuracy.
 
 \begin{table*}[t]
 \tablebodyfont
@@ -225,10 +228,10 @@ Online Resource~1, Table~S6 reports precision, recall and F1 per level. The two 
 
 \subsection{Effect of the decoding rule}\label{sec:res_decoder}
 
-Table~\ref{tab:decoder} isolates the decoding rule of Section~\ref{sec:method} on the audio-visual network. Replacing argmax with expected-level thresholds adds 2.00 points of top-1 accuracy for the network and 1.80 points for its video-only condition, with no change to the weights and no test data used in the fit. This gain is larger than the effect of any single training change in the sweep of Online Resource~1, Table~S2, and larger than the gap between most of the published baselines, which decode a softmax output with argmax.
+Table~\ref{tab:decoder} isolates the decoding rule of Section~\ref{sec:method} on the audio-visual network. Replacing argmax with expected-level thresholds adds 1.99 points of top-1 accuracy for the network and 1.80 points for its video-only condition, with no change to the weights and no test data used in the fit. This gain is larger than the effect of any single training change in the sweep of Online Resource~1, Table~S2, and larger than the gap between the two best published baselines (1.11 points), which decode a softmax output with argmax.
 
 \begin{table}[t]
-\caption{Effect of the decoding rule on the same trained weights (test top-1, \%, three seeds). Thresholds: expected-level thresholds fitted on validation; refined: the same after the coordinate search}\label{tab:decoder}
+\caption{Effect of the decoding rule on the same trained weights (test top-1, \%, three seeds). Thresholds: expected-level thresholds fitted on validation on a grid; refined: the same after a local search; differences computed before rounding}\label{tab:decoder}
 \begin{tabular*}{\columnwidth}{@{\extracolsep\fill}lcc}
 \toprule
 Decoder & Audio + video & Video only\\
@@ -238,7 +241,7 @@ Fitted logit bias & 65.06 $\pm$ 0.37 & 63.83 $\pm$ 0.45\\
 Thresholds & \textbf{66.34 $\pm$ 0.50} & 65.26 $\pm$ 0.40\\
 Refined thresholds & 66.27 $\pm$ 0.45 & \textbf{65.28 $\pm$ 0.53}\\
 \midrule
-Refined $-$ argmax & +2.00 & +1.80\\
+Refined $-$ argmax & +1.99 & +1.80\\
 \botrule
 \end{tabular*}
 \end{table}
@@ -249,7 +252,7 @@ We performed five ablation studies on the EngageNet test split; four are reporte
 
 \subsubsection{Contribution of each modality}\label{sec:abl_modality}
 
-This ablation asks whether the audio track contributes to a network that was trained with it, and by how much. Instead of training separate unimodal models, we kept the trained weights unchanged and set the token sequence of one modality to zero at inference, the same operation as modality dropout, for the nine fine-tuned networks of this work: three seeds each of the audio-visual network and of the two behavior-branch variants of Section~\ref{sec:abl_branch}. Audio alone scores at or below the majority-class predictor in all nine networks (mean 48.60\%), so audio by itself does not predict engagement on this dataset. Adding audio to video raises top-1 accuracy in seven of the nine networks, leaves it unchanged in one and lowers it by 0.13 points in one, by 0.74 points on average (from 65.41\% to 66.15\%; Online Resource~1, Table~S9). Only one difference (1.99 points) reaches the 95\% interval of a single test evaluation, and the nine networks share one warm start, so the evidence is the consistent sign rather than any single network; an earlier sweep of thirteen networks from the same warm start shows the same sign in twelve. Macro-F1 is higher with audio in six of the nine networks.
+This ablation asks whether the audio track contributes to a network that was trained with it, and by how much. Instead of training separate unimodal models, we kept the trained weights unchanged and set the token sequence of one modality to zero at inference, the same operation as modality dropout, for the nine fine-tuned networks of this work: three seeds each of the audio-visual network and of the two behavior-branch variants of Section~\ref{sec:abl_branch}. Audio alone scores at or below the majority-class predictor in all nine networks (mean 48.60\%), so audio by itself does not predict engagement on this dataset. Adding audio to video raises top-1 accuracy in seven of the nine networks, leaves it unchanged in one and lowers it by 0.13 points in one, by 0.74 points on average (from 65.41\% to 66.15\%; Online Resource~1, Table~S9). Only one difference (1.99 points) remains significant after adjustment for multiple testing (exact McNemar test; Online Resource~1, Table~S12), and the nine networks share one warm start, so the evidence is the consistent sign rather than any single network; in an earlier sweep, ten further networks from the same warm start show the same sign in nine. Macro-F1 is higher with audio in six of the nine networks.
 
 
 \subsubsection{Behavior branch inside the network}\label{sec:abl_branch}
@@ -259,7 +262,7 @@ This ablation asks whether the two separate behavior models are necessary, or wh
 
 \subsubsection{Fusion weights}\label{sec:abl_fusion}
 
-This ablation asks how much the result depends on the particular fusion weights. We evaluated the fusion of block C under different weight rules, keeping all three models unchanged (Online Resource~1, Table~S10). Every weight rule that includes the gradient-boosting model gives between 67.4\% and 70.5\% on every seed; equal weights, which involve no selection, give 69.28 $\pm$ 0.23\%, and the network with the gradient-boosting model alone gives 69.95--70.04\% with fixed weights. Fusing the network with the segment Transformer alone is unstable across seeds (68.69 $\pm$ 2.08\% with validation-selected weights), because the validation accuracy of the Transformer does not follow its test accuracy closely; adding the gradient-boosting model reduces the standard deviation to 0.14 points. A sweep of the network weight (Online Resource~1, Fig.~S1) shows that accuracy changes little between 0.5 and 0.7 and drops once the network dominates the average. Finally, with the full 98-dimensional OpenFace descriptor of the best baseline, the gradient-boosting model alone reaches 68.88\% (68.13\% with argmax decoding), above the published Transformer on the same features, but the three-way fusion does not improve (69.15 $\pm$ 0.83\% over the eight networks of Section~\ref{sec:method_fusion}).
+This ablation asks how much the result depends on the particular fusion weights. We evaluated the fusion of block C under different weight rules, keeping all three models unchanged (Online Resource~1, Table~S10). Every weight rule in Table~S10 that includes the gradient-boosting model gives between 67.4\% and 70.5\% on every seed, and equal weights, which involve no selection, give 69.28 $\pm$ 0.23\%. With the gradient-boosting model alone, any network weight from 0.5 to 0.7 gives 69.95--70.07\%, and accuracy drops once the network dominates the average (Online Resource~1, Fig.~S1). Fusing the network with the segment Transformer alone is unstable across seeds (68.69 $\pm$ 2.08\% with validation-selected weights), because the validation accuracy of the Transformer does not follow its test accuracy closely; adding the gradient-boosting model reduces the standard deviation to 0.14 points. Finally, with the full 98-dimensional OpenFace descriptor of the best baseline, the gradient-boosting model alone reaches 68.88\% (68.13\% with argmax decoding), above the published Transformer on the same features, but the three-way fusion does not improve (69.15 $\pm$ 0.83\% over the eight networks of Section~\ref{sec:method_fusion}, with validation-selected weights).
 
 
 \subsubsection{Number of segments}\label{sec:abl_segments}
@@ -276,22 +279,27 @@ Fig.~\ref{fig:confusion} presents the row-normalized test confusion matrices of 
 
 \begin{figure}[t]
 \centering
-\input{figures/fig_confusion}
+\includegraphics{Fig3}
 \caption{Row-normalized test confusion matrices (\%) of the audio-visual network (left) and \ournet{} (right), pooled over three seeds. Levels 0--3: not, barely, engaged, highly engaged}
 \label{fig:confusion}
 \end{figure}
 
-We see two reasons for this behavior. First, the two middle levels describe a difference of degree in similar visible behavior: a student who looks at the screen with a neutral face may be labeled \emph{barely engaged} or \emph{engaged}, and a ten-second clip of a student watching an educational video contains no response to an instructor that would separate the two. Second, the label prior differs between the splits (12.3\% \emph{not engaged} clips in validation against 20.3\% in test), so thresholds fitted on validation are not the best thresholds for test; for the seed-1 network, thresholds fitted on the test split itself would give 67.82\% instead of the 65.69\% of the same search on validation, an upper bound rather than a method. Merging the two middle levels in the output of the same trained network, without retraining, raises top-1 accuracy from 64.27\% to 70.70\% against an unchanged majority-class accuracy (Online Resource~1, Table~S4), which locates the errors between these two levels.
+We see two reasons for this behavior. First, the two middle levels describe a difference of degree in similar visible behavior: a student who looks at the screen with a neutral face may be labeled \emph{barely engaged} or \emph{engaged}, and a ten-second clip of a student watching an educational video contains no response to an instructor that would separate the two. Second, the label prior differs between the splits (12.3\% \emph{not engaged} clips in validation against 20.3\% in test), so thresholds fitted on validation are not the best thresholds for test; for the seed-1 network, thresholds fitted on the test split itself would give 67.82\% instead of the 65.69\% of the same search on validation, an upper bound rather than a method. Merging the two middle levels in the output of one trained network (seed 3, argmax decoding), without retraining, raises top-1 accuracy from 64.27\% to 70.70\% against an unchanged majority-class accuracy (Online Resource~1, Table~S4), which locates the errors between these two levels.
 
 \subsection{Challenges and future directions}\label{sec:limitations}
 
-The results mark out three challenges for the next studies. \emph{Datasets.} The evaluation uses a single dataset, whose participants watch short educational videos and rarely speak, so the audio contribution measured here (0.74 points) is a lower bound for settings in which students speak and listen in turn; recordings of live online classes with per-participant audio are the natural next evaluation. \emph{Middle levels.} \emph{Barely engaged} is recognized in at most 18\% of cases by any model and in 2--5\% by the two behavior models, so the remaining errors lie in the two middle levels rather than in any one modality. Since the labels are themselves human judgements, a survey in which raters with teaching experience label a stratified sample of test clips will show whether these levels are also hard for people. \emph{Design choices and cost.} The temporal alignment and the modality dropout were adopted from the emotion-recognition setting and kept fixed; matched runs without them will quantify their individual effect. Part of the margin over the published baselines comes from the decoding rule and the learner rather than from the network (Section~\ref{sec:res_sota}), and both steps apply to any classifier. OpenFace extraction takes about as long as the clip on one CPU thread, so a lighter descriptor extractor would make \ournet{} usable in real time.
+The results mark out three challenges for the next studies. \emph{Datasets.} The evaluation uses a single dataset, whose participants watch short educational videos and rarely speak, so the audio contribution measured here (0.74 points) is likely a lower bound for settings in which students speak and listen in turn; recordings of live online classes with per-participant audio are the natural next evaluation. \emph{Middle levels.} \emph{Barely engaged} is recognized in at most 18\% of cases by any model on average over seeds, and in 2--5\% by the two behavior models, so the remaining errors lie in the two middle levels rather than in any one modality. Since the labels are themselves human judgements, a survey in which raters with teaching experience label a stratified sample of test clips will show whether these levels are also hard for people. \emph{Design choices and cost.} The temporal alignment and the modality dropout were adopted from the emotion-recognition setting and kept fixed; matched runs without them will quantify their individual effect. Part of the margin over the published baselines comes from the decoding rule and the learner rather than from the network (Section~\ref{sec:res_sota}), and both steps apply to any classifier. OpenFace extraction takes about as long as the clip on one CPU thread, so a lighter descriptor extractor would make \ournet{} usable in real time.
 
 \section{Conclusion}\label{sec:conclusion}
 
 We presented \ournet, which combines an audio-visual cross-attention network with two models on segment statistics of OpenFace descriptors and decodes the four ordered engagement levels through the expected level. Our experiments on the official EngageNet test split over three training seeds show that \ournet{} exceeds the published baselines, with 70.29\% against 67.61\%, and that most of this gain comes from two steps that do not depend on the network architecture: decoding through the expected level, and averaging models that make different errors. The audio track has no standalone signal on this dataset, but it raised accuracy in seven of nine networks when fused with video, and the facial-behavior descriptors helped when they were summarized by segment statistics in separate models, not when they were learned by a recurrent branch inside the network. One shortcoming of this work is that it uses a single dataset in which students rarely speak. Evaluating the model on live online classes with per-participant audio, and a human labeling study of the two middle levels, are the directions of our future work.
 
 \backmatter
+
+\bmhead{Supplementary information}
+Online Resource 1 (ESM\_1.pdf) gives the decoding rules and threshold search, the metric definitions, the cross-attention configuration, the training procedure and configuration, the full ablation, per-level, cost and dataset tables, and paired significance tests.
+
+% \bmhead{Acknowledgements} -- optional in the template; add here if the authors wish to acknowledge anyone.
 
 \section*{Statements and Declarations}
 
@@ -307,9 +315,6 @@ This study uses only the publicly released EngageNet dataset \citep{singh2023eng
 
 \bmhead{Consent for publication}
 Not applicable.
-
-\bmhead{Supplementary information}
-Online Resource 1 (ESM\_1.pdf): decoding rules, training objective and threshold search, metric definitions, temporal alignment and cross-attention block configuration, training procedure, full ablation tables including the training-variable sweep, fusion-weight sensitivity plot, computational cost, label-granularity analysis, training configuration, per-level precision, recall and F1, the behavior-branch, modality and fusion-weight ablation tables, and dataset statistics.
 
 \bmhead{Data availability}
 The EngageNet dataset is available from its authors \citep{singh2023engagenet} under their access conditions; the per-clip predictions and derived features of this study are available from the corresponding author on reasonable request.
@@ -328,76 +333,8 @@ To be completed by the authors.
 \bmhead{Use of generative AI}
 % DRAFT -- the authors must review and edit this statement so that it is accurate (Springer Nature AI
 % policy: describe the tool, its purpose and the extent of its contribution; authors remain accountable).
-The authors used Claude (Anthropic) under their direction to write and debug experiment and analysis code, to check bibliographic metadata, to generate the source code of the charts and the architecture diagram from the authors' result files, and to draft and restructure manuscript text from the authors' results and earlier drafts. All experiments were designed and run by the authors, every number was computed by the authors' code, and the authors reviewed and edited all text, figures and references and take full responsibility for the content.
+The authors used Claude (Anthropic) under their direction to write and debug experiment and analysis code, to check bibliographic metadata, to generate the source code of the charts and of the two diagrams (Figs.~\ref{fig:overview} and~\ref{fig:arch}) from the authors' result files and model, and to draft and restructure manuscript text from the authors' results and earlier drafts. All experiments were designed and run by the authors, every number was computed by the authors' code, and the authors reviewed and edited all text, figures and references and take full responsibility for the content.
 
-\begin{thebibliography}{99}
-
-\bibitem[Abedi and Khan(2024)]{abedi2024stgcn}
-Abedi A, Khan SS (2024) Engagement measurement based on facial landmarks and spatial-temporal graph convolutional networks. In: Proceedings of the International Conference on Pattern Recognition (ICPR), Lecture Notes in Computer Science. Springer, Cham, pp 321--338. \url{https://doi.org/10.1007/978-3-031-78201-5\_21}
-
-\bibitem[Augusma et al.(2026)]{augusma2026vemd}
-Augusma A, Vaufreydaz D, Letu\'{e} F (2026) Variational encoder--multi-decoder (VE-MD) for privacy-by-functional-design (group) emotion recognition. arXiv:2604.02397
-
-\bibitem[Baltru\v{s}aitis et al.(2018)]{baltrusaitis2018openface}
-Baltru\v{s}aitis T, Zadeh A, Lim YC, Morency LP (2018) OpenFace 2.0: Facial behavior analysis toolkit. In: Proceedings of the IEEE International Conference on Automatic Face and Gesture Recognition (FG), pp 59--66. \url{https://doi.org/10.1109/FG.2018.00019}
-
-\bibitem[Cai et al.(2023)]{cai2023marlin}
-Cai Z, Ghosh S, Stefanov K, Dhall A, Cai J, Rezatofighi H, Haffari R, Hayat M (2023) MARLIN: Masked autoencoder for facial video representation learning. In: Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR), pp 1493--1504. \url{https://doi.org/10.1109/CVPR52729.2023.00150}
-
-\bibitem[Das and Dev(2025)]{das2025optimizing}
-Das R, Dev S (2025) Optimizing student engagement detection using facial and behavioral features. Neural Comput Appl 37(23):19063--19085. \url{https://doi.org/10.1007/s00521-025-11317-z}
-
-\bibitem[Dhall et al.(2020)]{dhall2020emotiw}
-Dhall A, Sharma G, Goecke R, Gedeon T (2020) EmotiW 2020: Driver gaze, group emotion, student engagement and physiological signal based challenges. In: Proceedings of the 2020 International Conference on Multimodal Interaction (ICMI), pp 784--789. \url{https://doi.org/10.1145/3382507.3417973}
-
-\bibitem[Dhall et al.(2023)]{dhall2023emotiw}
-Dhall A, Singh M, Goecke R, Gedeon T, Zeng D, Wang Y, Ikeda K (2023) EmotiW 2023: Emotion recognition in the wild challenge. In: Proceedings of the 25th International Conference on Multimodal Interaction (ICMI), pp 746--749. \url{https://doi.org/10.1145/3577190.3616545}
-
-\bibitem[Dhanith et al.(2026)]{venkatraman2025avtca}
-Dhanith PRJ, Venkatraman S, Sharma V, Malarvannan S (2026) Multimodal emotion recognition using audio-video transformer fusion with cross attention. arXiv:2407.18552v4
-
-\bibitem[Gupta et al.(2016)]{gupta2016daisee}
-Gupta A, D'Cunha A, Awasthi K, Balasubramanian V (2016) DAiSEE: Towards user engagement recognition in the wild. arXiv:1609.01885
-
-\bibitem[Mandia et al.(2024)]{mandia2023review}
-Mandia S, Mitharwal R, Singh K (2024) Automatic student engagement measurement using machine learning techniques: A literature study of data and methods. Multimed Tools Appl 83(16):49641--49672. \url{https://doi.org/10.1007/s11042-023-17534-9}
-
-\bibitem[Mollahosseini et al.(2019)]{mollahosseini2019affectnet}
-Mollahosseini A, Hasani B, Mahoor MH (2019) AffectNet: A database for facial expression, valence, and arousal computing in the wild. IEEE Trans Affect Comput 10(1):18--31. \url{https://doi.org/10.1109/TAFFC.2017.2740923}
-
-\bibitem[Pedregosa et al.(2011)]{pedregosa2011sklearn}
-Pedregosa F, Varoquaux G, Gramfort A, Michel V, Thirion B, Grisel O, Blondel M, Prettenhofer P, Weiss R, Dubourg V, Vanderplas J, Passos A, Cournapeau D, Brucher M, Perrot M, Duchesnay {\'E} (2011) Scikit-learn: Machine learning in Python. J Mach Learn Res 12:2825--2830
-
-\bibitem[Qarbal et al.(2025)]{qarbal2025review}
-Qarbal I, Sael N, Ouahabi S (2025) Student's engagement detection based on computer vision: A systematic literature review. IEEE Access 13:140519--140545. \url{https://doi.org/10.1109/ACCESS.2025.3596885}
-
-\bibitem[Qin et al.(2026)]{qin2026glpfusion}
-Qin Z, Shen S, Sun D, Zhu K, Huang Z, Liu Q, Wang S (2026) GLP-fusion: A hierarchical multimodal fusion framework for robust student engagement prediction. IEEE Trans Multimedia (early access). \url{https://doi.org/10.1109/TMM.2026.3685539}
-
-\bibitem[Singh et al.(2023)]{singh2023engagenet}
-Singh M, Hoque X, Zeng D, Wang Y, Ikeda K, Dhall A (2023) Do I have your attention: A large scale engagement prediction dataset and baselines. In: Proceedings of the 25th International Conference on Multimodal Interaction (ICMI), Paris, pp 174--182. \url{https://doi.org/10.1145/3577190.3614164}
-
-\bibitem[Vaswani et al.(2017)]{vaswani2017attention}
-Vaswani A, Shazeer N, Parmar N, Uszkoreit J, Jones L, Gomez AN, Kaiser {\L}, Polosukhin I (2017) Attention is all you need. In: Advances in Neural Information Processing Systems 30, pp 5998--6008
-
-\bibitem[Vedernikov(2026)]{vedernikov2026priornet}
-Vedernikov A (2026) PriorNet: Prior-guided engagement estimation from face video. Mach Vis Appl 37(6):154. \url{https://doi.org/10.1007/s00138-026-01918-6}
-
-\bibitem[Vedernikov et al.(2024)]{vedernikov2024tcct}
-Vedernikov A, Kumar P, Chen H, Sepp\"{a}nen T, Li X (2024) TCCT-Net: Two-stream network architecture for fast and efficient engagement estimation via behavioral feature signals. In: Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition Workshops (CVPRW), pp 4723--4732. \url{https://doi.org/10.1109/CVPRW63382.2024.00475}
-
-\bibitem[Wang et al.(2026)]{wang2026shap}
-Wang GY, Hatori Y, Sato Y, Tseng CH, Yueh HP, Shioiri S (2026) Cultural differences in facial features based on SHAP analysis from machine learning model estimating learners' mental states. Multimed Tools Appl 85(4):344. \url{https://doi.org/10.1007/s11042-026-21230-9}
-
-\bibitem[Wu et al.(2024)]{wu2024cmose}
-Wu CH, Liu SY, Huang X, Wang X, Zhang R, Minciullo L, Yiu WK, Kwan K, Cheng KT (2024) CMOSE: Comprehensive multi-modality online student engagement dataset with high-quality labels. In: Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition Workshops (CVPRW), pp 4636--4645. \url{https://doi.org/10.1109/CVPRW63382.2024.00466}
-
-\bibitem[Zhang et al.(2016)]{zhang2016mtcnn}
-Zhang K, Zhang Z, Li Z, Qiao Y (2016) Joint face detection and alignment using multitask cascaded convolutional networks. IEEE Signal Process Lett 23(10):1499--1503. \url{https://doi.org/10.1109/LSP.2016.2603342}
-
-\bibitem[Zhao et al.(2021)]{zhao2021efficientface}
-Zhao Z, Liu Q, Zhou F (2021) Robust lightweight facial expression recognition network with label distribution training. In: Proceedings of the AAAI Conference on Artificial Intelligence 35(4):3510--3519. \url{https://doi.org/10.1609/aaai.v35i4.16465}
-
-\end{thebibliography}
+\bibliography{references}% formatted by sn-basic.bst (selected by the sn-basic class option)
 
 \end{document}

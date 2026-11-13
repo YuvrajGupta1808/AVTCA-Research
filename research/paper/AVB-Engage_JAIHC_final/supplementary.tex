@@ -1,7 +1,8 @@
 %% Supplementary Information (Online Resource 1, ESM_1.pdf) for the AVB-Engage manuscript (JAIHC). Compile with
 %% pdfLaTeX alongside sn-jnl.cls. Holds the material moved out of the main text on 2026-11-03 and 2026-11-09 (decoding
 %% rules and training objective, metrics, threshold search, pre-training stages, training sweep, configuration,
-%% per-level and ablation tables); checked against the code and the result files on 2026-11-13 (docs/plan.md Sec. 21).
+%% per-level and ablation tables) and, on 2026-11-13, the paired significance tests of Section S13; checked against
+%% the code and the result files on 2026-11-13 (docs/plan.md Sec. 21).
 \documentclass[pdflatex,sn-basic]{sn-jnl}
 
 \usepackage{amsmath,amssymb,amsfonts}
@@ -34,7 +35,7 @@
 \author[1]{\fnm{Third} \sur{Author}}
 \affil*[1]{\orgdiv{Department}, \orgname{Organization}, \orgaddress{\city{City}, \state{State}, \country{Country}}}
 
-\abstract{Online Resource 1 for the article ``\ournet: Audio-Visual and Facial-Behavior Fusion for Ordinal Student Engagement Recognition'', submitted to the \emph{Journal of Ambient Intelligence and Humanized Computing}. This document supplements the main article. Section~S1 gives the decoding rules and the training objective summarized in Section~3 of the main text; Section~S2 defines the four evaluation metrics named in Section~5; Section~S3 gives the layer-by-layer configuration of the cross-attention fusion of Section~3.1.4; Section~S4 lists the training and inference procedure; Sections~S5 to S7 hold the segment-count and training-variable ablations, the fusion-weight sweep, the computational cost and the label-granularity analysis of Section~5; and Sections~S8 to S12 give the training configuration, the per-level results, and the behavior-branch, dataset, modality and fusion-weight tables.}
+\abstract{Online Resource 1 for the article ``\ournet: Audio-Visual and Facial-Behavior Fusion for Ordinal Student Engagement Recognition'', submitted to the \emph{Journal of Ambient Intelligence and Humanized Computing}. This document supplements the main article. Section~S1 gives the decoding rules and the training objective summarized in Section~3 of the main text; Section~S2 defines the four evaluation metrics named in Section~5; Section~S3 gives the layer-by-layer configuration of the cross-attention fusion of Section~3.1.4; Section~S4 lists the training and inference procedure; Sections~S5 to S7 hold the segment-count and training-variable ablations, the fusion-weight sweep, the computational cost and the label-granularity analysis of Section~5; Sections~S8 to S12 give the training configuration, the per-level results, and the behavior-branch, dataset, modality and fusion-weight tables; and Section~S13 gives paired significance tests of the main comparisons.}
 
 \maketitle
 
@@ -107,7 +108,7 @@ Here, $\tilde{\mathbf{A}}_1[:, j]$ is the $j$-th aligned audio token for $j = 1,
 
 \section{Training and inference procedure}\label{sec:s_alg}
 
-Algorithm~\ref{alg:s_ournet} lists the training and inference steps of \ournet{} in order. Before the fine-tuning reported in the main text, the audio-visual network was trained on EngageNet in three stages starting from the AffectNet initialization of the visual backbone, with the audio and fusion modules initialized randomly: 30 epochs with the cross-entropy loss at a learning rate of $10^{-2}$ and batch size 2, then 25 epochs with the ordinal objective at $10^{-4}$ and batch size 2, and then 8 epochs with the ordinal objective at $5 \times 10^{-5}$ and batch size 8, each stage starting from the weights of the previous one. These stages read every face frame of a clip; the square-root class-balanced sampler of Table~\ref{tab:config} was used in the reported fine-tuning only. All reported networks are fine-tuned from the resulting checkpoint with three random seeds, about 32 minutes per run on one NVIDIA RTX 3090 GPU with 24\,GB of memory; the segment Transformer was trained on the same GPU and the gradient-boosting model on the CPU, both on the training split only.
+Algorithm~\ref{alg:s_ournet} lists the training and inference steps of \ournet{} in order. Before the fine-tuning reported in the main text, the audio-visual network was trained on EngageNet in three stages starting from the AffectNet initialization of the visual backbone, with the audio and fusion modules initialized randomly: 30 epochs with the cross-entropy loss at a learning rate of $10^{-2}$ and batch size 2, then 25 epochs with the ordinal objective at $10^{-4}$ and batch size 2, and then 8 epochs with the ordinal objective at $5 \times 10^{-5}$ and batch size 8, each stage starting from the weights of the previous one. These stages read every face frame of a clip; the square-root class-balanced sampler was used in the reported fine-tuning only. All reported networks are fine-tuned from the resulting checkpoint with three random seeds, about 32 minutes per run on one NVIDIA RTX 3090 GPU with 24\,GB of memory; the segment Transformer was trained on the same GPU and the gradient-boosting model on the CPU, both on the training split only.
 
 \begin{algorithm}[t]
 \caption{\ournet{} training and inference}\label{alg:s_ournet}
@@ -152,7 +153,7 @@ $S$ & Dims & Argmax & Thresholds & Macro-F1 & + GBM (0.5/0.5) & 3-way (0.6/0.2/0
 \end{tabular*}
 \end{table}
 
-\emph{Training variables of the network.} This ablation asks whether a better training recipe for the network alone could have produced the gains that the decoding rule and the fusion provide. Fourteen fine-tuning runs were started from the same checkpoint (Table~\ref{tab:sweep}): a control that reads every frame for 8 epochs; a run with a frame cap of 50 and 6 epochs; eleven runs that keep this cap and epoch count and change one further setting (three seeds of the square-root class-balanced sampler, the loss type, the ordinal penalty weight at two values, label smoothing, an exponential moving average of the weights, the learning rate together with its schedule, SpecAugment on the spectrogram, and a class-weighted loss); and one run with synchronized random temporal cropping and a frame cap of 40. The standard deviation across the fourteen runs (0.52 points) is close to the seed spread of one configuration (0.45 points), no change raises accuracy by more than that spread once the three sampler seeds are averaged (66.27\%, 0.18 points above the control), and only the class-weighted loss (64.72\%) and the cropping run (64.89\%) fall more than one point below the control. Averaging the logits of all fourteen networks gives 65.69\%, below the best single network, which is consistent with networks fine-tuned from one checkpoint making similar errors. For a single network on this dataset, the training variables we tested do not raise top-1 accuracy beyond the seed noise; the gains in this paper come from the decoding rule and from combining different models.
+\emph{Training variables of the network.} This ablation asks whether a better training recipe for the network alone could have produced the gains that the decoding rule and the fusion provide. Fourteen fine-tuning runs were started from the same checkpoint (Table~\ref{tab:sweep}): a control that reads every frame for 8 epochs; a run with a frame cap of 50 and 6 epochs; eleven runs that keep this cap and epoch count and change one further setting (three seeds of the square-root class-balanced sampler, the loss type, the ordinal penalty weight at two values, label smoothing, an exponential moving average of the weights, the learning rate together with its schedule, SpecAugment on the spectrogram, and a class-weighted loss); and one run with 8 epochs, like the control, that adds synchronized random temporal cropping with a frame cap of 40. The standard deviation across the fourteen runs (0.52 points) is close to the seed spread of one configuration (0.45 points), no change raises accuracy by more than that spread once the three sampler seeds are averaged (66.27\%, 0.18 points above the control), and only the class-weighted loss (64.72\%) and the cropping run (64.89\%) fall more than one point below the control. Averaging the class probabilities of all fourteen networks gives 65.69\%, below the best single network, which is consistent with networks fine-tuned from one checkpoint making similar errors. For a single network on this dataset, the training variables we tested do not raise top-1 accuracy beyond the seed noise; the gains in this paper come from the decoding rule and from combining different models.
 
 \begin{table}[t]
 \setlength{\tabcolsep}{3pt}
@@ -176,7 +177,7 @@ Frame cap 50, 6 epochs & 65.82 & 91.40 & 0.446 & 50.76\\
 Cap 40 + random crop & 64.89 & 91.53 & 0.450 & 50.42\\
 Class-weighted loss & 64.72 & 91.71 & 0.452 & 50.41\\
 \midrule
-Logit average of the 14 networks & 65.69 & -- & -- & --\\
+Probability average of the 14 networks & 65.69 & -- & -- & --\\
 \botrule
 \end{tabular*}
 \end{table}
@@ -207,8 +208,7 @@ Logit average of the 14 networks & 65.69 & -- & -- & --\\
 Table~\ref{tab:cost} reports the size and inference cost of every component of \ournet{} (Section~5.5 of the main text).
 
 \begin{table}[t]
-\setlength{\tabcolsep}{3pt}
-\caption{Size and inference cost per 10\,s clip (batch size 1). GPU: NVIDIA RTX 3090, mean over 110 test clips (21.5 $\pm$ 5.1\,ms); CPU: eight threads, mean over 30 test clips; OpenFace: one thread, median over 30 test clips. FLOPs count one multiply-add as two operations}\label{tab:cost}
+\caption{Size and inference cost per 10\,s clip (batch size 1). GPU: NVIDIA RTX 3090, mean over 110 test clips (21.5 $\pm$ 5.1\,ms); CPU: eight threads, network mean over 30 test clips, segment Transformer mean of 200 runs, gradient boosting median of 20 runs on one clip; OpenFace: one thread, median over 30 test clips. FLOPs count one multiply-add as two operations}\label{tab:cost}
 \begin{tabular*}{0.8\textwidth}{@{\extracolsep\fill}lccl}
 \toprule
 Component & Params & FLOPs & Time\\
@@ -219,7 +219,7 @@ Audio-visual network & 2.38\,M & 16.0\,G & 21.5\,ms GPU\\
 \quad Visual temporal conv. & 0.28\,M & -- & --\\
 \quad Audio encoder & 0.27\,M & -- & --\\
 \quad Cross-attention & 0.55\,M & 0.04\,G & --\\
-Segment Transformer & 71.6\,k & 0.11\,M & 0.7\,ms CPU\\
+Segment Transformer & 71.6\,k & 3.1\,M & 0.7\,ms CPU\\
 Gradient boosting & 4.8\,k trees & -- & 38.6\,ms CPU\\
 OpenFace 2.2 & -- & -- & 11.3\,s CPU\\
 \botrule
@@ -231,12 +231,12 @@ OpenFace 2.2 & -- & -- & 11.3\,s CPU\\
 Table~\ref{tab:granularity} shows the effect of merging engagement levels in the output of one trained audio-visual network without retraining (Section~5.6 of the main text).
 
 \begin{table}[t]
-\caption{Effect of label granularity on the output of one audio-visual network (seed 3, argmax, no retraining; test top-1 and majority-class accuracy in \%)}\label{tab:granularity}
+\caption{Effect of label granularity on the output of one audio-visual network (seed 3, argmax, no retraining; test top-1 and majority-class accuracy in \%; gains computed before rounding)}\label{tab:granularity}
 \begin{tabular*}{0.6\textwidth}{@{\extracolsep\fill}lccc}
 \toprule
 Levels & Top-1 & Majority & Gain\\
 \midrule
-4 (as trained) & 64.27 & 50.27 & +14.00\\
+4 (as trained) & 64.27 & 50.27 & +14.01\\
 3 (middle two merged) & 70.70 & 50.27 & \textbf{+20.43}\\
 2 (0--1 vs.\ 2--3) & 85.95 & 68.84 & +17.11\\
 \botrule
@@ -256,6 +256,7 @@ Setting & Audio-visual network & Segment Transformer & Gradient boosting\\
 \midrule
 Input & 50 face frames + log-mel & 20 tokens (44-d) & 924-d vector\\
 Optimizer & SGD, momentum 0.9 & AdamW & --\\
+Dampening & 0.9 & -- & --\\
 Learning rate & $5 \times 10^{-5}$, constant & $10^{-3}$, warm-up cosine & 0.05 / 0.03 / 0.05\\
 Weight decay / L2 & $10^{-3}$ & 0.05 & 1.0\\
 Batch size & 8 & 64 & --\\
@@ -264,7 +265,7 @@ Loss & CE + ordinal & CE + ordinal & log loss\\
 Ordinal weight $\lambda$ & 0.15 & 0.15 & --\\
 Label smoothing & 0.1 & 0.1 & --\\
 Sampling & inverse-sqrt class frequency & uniform & uniform\\
-Dropout & modality 0.15 & 0.3, token 0.1 & --\\
+Dropout & modality 0.15, attn.\ 0.1 & 0.3, token 0.1 & --\\
 Tree size & -- & -- & $\le$ 15 leaves\\
 Seeds & 3 & 3 & deterministic\\
 \botrule
@@ -356,7 +357,7 @@ Members & Weight rule & Top-1\\
 \midrule
 AV + GBM & fixed 0.5 / 0.5 & 69.95 $\pm$ 0.20\\
 AV + GBM & fixed 0.7 / 0.3 & 70.04 $\pm$ 0.20\\
-AV + GBM & validation, argmax, step 0.1 & 69.86 $\pm$ 0.50\\
+AV + GBM & validation, argmax, step 0.1$^{a}$ & 69.86 $\pm$ 0.50\\
 AV + GBM & validation, argmax, step 0.05 & 69.90 $\pm$ 0.41\\
 AV + GBM & validation, thresholds, step 0.05 & 69.12 $\pm$ 1.55\\
 AV + TF & validation, thresholds, step 0.05 & 68.69 $\pm$ 2.08\\
@@ -364,6 +365,53 @@ AV + TF + GBM & fixed, equal thirds & 69.28 $\pm$ 0.23\\
 AV + TF + GBM & \textbf{fixed 0.6 / 0.2 / 0.2} & \textbf{70.29 $\pm$ 0.14}\\
 AV + TF + GBM & validation, thresholds, step 0.1 & 70.29 $\pm$ 0.14\\
 AV + TF + GBM & validation, argmax, step 0.1 & 69.43 $\pm$ 1.09\\
+\botrule
+\end{tabular*}
+\footnotetext[a]{Thresholds fitted by an exhaustive grid with step 0.02 instead of the coordinate search; this rule selected 0.7 / 0.3 on every seed}
+\end{table}
+
+\section{Paired significance tests}\label{sec:s_sig}
+
+All models are evaluated on the same 2,256 test clips, so two models can be compared on paired outcomes rather than with two separate intervals. For models $a$ and $b$, let $n_a$ be the number of clips that only $a$ classifies correctly and $n_b$ the number that only $b$ classifies correctly. If the two models are equally accurate, $n_a$ follows a binomial distribution with $n_a + n_b$ trials and probability 0.5, and the exact McNemar test is the two-sided binomial test of this hypothesis. Tables~\ref{tab:sig_fusion} and~\ref{tab:sig_audio} report $n_a$, $n_b$, the p-value, and the p-value adjusted by the Holm method for the number of tests in each table. Every model is decoded as in the main text, the network with its refined expected-level thresholds and the other models and the fusion with thresholds fitted on the validation split, and the predictions reproduce Table~2 of the main text and Table~\ref{tab:modality} exactly.
+
+\emph{Fusion against its members.} \ournet{} classifies more clips correctly than each of its three members on every seed, and every difference remains significant after adjustment (Table~\ref{tab:sig_fusion}).
+
+\emph{Audio.} The audio comparison uses the inference-time ablation of Section~5.4.1 of the main text: each network is run once with both streams and once with the audio tokens set to zero, with unchanged weights, and each run is decoded with the thresholds fitted on validation for that condition. Adding audio corrects more clips than it breaks in seven of the nine networks (Table~\ref{tab:sig_audio}), and the difference is significant at the 5\% level in three networks before adjustment and in one after it (1.99 points). The nine networks are fine-tuned from one warm start, so their tests are not independent and cannot be pooled into one test; the evidence for audio is the consistent sign across matched networks rather than the significance of any single one.
+
+\begin{table}[t]
+\caption{Exact McNemar tests of \ournet{} against each of its members on the test split. $\Delta$: difference in top-1 accuracy (points); $n_{\mathrm{AVB}}$ and $n_{\mathrm{m}}$: clips classified correctly only by \ournet{} or only by the member}\label{tab:sig_fusion}
+\begin{tabular*}{\textwidth}{@{\extracolsep\fill}llrrrll}
+\toprule
+Seed & Member & $\Delta$ & $n_{\mathrm{AVB}}$ & $n_{\mathrm{m}}$ & $p$ & $p$ (Holm)\\
+\midrule
+1 & Audio-visual network & +4.39 & 184 & 85 & $1.5 \times 10^{-9}$ & $1.4 \times 10^{-8}$\\
+1 & Segment Transformer & +3.15 & 203 & 132 & $1.2 \times 10^{-4}$ & $2.5 \times 10^{-4}$\\
+1 & Gradient boosting & +3.90 & 240 & 152 & $1.0 \times 10^{-5}$ & $3.1 \times 10^{-5}$\\
+2 & Audio-visual network & +3.90 & 167 & 79 & $2.1 \times 10^{-8}$ & $1.7 \times 10^{-7}$\\
+2 & Segment Transformer & +2.35 & 205 & 152 & 0.006 & 0.006\\
+2 & Gradient boosting & +3.99 & 235 & 145 & $4.5 \times 10^{-6}$ & $1.8 \times 10^{-5}$\\
+3 & Audio-visual network & +3.77 & 170 & 85 & $1.1 \times 10^{-7}$ & $6.6 \times 10^{-7}$\\
+3 & Segment Transformer & +4.39 & 213 & 114 & $4.8 \times 10^{-8}$ & $3.3 \times 10^{-7}$\\
+3 & Gradient boosting & +4.17 & 246 & 152 & $2.8 \times 10^{-6}$ & $1.4 \times 10^{-5}$\\
+\botrule
+\end{tabular*}
+\end{table}
+
+\begin{table}[t]
+\caption{Exact McNemar tests of audio + video against video only on the same trained weights (test split; the nine networks of Table~\ref{tab:modality}). $\Delta$: difference in top-1 accuracy (points); $n_{\mathrm{AV}}$ and $n_{\mathrm{V}}$: clips classified correctly only with the audio stream or only without it}\label{tab:sig_audio}
+\begin{tabular*}{\textwidth}{@{\extracolsep\fill}lrrrll}
+\toprule
+Network & $\Delta$ & $n_{\mathrm{AV}}$ & $n_{\mathrm{V}}$ & $p$ & $p$ (Holm)\\
+\midrule
+Audio-visual network, seed 1 & +0.18 & 80 & 76 & 0.810 & 1.000\\
+Audio-visual network, seed 2 & +0.80 & 65 & 47 & 0.108 & 0.647\\
+Audio-visual network, seed 3 & +1.99 & 100 & 55 & $3.8 \times 10^{-4}$ & 0.003\\
+Behavior branch, seed 1 & +0.62 & 82 & 68 & 0.288 & 1.000\\
+Behavior branch, seed 2 & +1.55 & 102 & 67 & 0.009 & 0.070\\
+Behavior branch, seed 3 & $-$0.13 & 53 & 56 & 0.848 & 1.000\\
+Behavior branch + AU text, seed 1 & +0.62 & 85 & 71 & 0.298 & 1.000\\
+Behavior branch + AU text, seed 2 & +1.06 & 75 & 51 & 0.040 & 0.280\\
+Behavior branch + AU text, seed 3 & 0.00 & 58 & 58 & 1.000 & 1.000\\
 \botrule
 \end{tabular*}
 \end{table}

@@ -1,0 +1,12 @@
+%% Source of Fig3.pdf (row-normalized test confusion matrices). The manual (Sec. 7.3) wants every figure as one image
+%% file on the same level as paper.tex, so the TikZ drawing is compiled here once:
+%%   cd figures && tectonic Fig3_source.tex && cp Fig3_source.pdf ../Fig3.pdf
+%%   cd .. && gs -q -dNOPAUSE -dBATCH -dSAFER -sDEVICE=eps2write -sOutputFile=Fig3.eps Fig3.pdf
+%% Same font (Computer Modern, \footnotesize = 8 pt) and natural size as when it was drawn inside the paper.
+\documentclass[border=2pt]{standalone}
+\usepackage{xcolor}
+\usepackage{tikz}
+\input{fig_colors}
+\begin{document}
+\input{fig_confusion}
+\end{document}
