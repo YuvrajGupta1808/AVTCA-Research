@@ -10,6 +10,7 @@ datasets/CMU-MOSEI/
 datasets/CREMAD/
 datasets/EngageNet/
 datasets/DAISEE/
+datasets/SFSU/
 
 
 # Preprocessed artifacts inside dataset folders

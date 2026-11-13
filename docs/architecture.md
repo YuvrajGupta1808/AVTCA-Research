@@ -36,60 +36,76 @@ V4 is useful as an overfitting study: it lowers train accuracy compared with Eff
 
 ## Architecture Diagram
 
+The 70.29 pipeline: the AVT-CA network (EngageNet, 4 ordinal classes, `--fusion it --it_fusion_mode
+modern`, arm A) followed by inference-time late fusion with two OpenFace-statistics models. The
+network alone, decoded from `classifier_1` with its own validation thresholds, scores 66.27 and is
+what the UI serves today; that path is not drawn separately. The neural behavior branch (`--behavior`,
+arm B) is not drawn: it scores the same as arm A and is not part of the headline pipeline. It is still
+in the code and is documented in the "Behavior stream" section below. The pre-September RAVDESS 8-class
+diagram is retained as history in git (commit 0043f9f and earlier).
+
 ```mermaid
 flowchart TD
+    CLIP["EngageNet clip ≤10 s"] --> V["Video: 50 face frames @ 5 fps<br/>3×224×224"]
+    CLIP --> A["Audio: full-clip 64-bin mel<br/>~431 frames"]
+    CLIP --> OF["OpenFace per source frame<br/>(T, 22): 17 AUs + gaze xy + pose Rx Ry Rz"]
 
-    RAW["RAVDESS audiovisual sample"] --> PRE["Dataset loader + transforms"]
+    V --> VF["EfficientFace (AffectNet7 pretrained)<br/>→ (B, 50, 1024)"]
+    VF --> VS1["Visual stage 1 Conv1D → (B, 64, 50)"]
+    A --> AS1["Audio stage 1 Conv2D → (B, 128, ~108)"]
+    AS1 --> AL["Adaptive align: pool audio span<br/>onto 50 video tokens (1:1 clock)"]
 
-    PRE --> VID["Video input<br/>15 face frames, 3 x 224 x 224"]
-    PRE --> AUD["Audio input<br/>3.6 sec waveform to 64-bin mel spectrogram"]
-    PRE --> TXT["Optional text add-on<br/>hashed token sequence from annotation text"]
+    AL --> MD["Modality dropout p=0.15 (train)"]
+    VS1 --> MD
+    MD --> X1["Early cross-attn av1 / va1 + residual<br/>(50 audio ↔ 50 video tokens, 1:1 clock)"]
+    X1 --> S2["Stage 2 Conv1D<br/>audio 128→256→128 with 2× MaxPool → ~12 tokens<br/>video 64→128→128, no pool → 50 tokens"]
+    S2 --> X2["Cross-modal MHA + residual<br/>(12 audio ↔ 50 video)"]
+    X2 --> X3["Final audioCrossAttention / visualCrossAttention"]
+    X3 --> AP["Masked AttentionPool audio → 128"]
+    X3 --> VP["Masked AttentionPool video → 128"]
+    AP --> AV["av_pair = cat → (B, 256)"]
+    VP --> AV
+    AV --> CLS1["classifier_1 Linear(256 → 4)"]
 
-    VID --> VF["EfficientFace forward_features<br/>2D visual frame encoder"]
-    VF --> VS1["Visual stage 1<br/>Conv1D 1024 to 64 to 64"]
-
-    AUD --> AS1["Audio stage 1<br/>Conv2D 1 to 64 to 128<br/>frequency mean to temporal tokens"]
-    AS1 --> ALIGN["Per-sample adaptive pool<br/>pool full valid audio span<br/>into valid video length, then pad/mask"]
-
-    ALIGN --> AV1["av1 AttentionBlock<br/>audio query over visual keys/values"]
-    VS1 --> AV1
-    VS1 --> VA1["va1 AttentionBlock<br/>visual query over audio keys/values"]
-    ALIGN --> VA1
-
-    AV1 --> ARES1["Audio residual add"]
-    ALIGN --> ARES1
-    VA1 --> VRES1["Visual residual add"]
-    VS1 --> VRES1
-
-    ARES1 --> AS2["Audio stage 2<br/>Conv1D 128 to 256 to 128"]
-    VRES1 --> VS2["Visual stage 2<br/>Conv1D 64 to 128 to 128"]
-
-    AS2 --> MHA_A["audioAttention<br/>query audio, key/value visual"]
-    VS2 --> MHA_A
-    VS2 --> MHA_V["visualAttention<br/>query visual, key/value audio"]
-    AS2 --> MHA_V
-
-    MHA_A --> ARES2["Audio residual + attention dropout"]
-    AS2 --> ARES2
-    MHA_V --> VRES2["Visual residual + attention dropout"]
-    VS2 --> VRES2
-
-    ARES2 --> FCA["audioCrossAttention<br/>audio query over visual"]
-    VRES2 --> FCA
-    VRES2 --> FCV["visualCrossAttention<br/>visual query over audio"]
-    ARES2 --> FCV
-
-    FCA --> AP["Audio attention pooling"]
-    FCV --> VP["Visual attention pooling"]
-    AP --> AVC["AV context projection<br/>pooled audio + visual to 128-d summary"]
-    VP --> AVC
-    AVC --> TADD["LateTextFusion<br/>AV summary reads text afterwards"]
-    TXT --> TADD
-    AVC --> CAT["Concatenate AV summary + text-refined summary"]
-    TADD --> CAT
-    CAT --> CLS["Linear classifier<br/>256 to 8"]
-    CLS --> OUT["Emotion prediction<br/>neutral, calm, happy, sad,<br/>angry, fearful, disgust, surprised"]
+    subgraph LATE["Inference-time late fusion"]
+        OF --> SEG["20 segments × [mean,std] + clip stats = 924-d"]
+        SEG --> GBM["HistGradientBoosting × 3 fits, averaged → p_GBM"]
+        SEG --> TF["SegmentTransformer (2 layers, d 64, FFN 128, ~0.1 M) → p_TF"]
+        CLS1 --> PAV["softmax → p_AV"]
+        PAV --> MIX["0.6·p_AV + 0.2·p_TF + 0.2·p_GBM<br/>val-selected on 0.1 simplex; fixed weights give the same 70.29"]
+        GBM --> MIX
+        TF --> MIX
+        MIX --> DEC2["expected level + thresholds<br/>(refit on the fused probabilities)"]
+        DEC2 --> OUT["Engagement level 0–3 (70.29)"]
+    end
 ```
+
+Without `--behavior` the model ends at `av_pair → classifier_1 Linear(256→4)`; that is the AV-only
+arm A (66.27 ± 0.45). The behavior branch (arm B) is length-agnostic and does not change accuracy;
+the late-fusion members on the same OpenFace features do (see the two sections dated 2026-09-12 below).
+
+Diagram notes (verified against `models/multimodal_cnn.py` and `scripts/fullclip/*`, 2026-09-16):
+- The 70.29 ± 0.14 headline fuses **arm A** checkpoints (`classifier_1`). The neural behavior branch
+  (arm B, `classifier_fused` 448 → 4) was removed from the diagram on 2026-09-16 because it does not
+  change accuracy (66.08 vs 66.27) and is not in the headline; fusing arm B checkpoints gives 69.77 / 70.04.
+- The 1:1 audio/video clock holds at `av1`/`va1` only. Audio stage 2 pools twice (50 → ~12 tokens);
+  video stage 2 does not pool, so the later cross-attention runs ~12 audio against 50 video tokens.
+- The optional `TemporalChannelGate` after audio stage 2 (`--audio_channel_attention`) is off by
+  default and omitted from the diagram.
+- The SegmentTransformer config shown (2 layers, d_model 64, FFN 128) is the sweep-selected one;
+  `segment_transformer.py` defaults are 4 layers / 128 / 256.
+
+### Previous vs current — summary of changes
+
+| Aspect | RAVDESS model (≤ Aug 2026) | EngageNet model (Sep 2026) |
+|---|---|---|
+| Task / head | 8 emotions, `Linear(256→8)`, argmax | 4 ordinal levels, `Linear(448→4)`, expected-level + thresholds |
+| Inputs | 15 frames, 3.6 s audio, optional hashed text | 50 frames @ 5 fps, full-clip audio, OpenFace (T, 22) |
+| Clock | 11× audio/video mismatch at cross-attention | audio and behavior both on the 50-token video clock |
+| Third modality | late hashed-text add-on (label oracle, dropped) | OpenFace statistics via late fusion (GBM + SegmentTransformer); neural behavior branch exists but unused |
+| Pooling | MaxPool (legacy) | masked learned `AttentionPool` (modern) |
+| Robustness | none | modality dropout p=0.15, missing-modality token |
+| Best result | 71.25% RAVDESS | 66.27 AV alone; 70.29 with GBM + transformer late fusion |
 
 ## Late Text Add-On
 

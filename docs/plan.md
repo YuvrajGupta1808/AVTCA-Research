@@ -1,7 +1,7 @@
 # Dataset Collection Plan — Classroom Engagement Detection
 
 **Current phase:** Design and collect a multimodal engagement dataset with equal audio-video importance.
-**Status:** Pre-collection — session design locked, no recordings yet.
+**Status:** First partner recording received 2026-11-09 (SFSU PSY 371 office hours, 2026-10-29; truncated to 19 of 84 min; active-speaker view + mixed audio, so no listener footage). Review and the revised recording requirements in **§20**. The session design below assumed sessions we script; §20.5 records what changes with a partner instructor.
 
 ---
 
@@ -346,6 +346,7 @@ Expected output: ~10,000–12,000 labeled clips, 2 cohorts, 8 sessions, 24 uniqu
 | TX1 | `preprocessing/zoom/extract_chat.py` — parse Zoom chat export, per-student per-clip text (Section 17) | High — unblocked now |
 | TX3 | Chat elicitation prompts + display-name convention into E1 session script (Section 17.1) | High — merge with E1 |
 | TX2, TX4–TX7 | Chat schema, text encoder, null token, text dropout, leakage gate + A/B (Section 17.7) | Blocked on pilot data |
+| SF1–SF6 | SFSU partner recording: full re-transfer, companion files (m4a/vtt/chat), recording-settings request (gallery view separate + per-participant audio), session metadata, survey labels, review of stops 2–5 (Section 20.8) | **Critical** — SF3 must reach the instructor before the next session |
 
 **ProsodyEncoder implementation note (E9):** Do NOT produce a single summary token for concatenation into the temporal sequence. A scalar token attends identically at every time step. Instead, condition the audio CNN features directly:
 ```python
@@ -2241,9 +2242,9 @@ is not (§19.6).
 | **mean** | 66.16 | 65.41 | 48.60 | **+0.74** (8/9 ≥ 0) | 52.24 | 51.65 |
 
 The audio contribution measured in the August sweep (+0.67, 12/13 models) reproduces under clean
-three-seed training: **+0.74 top-1 from fusing audio, sign-consistent on 8 of 9 runs**, while audio alone
+three-seed training: **+0.74 top-1 from fusing audio, strictly higher on 7 of 9 runs (one tie, one −0.13; ≥ 0 on 8 of 9)**, while audio alone
 is exactly the majority predictor (50.27) or below it (46.2–46.7 when the model collapses to a different
-constant). Macro-F1 is not consistently helped (5/9). This is the defensible AV claim for the paper:
+constant). Macro-F1 is higher with audio on 6 of 9 runs (corrected 2026-10-06; earlier text said 5/9). Paper wording must be "not lower in 8 of 9" or "higher in 7 of 9", never "lowers in 8 of 9"; `A_av_s3` (+1.99) is the one run at the ±1.95 binomial CI. This is the defensible AV claim for the paper:
 *audio has no standalone engagement signal on EngageNet but adds ~0.7 top-1 on top of video when fused.*
 
 **Bottom line of §19.5.** "Full video + full audio" = the model that already existed: 66.27 ± 0.45.
@@ -2498,3 +2499,668 @@ one: equal-weight averaging of the audio-visual network with the two OpenFace-st
 scores 69.3 ± 0.2, and the conventional 0.6/0.2/0.2 scores 70.3 ± 0.1; validation-selected weights sit
 in the same band.** Report the fixed-weight rows as the headline and the selected rows as a check,
 not the other way round. `fuse_members.py` now has `--select {ethr,argmax}` and `--fixed w1,w2,...`.
+
+### 18.16 Springer (MTAP) version of the paper (2026-10-01)
+
+Target: **Multimedia Tools and Applications**, collection *Track 5: Multimedia and Education* (ongoing, editor Borko Furht).
+New source `research/paper_springer/paper.tex` (sn-jnl v3.1, `[pdflatex,sn-basic,Numbered]`, compiles with tectonic, 26 pp,
+abstract 213 words, 6 keywords). The IEEE draft in `research/paper/` is kept unchanged.
+- **Pattern** taken from the two Springer exemplars (JAIHC 17:1579-1598, 2026: 6 experiment groups, 11 tables, 11 figs;
+  JSPS 97:269-280, 2025: per-seed/per-class results, 2 hyperparameter ablations, SOTA table): related-work summary table,
+  training-configuration table, per-seed and per-level tables, 5 ablations, computational-cost table, limitations.
+- **New numbers** (from saved outputs, `scripts/paper/*.py` -> `results/paper_springer/`): per-level P/R/F1; fusion-weight
+  sensitivity (0.6 is the 3-way peak, 0.8 drops to 67.46); segment count S=1..40 changes GBM top-1 by <1 pt and every
+  fusion stays 68.8-70.6 (S=1 alone 67.29); cost: network 2.38 M params, 16.0 GFLOPs, 21.5 ms/clip on RTX 3090,
+  OpenFace 11.3 s/clip on one CPU thread (3 of 30 sampled test clips decode to 10,000 frames, ~300 s each).
+- **IEEE-draft corrections found:** its confusion figure decoded the network with the fusion threshold search
+  (79/12/30/85), not the stated refined thresholds (77/18/26/87; 67.4% of errors on middle levels, not 65.8%);
+  GBM MAE is 0.476 not 0.480; error overlap is 33.3-34.2 / 33.7 / 21.5-22.3% under the stated decoders.
+  The 0.6/0.2/0.2 weights are validation-selected (7 of 8 members), so they are not described as "fixed in advance".
+- **AI policy** (Springer Nature 2026 risk tiers + MTAP guidelines): drafting from author input = amber, needs an AI
+  declaration; AI writing results/discussion independently = not permitted; AI-assisted figures need disclosure in the
+  caption. MTAP also wants LLM use documented in the Methods. A draft declaration is in the paper; authors must edit it.
+- **Open:** author block and declarations (funding, contributions, EngageNet licence); convert `thebibliography` to a
+  `.bib` with sn-basic.bst and replace `\input` figures by Fig*.pdf before submission (template rule); add AI-use
+  disclosure to the captions of the TikZ/draw.io figures; second dataset (both exemplars evaluate on three).
+- **Venue page limits (checked 2026-10-01 on the official guideline pages).** JAIHC (journal 12652): since 2022-01-01, 12 pages
+  *including references* at submission in the journal's two-column format, max 14 after revision; surveys 24/28 with prior
+  approval; `\documentclass[iicol,sn-basic]{sn-jnl}` with **author-year** references; non-compliant papers are returned.
+  MTAP: no page limit (only abstract 150-250 words), numbered references. Our draft compiled two-column (scratch copy,
+  numbered citations) = **18 pages** (body to p. 15, references pp. 16-18), so a JAIHC submission needs ~6 pages cut plus
+  author-year references. MTAP needs no cut.
+
+### 18.17 JAIHC version of the paper (2026-10-01)
+
+Yuvraj chose the *Journal of Ambient Intelligence and Humanized Computing* (JAIHC). New source `research/paper_jaihc/`
+(`paper.tex` + `references.bib`, `\documentclass[pdflatex,iicol,sn-basic]{sn-jnl}`: two columns, author-year citations
+via `\citep`/`\citet`). **Compiles to exactly 12 pages including references** (references pp. 10-12; ~0.7 page free on
+p. 12 for the real author block and declarations), abstract 216 words, 6 keywords, no overfull boxes, all citations
+resolved. Condensed from the MTAP long version (`research/paper_springer/`, kept): dropped the overview figure,
+Algorithm 1, the related-work summary, training-configuration, per-level, fusion-weight, segment-count, sweep and
+granularity tables (their key numbers are in the text); kept the per-seed table, decoder, modality, branch and cost
+tables, and the concept, architecture, results, sensitivity and confusion figures. References cut from 40 to 28
+(dropped Pabba, Immadisetty, Hegde, Lu, Kim, Yulius, Gothwal, VLM-noise, Safa, Li survey, Mo early fusion). TikZ
+figures redrawn for one 84 mm column with text >= 8 pt (JAIHC: figure lettering similar to body text).
+**Open before submission:** (1) `figures/architecture.drawio` must be edited by hand in draw.io: at full page width its
+lettering is ~5.5 pt (needs ~11 pt at the current canvas size) and its legend still says "Section VI" (now Section 5);
+(2) author block, funding, contributions, EngageNet licence, AI declaration (draft); (3) paste the .bbl and replace
+`\input` figures with PDFs if the editorial system asks for a single .tex file.
+- **2026-10-01 (latest):** Yuvraj put the JAIHC version on hold and is uploading the MTAP version (`research/paper_springer/`)
+  to Overleaf; the venue choice is still open. Overleaf bundle = paper.tex + sn-jnl.cls + sn-basic.bst + figures/
+  (verified to build from an empty folder, 26 pp).
+
+### 18.18 MTAP manuscript revised after the full-paper review (2026-10-07)
+
+Yuvraj asked for every review finding to be fixed. `research/paper_springer/paper.tex` was edited in place (the
+2026-10-01 state is kept as `AVB-Engage_MTAP_overleaf_2026-10-01.zip`; the new bundle `AVB-Engage_MTAP_overleaf.zip`
+builds from an empty folder with tectonic: 28 pp, no overfull boxes, no undefined references, 45 references).
+- **Story:** abstract, contributions and conclusion now say that most of the gain over 67.61 comes from expected-level
+  decoding and from averaging models with different errors; audio is a small, sign-consistent addition. Contribution 2
+  is a *measurement* on identical weights (CMOSE/EmotiW already threshold a scalar score). The per-sample alignment
+  left the contribution list (its effect is not measured). Title unchanged (Yuvraj/Sanchita to decide).
+- **Facts corrected:** "lowers in eight of nine" → higher in 7 of 9 (1 tie, 1 −0.13), Table 7 likewise; macro-F1 6/9;
+  "no single difference exceeds the noise floor" → one (1.99) reaches the ±1.95 interval; the 12-of-13 sweep is not
+  independent; gap point 3 rewritten (CMOSE thresholds; EngageNet baselines use softmax); GLP-fusion moved to §2.2 and
+  Table 1 (EmotiW 2023, own re-split, all streams video-derived); "only the thresholds are fitted on validation" →
+  checkpoint, Transformer size, fusion weights and thresholds are all chosen on validation; "eight neural members"
+  defined; sweep text (0.52 vs 0.45 "close to"; two runs >1 pt below control; cropping run changes two variables);
+  segment count "about one point at most (0.80 / 1.02)"; granularity gains +14.00/+20.43/+17.11 with majority 68.84;
+  Fig. 6 cell 5 → 4; OpenFace face detection 98.2% (from `behavior98` success flags; 98.8% had no source);
+  OpenFace timing = median over 30 test clips; Table 3 lists constant LR 5e-5 and label smoothing 0.1 for the
+  Transformer; Das & Dev described as in their abstract (two datasets, not "DAiSEE"); Algorithm 1 computes features
+  inside the training loop.
+- **Added citations (Crossref-checked):** MTCNN, AffectNet, MARLIN, Transformer, SpecAugment, scikit-learn,
+  Krippendorff (2019), EmotiW 2020. **Dropped:** Hegde (text-audio polarity), Tribedi (forced FER link).
+  Bibliography reordered by first citation.
+- **Prose:** Intro and Related Work rewritten on the FoleyGAN pattern (framing sentence, one clause per work, closest
+  work contrasted, "In our work, we…"); "published in this journal" sentence removed; numbers left to abstract,
+  tables and results; repeated sentences across sections removed.
+- **Figures/tables:** Fig. 1 level boxes and font sizes; Fig. 4 labels no longer crossed by the dashed line; Fig. 5
+  legend moved below the axes; Fig. 6 column labels unclipped; Tables 1, 3, 4, 5, 10, 12, 13 fit the text width.
+- **Still open (authors):** Figs. 2 and 3 are draw.io and must be edited by hand: raw `p_AV`/`p_TF`/`p_GBM` underscores
+  (use subscripts), Fig. 3 lettering ~4 pt at text width and its legend still says "Section VI" (now Section 5);
+  epochs of training stage 2 (TODO comment in §4.2); author block and declarations; AI-use note in figure captions.
+
+**2026-10-09 recheck of the Intro and Related Work (Yuvraj asked before updating Overleaf).** Every claim was
+checked against the source PDF, arXiv full text or the OpenAlex/Crossref abstract. Verified unchanged: EngageNet
+audio statement ("impacted by noise and a lack of audio, thus we only concentrated on video"), 20-segment Transformer
+tokenization, val–test gap 1.5–5.2, CMOSE +0.41 / +3.18 (Table 5: 78.14→78.55; 71.42→74.60), CMOSE 2,930 of
+12,193 segments with speech (24.0%) and 102 participants (so "most participants" holds vs DAiSEE 112), VE-MD
+68.98 is video-only (its audio-video fusion table covers VGAF, MER-MULTI, SAMSEMO only), TCCT-Net uses two
+head-pose rotation signals, GLP-fusion three video-derived streams, CORE-Net ordinal supervision, Wang 2026 =
+LightGBM on AUs in an ITS, Das & Dev = XGBoost 82.9 vs EfficientNet 47.2 on "WACV and DAiSEE", EfficientFace =
+local-feature extractor + channel-spatial modulator, DSTC audio+video+text, Safa/Abedi on DAiSEE. Corrected:
+EngageNet stimuli are three short educational videos narrated by a digital avatar (not "lecture videos");
+MSC-Trans uses an encoder–decoder structure over user-selected visual feature groups (its only "audio" mention
+misdescribes DAiSEE); Kim et al. encode frames and log-mel spectrograms with one Swin Transformer and fuse
+pairwise by co-attention; **Yulius et al. (CENIM 2025) work on EngageNet itself** (ResNet-18 frame features,
+GAN augmentation of the two rare levels, accuracies 0.672–0.748 and macro-F1 0.41–0.57 on an unstated split) →
+moved from §2.1 to §2.2 with "evaluation split not stated", not in Table 1; "only results on the official test
+split" now carries "to our knowledge" and a note that the test labels are distributed with the dataset
+(`datasets/EngageNet/test_engagement_labels.csv` came with the official download, contrary to the 2026-09-23
+note that test labels were never released; GLP-fusion also says they are not public). GLP-fusion's EmotiW 2023
+data is tied to EngageNet through the challenge paper (same authors): new reference `dhall2023emotiw`
+(ICMI 2023, pp 746–749). 46 references; 28 pp; clean build; Overleaf zip rebuilt.
+
+**2026-10-16 — Section 4 (Experiments) checked and reformatted (Yuvraj: "only Section 4", double spacing per the SN
+user manual).** `[referee]` added to `\documentclass` (sn-jnl's double-spacing option; the manual's peer-review
+setting). Every number in §4 re-derived: split counts 7,879/1,071/2,256 and the per-level table from
+`annotations_engagement_a10.txt` (104 + 1 SNP clips removed from the official 7,983/1,071/2,257); majority
+50.27 / 16.73; clip length max 10.06 s, median 10.00 s; 90/11/26 participants, ages 18–37, ≥640×480, background
+noise (EngageNet PDF); OpenFace success 13,102,192 / 13,342,612 frames = 98.20%; fine-tune wall time 31.5 min
+(`A_av_s1` 16:44:36 → 17:16:09 on one 3090); PyTorch 2.5.1; GBM and segment-Transformer settings vs
+`gbm_member.py` / `segtf/T7_d64_L2_lr1e3_s1/results.json`; modality dropout 0.15 per sample hard-coded in
+`forward_feature_3` under `self.training`. **One factual error fixed:** the three pre-training stages. The chain
+into E04 is `engagenet_h8_uniform_fullaudio_v96` (CE + LS 0.1, lr 1e-2, batch 2, configured 10 but resumed twice
+to **30 epochs**, best val epoch 24) → `v12_05_finetune_uniform_best_ord_nosampler_lr0001_e30` (resume from that
+best; ordinal 0.15, lr **1e-4**, batch 2, **no sampler**, checkpoint epoch 25) → `E04_ft10s_ord_lr5e5_e8` (ordinal
+0.15, LS 0.1, lr 5e-5, batch 8, 8 epochs, best val epoch 3). The manuscript's "10 epochs at 1e-2" and "a stage at
+5e-4 with batch 2 and the class-balanced sampler" described `v12_03`, which is a dead-end sibling of v12_05 (no
+run resumes from it; plan §12.3/§12.8 name v12_05 as the "V12 best" E04 started from). The TODO on stage-2 epochs is
+resolved (25). Also stated: clips with >50 frames (1,005 of 11,311) are uniformly subsampled, not only padded.
+Formatting: `\footnotesize`/`\tabcolsep` removed from Table 3 (manual discourages fine-tuning commands) and the
+loss/regularization rows split so it fits the text width at body size; the four metric formulas became numbered
+display equations (`eq:top1`, `eq:adj`, `eq:mae`, `eq:f1`) in the FoleyGAN "calculated as … where" pattern.
+41 pp double-spaced, no overfull boxes. Nothing outside §4 was touched except the class option and the header
+comment.
+**Same day, second pass (Yuvraj: "make it cleaner; what is Section 4 missing?").** Audit against the Springer
+exemplar pattern (dataset → compared methods → implementation → metrics): the six EngageNet baselines were named only in
+Related Work and in Fig. 4, so a new **§4.2 Compared methods** states them (LSTM, CNN-LSTM, TCN, Transformer on
+windowed mean/std OpenFace features, 16+12+70 = 98 values per window, Transformer on 20 equal windows; Transformer on
+MARLIN; fusion of both), that their test numbers are taken from the EngageNet paper without retraining, and that the
+majority predictor is the second reference (all checked in `papers/EngageNet.pdf` §4). Table 2 gained a Participants
+column (90/11/26) and right-aligned counts with Level 0–3 headers; §4.3 now also states the audio preprocessing
+(22.05 kHz, 64-bin log-mel) and that the segment Transformer trains on the GPU and the GBM on the CPU. 42 pp, no
+overfull boxes; zip rebuilt and verified from a clean folder. Still not in §4 by design: a second dataset (both
+exemplars use three; noted as open in §18.16) and any statistical test beyond seed sd.
+**Third pass: two-column layout.** Yuvraj clarified that "double" meant the manual's double-*column* layout, not
+double spacing: `[referee]` → `[iicol]` (manual §2.1). Consequences fixed across the whole file, as the manual's §7.3
+requires: the 17 tables/figures set to `\textwidth` became `table*`/`figure*`; the results bar chart (`fig_results.tex`)
+now spans both columns at `0.5\textwidth`; the per-sample alignment equation (§3.2.3) is split over two lines with
+`split`; the 36 bare DOI/arXiv URLs in the pasted bibliography are wrapped in `\url{}` so they break. Result: **22 pp,
+0 overfull boxes**, zip rebuilt and verified from a clean folder. To get double spacing as well, add `referee` to the
+class options (`[pdflatex,sn-basic,Numbered,iicol,referee]`).
+
+### 18.19 JAIHC guideline check of the manuscript (2026-10-16)
+
+Yuvraj pasted the JAIHC (journal 12652) submission guidelines and asked for a check of everything **except the
+page limit**. Findings and what was done in `research/paper_springer/paper.tex` (22 pp two-column, 0 overfull,
+zip rebuilt and verified from a clean folder):
+
+| Guideline item | Status before | Now |
+|---|---|---|
+| `\documentclass[iicol,sn-basic]` with author-year references | `[Numbered]`, 80 numbered `\cite` | **done**: option removed; 57 `\citep`, Table 1 Work column and one caption `\citet`; renders "(Singh et al. 2023)" |
+| Reference list alphabetical, a/b for same author-year, full DOI links | citation order, bare DOIs | **done**: `\bibitem[Label(year)]` added to all 46 entries, sorted by first author then year; Abedi and Khan 2024a/b; 36 URLs in `\url{}` |
+| No space-saving tricks; fonts similar to running text | `\footnotesize` in 6 tables, `\tiny`/`\scriptsize` in 2 TikZ figures | **done**: removed; figures use `\footnotesize` (8 pt); the 13-column Table 5 still fits at 10 pt |
+| Abstract 150–250 words; 4–6 keywords; ≤3 heading levels; no footnotes | 210 words, 6 keywords, 3 levels, 0 footnotes | compliant |
+| Tables numbered, cited in order, captions, table footnotes as superscript letters | checked programmatically | compliant (Table 1 uses $^{a}$) |
+| Figures numbered, cited in order, captions "Fig." bold, no final punctuation | checked | compliant |
+| Statements and Declarations incl. Competing Interests; LLM use in Methods | present (§4.3 + declaration) | compliant, but Funding / Author contributions / Code availability / EngageNet licence are **author TODOs** |
+| Title page: names, affiliations, corresponding e-mail, ORCID | placeholders | **open** (authors) |
+| Figure files `Fig1.eps`, program stated, fonts embedded, 84/174 mm widths | TikZ `\input` + draw.io PDFs | **open at submission**: export TikZ to PDF/EPS as Fig1–Fig6, state "TikZ/pgfplots" and "draw.io"; draw.io Figs. 2–3 lettering (~4–5.5 pt) must be enlarged by hand |
+| Colour distinguishable in B/W, patterns in addition to colour | grey/blue/orange bars, sequential confusion fills | **open (optional)**: add hatch patterns to Fig. 4 bars |
+| Acknowledgments | `\bmhead` in back matter (template form) | acceptable for the LaTeX template |
+
+Not checked by request: the 12-page limit (this version is 22 pp; the earlier 12-page cut lives in `research/paper_jaihc/`
+with 28 references and is now stale relative to this text).
+
+**2026-10-20 correction.** Yuvraj asked "anything incorrect?". The 10-16 author-year conversion had a bug: its first
+regex pass replaced `<Capitalized word> \cite{key}` by `\citet{key}` and **dropped the word**; the second pass turned
+those into `\citep` without restoring it, so 17 names vanished from the text (EngageNet ×4, DAiSEE ×2, CMOSE ×2,
+AVT-CA ×2, MTCNN ×2, AffectNet, EfficientFace, SpecAugment ×2) and the first Intro sentence read "(Singh et al. 2023)
+is a public benchmark". All 17 restored by hand (verified in the PDF text); the one citation inside parentheses
+(Krippendorff) now uses `\citealp`. No other conversion artefact found (every `\citep` site re-read). 22 pp, 0
+overfull, zip rebuilt. Lesson: never let a regex consume the token before `\cite`; the pre-conversion backup lived in
+the session scratchpad, which is wiped between days — keep backups inside the repo folder.
+
+**2026-10-09 — Section 3 checked against the code and corrected.** Every statement in §3 was compared with
+`models/multimodal_cnn.py`, `models/transformer.py`, `src/engine/{runtime,calibration}.py`, the A_av_s1 opts,
+`scripts/fullclip/{gbm_member,segment_transformer,sweep_segtf,segment_features,fuse_members}.py` and
+`models/behavior_features.py`. Verified: audio/visual encoders, alignment, modality dropout (hard-coded 0.15),
+stage 2, second exchange (torch MultiheadAttention + dropout 0.1 + residual), attention pooling, Linear(256,4)
+(late_text_fusion was off), h=8, loss, 924-d GBM, Transformer config, 22 channels (17 AU_r + gaze_angle_x/y +
+pose_Rx/Ry/Rz), 0.1-step simplex weight grid, four decoders. Corrected in the tex: (1) the **third exchange has
+no residual** (`x_audio_final = audioCrossAttention(xk=video, xq=audio)`), so each pooled vector summarizes the
+other stream; (2) `AttentionBlock` = pre-LN on both inputs, bias-free Q/K/V, LN + 2-layer GELU FFN (hidden 2d_o)
+with residual around the FFN, output width = query width (128 / 64), no dropout; (3) fusion thresholds are a
+**coordinate search** (init 0.5/1.5/2.5, ±1.0, step 0.01, 3 rounds, top-1 then adj then −MAE), not a grid;
+(4) alignment windows follow adaptive average pooling (⌊(j−1)L_a/T_v⌋ ≤ t < ⌈jL_a/T_v⌉; widths 2–4 for 107→50);
+(5) audio stage-2 widths 128→256→128 stated; (6) §3.2.4 split into first / second / third exchange paragraphs;
+(7) "Model overview" heading removed — its paragraph now opens §3 (subsections renumbered 3.1–3.4, all \ref);
+(8) loss terms "averaged over the mini-batch"; (9) Fig. 3 caption notes the missing residual. 29 pp, clean build.
+
+
+## 20. First partner recording — SFSU PSY 371 office hours (reviewed 2026-11-09)
+
+File: `datasets/SFSU/GMT20261029-210729_Recording_1920x1380.mp4` (git-ignored since 2026-11-09 — it holds
+identifiable faces, voices and on-screen names). Zoom **cloud** recording (the `GMT…_Recording_WxH.mp4` naming),
+2026-10-29 21:07 UTC (14:07 Pacific). Presumably the psychology-professor route of §18.5, but this is a
+**synchronous office-hours session**, not an asynchronous class. Reviewed with local tools only (Whisper large-v3-turbo
+on GPU, MTCNN + FaceNet clustering at 1 fps, ffmpeg scene cuts); nothing left the machine. Students are referred to as
+S1–S5 below; names are deliberately not recorded in the repo.
+
+### 20.1 The file is truncated — only 19 of 84 minutes exist
+
+The container header says 5017.3 s (83.6 min), but packets stop at **1139.7 s** (ffprobe: "partial file"); the
+transfer ended at 240,218,112 B of an expected ≈ 700 MB (1.04 Mbps video + 81 kbps audio × 5017 s). Everything below
+is measured on the first 19 minutes. **Re-transfer the full file before any further analysis.**
+
+### 20.2 What the session is
+
+Voluntary, community-building office hours for a large statistics lecture (PSY 371), run by the course instructor.
+Students take part for **SONA credit**: camera on + a consent survey = recorded participant; a short follow-up survey at
+the end. The slide deck ("Data to Discussion — a working session: we'll meet each other, take our own stats pulse,
+build a tiny survey, and see what the numbers actually say", slide 2 "Five stops, one hour") has five activities:
+
+| Stop | Slide | In our 19 min? |
+|---|---|---|
+| 1 | Name + five words (snowball icebreaker: speaker names the next person; ≥ 2 follow-up questions per person) | yes — still running at the cut |
+| 2 | "How are we feeling about…" (1–5 Likert pulse on stats) | no |
+| 3 | "Let's build a survey" | no |
+| 4 | "Our data, our numbers" | no |
+| 5 | "The Flynn Effect, revisited" | no |
+
+The icebreaker alone used ≥ 19 min of a "one hour" plan, so the content stops (where cognitive load and confusion would
+appear) are all in the missing 64 minutes.
+
+**Timeline of the 19 minutes that exist** (recording time; transcript + 1 fps face identity; S4 is the late joiner):
+
+| Time | What happens | On screen |
+|---|---|---|
+| 00:00–00:58 | Instructor welcome: "build community" in a large lecture, room to ask stats questions | instructor |
+| 00:59–03:08 | Screen share: title slide, then "Name + five words" rules (≥ 2 follow-up questions each); instructor gives own five words (02:04–02:43), picks S1 (02:52) | slides (instructor thumbnail) |
+| 03:06–04:02 | S1 introduces themself | S1 |
+| 04:03–04:16 | Rules confusion; instructor: "you can put yourself off of mute" (04:13) | S1 / instructor |
+| 04:18–05:00 | Another student asks S1 a follow-up; S1 answers | mostly S1 |
+| 05:14–05:27 | "Other questions?" → **11 s silence** (longest gap) | instructor |
+| 05:33–06:12 | S2 asks S1 about music; S1 answers | S2 (3 s), then S1 |
+| 06:27–07:28 | S1 picks S2; S2 introduces themself | S2 |
+| 07:30–09:08 | Instructor exchange; S1 asks S2 a research question (07:58), S2 answers | instructor, S1, S2 |
+| 09:15–09:24 | "Other follow-up questions" → 9 s silence | instructor |
+| 09:24–10:29 | Question on books; S2 answers; instructor–S2 exchange | S2 / instructor |
+| 10:29–11:40 | **S4 joins late**; instructor re-explains and gives the recording/consent/SONA notice; brief re-share ~10:48–11:10 | instructor, slides |
+| 11:44–12:22 | S2 picks S3; S3 introduces themself | S3 (phone, portrait) |
+| 12:31–12:52 | Follow-ups to S3; at 12:45 instructor notes a listener "showing you the heart" — **not captured** | instructor |
+| 12:57–14:15 | More follow-ups (cooking, movies); S3 answers | S3 / instructor |
+| 14:42–15:47 | S3 picks S4; S4 introduces themself | S4 |
+| 15:53–16:56 | Anime questions and recommendations | S4 |
+| 17:11–18:06 | S5 asks S4 "what got you into psychology" (~4 s on screen); S4 answers | S5, then S4 |
+| 18:19–18:56 | Last prompt; S4 picks the next student | instructor / S4 |
+| 18:59.7 | **File ends** mid-handover; 19:00–83:37 missing | — |
+
+Silences > 5 s, all waits after an open prompt: 05:16 (11 s), 06:17 (5 s), 07:45 (6 s), 09:15 (9 s), 09:54 (7 s),
+12:38 (8 s), 12:52 (6 s), 13:39 (6 s), 14:21 (6 s), 15:47 (6 s). Student on-screen totals: S1 2:35, S2 2:27,
+S3 1:31, S4 3:16, S5 ~0:04.
+
+### 20.3 Measured properties (first 1139 s)
+
+| Property | Value | Consequence |
+|---|---|---|
+| Layout | **Active-speaker view** (one person full-frame; switches on voice) + shared-screen view with a speaker thumbnail | Listener faces are never recorded |
+| Video | H.264 1920×1380, 25 fps, ~1.0 Mbps | ample quality |
+| Audio | AAC 48 kHz stereo, **L and R bit-identical** (max diff 0.0) → one mixed track | no per-student audio |
+| Participants seen | instructor + 5 students (S5 on screen ~4 s); one student joined ~10 min late | |
+| Screen time | instructor full-frame ~360 s + screen share ~145 s (≈ 44 %); students 589 s (52 %: S1 155, S2 147, S3 91, S4 196 s); no face 29 s | half the footage is the instructor, who is not a subject |
+| Student on-screen runs | 68 runs, median 4.5 s; only 16 runs ≥ 10 s → **36 non-overlapping 10 s student clips** in 19 min | ≈ 150 clips per full session, **all in the speaking role** |
+| Face size | full-frame median 306–524 px wide; MTCNN finds a face in 97.5 % of seconds | fine for OpenFace/MTCNN |
+| Face size during screen share | 44–66 px (thumbnail) | below OpenFace's usable range — content stops will be unusable in this layout |
+| Capture conditions | 2 of 5 students on phone cameras (portrait, pillar-boxed); 1 under red RGB light; 1 strongly backlit | per-student calibration (decision 4) is necessary, not optional |
+| Speech | ≈ 84 % of the timeline inside a transcribed speech segment; 10 silences > 5 s (all "any other questions?" waits) | speech-rich, as the plan wanted |
+| Mute behaviour | instructor: "you can put yourself off of mute" (04:13) — listeners sit muted | listener audio would be digital silence even with per-student tracks |
+| Missed listener cue | 12:45 instructor: a student "was just showing you the heart" — the recording was on the instructor | a direct example of the engagement signal this layout loses |
+| On-screen name tags | every tile carries the Zoom display name | useful for identity mapping (§17.1); PII — crop before features leave the machine |
+
+### 20.4 Plan vs. this recording
+
+| Plan requirement | Status here |
+|---|---|
+| Gallery view, every student visible all the time | **missing** — active-speaker view |
+| Per-student audio tracks (mandatory) | **missing** — one mixed track |
+| `is_speaking` / role conditioning, listener engagement (§ Speaker vs Listener) | **unlearnable** — every student frame is a speaker frame (`is_speaking ≈ 1`) |
+| Speech in ~75 % of clips | **met** (≈ 84 % of the timeline) |
+| No instructor monologue | **met** for stop 1 (instructor intro 0–3 min, then student turns) |
+| Breakout rooms of 4, cold calls, difficulty ramp, W-curve | **not used** — one main room, instructor-led; stop 1 has no difficulty ramp |
+| Zoom chat export, transcript (VTT) | **not received** — unknown whether they were saved |
+| Every student speaks ≥ 1× (calibration sample) | **met** — the icebreaker guarantees 1–4 min of speech per student |
+| Students not told engagement is measured | **met** — told only that the session is recorded (consent survey) |
+| Session 1 excluded (Hawthorne) | unknown which session this is; the instructor says they do "all the sessions" with new words each time, so several exist |
+
+### 20.5 What this changes in the plan (revisit of §§ Session Design, Recording Setup, Speaker vs Listener)
+
+1. **We do not control the pedagogy.** The session design above (breakouts of 4, cold calls, deliberate mismatch,
+   debate round) was written for sessions we script. With a partner instructor, the levers we actually hold are the
+   **recording settings, consent/IDs, and a self-report hook**. Treat the session design as a wish list to offer the
+   instructor, not a requirement.
+2. **Breakout rooms are not recordable in the cloud.** Zoom cloud recording captures the main room only; breakouts
+   need a local recorder (a desktop client with recording permission) inside every room. The breakout-centred design was
+   never feasible with a cloud setup. This main-room format (≤ 9 participants, one gallery page) is the more
+   recordable one — keep it.
+3. **Gallery view matters more than per-student audio.** Without gallery view there is no listener footage, so no
+   Level 1–2 data (office hours are voluntary and the icebreaker is uniformly high-engagement; drift happens in listeners
+   during someone else's long turn) and no role contrast. With gallery view + mixed audio, audio-visual active-speaker
+   detection can still attribute speech to tiles. Per-student audio remains preferred (overlap, clean attribution).
+4. **Listener audio is mute, not back-channels.** Students listen muted, so per-student tracks would be silent while
+   listening; the back-channel signal assumed in § Speaker vs Listener does not exist in this format. In this format the
+   listener audio signal is **participation dynamics**: who unmutes, how fast after an open prompt ("other questions?"),
+   number and length of turns, follow-up questions asked (the activity requires ≥ 2 per person). Scope decision 1
+   (equal audio/video contribution) to speaking segments and measure audio parity there.
+5. **Screen share kills faces.** During content stops, students shrink to a 44–66 px thumbnail. The recording must
+   produce a separate gallery-view file that keeps full tiles during sharing.
+6. **Self-report already exists.** Stop 2 is a 1–5 Likert pulse, and SONA has consent and follow-up surveys. With
+   consent, these are the cheapest secondary labels (§ Annotation Protocol, 0.3 weight) — ask for them de-identified and
+   keyed to the display name / SONA ID.
+7. **Clip yield depends on the layout, not the session.** Active-speaker view: ≈ 150 student clips per 84-min session,
+   all speaking. Gallery view: ≈ 5 students × ~75 min × 6 clips/min ≈ 2,000+ per session, speakers and listeners. Same
+   session, same students, one setting; it is worth ≈ 15× the data.
+
+### 20.6 Recording settings to request before the next session (host, Zoom web portal → Settings → Recording)
+
+| Setting | Why |
+|---|---|
+| Cloud recording → "Record active speaker, gallery view and shared screen **separately**", with **gallery view** ticked | full-size listener tiles, kept during screen share |
+| "Record a separate audio file of each participant" | per-student audio; cloud support is reported but unreliable — verify with a 2-person test call; local recording (desktop client) produces it reliably |
+| "Save chat messages from the meeting" | text modality (§17) |
+| "Create audio transcript" | speaker-named VTT for diarization |
+| "Display participants' names in the recording" | keep ON for identity mapping (crop before sharing features) |
+| Gallery view, ≤ 9 participants, "hide non-video participants" OFF | stable tile grid |
+| No breakout rooms unless a local recorder sits in each one | breakouts are not cloud-recorded |
+
+### 20.7 What the existing recording is still good for
+
+- Pipeline debugging on real partner footage: tile/face extraction, OpenFace, Whisper, identity mapping (the plan's
+  Session-1 role).
+- Per-student calibration baselines from each student's own speaking turns (decision 4).
+- Qualitative run of the EngageNet AV model on speaker segments (no labels exist, so no accuracy).
+- Not usable for: listener engagement, role conditioning, a labelled training set.
+
+### 20.8 Tasks
+
+| ID | Task | Owner | Status |
+|---|---|---|---|
+| SF1 | Re-transfer the full 2026-10-29 recording (≈ 700 MB, 83.6 min) | Yuvraj | open |
+| SF2 | Get the session's companion files from the host's cloud-recording page: audio-only `.m4a`, transcript `.vtt`, chat `.txt`, any gallery-view file | Yuvraj → instructor | open |
+| SF3 | Send the §20.6 settings to the instructor/Sanchita **before the next session**; run a 2-person test call to confirm the gallery and per-participant files appear | Yuvraj | open |
+| SF4 | Session metadata: which session number this was, how many sessions are planned, whether students recur (student-independent splits) | Yuvraj → instructor | open |
+| SF5 | De-identified consent + follow-up survey + stop-2 pulse responses, keyed to participant | Yuvraj → instructor | open (needs IRB/consent check) |
+| SF6 | Review the remaining 64 minutes (stops 2–5) once SF1 lands: screen-share share of time, confusion moments, student turn density | Claude | blocked on SF1 |
+
+## 21. JAIHC 12-page final version — readiness review (2026-11-13)
+
+Folder: `research/paper/AVB-Engage_JAIHC_final/`, renamed on 2026-11-13 from `AVB-Engage_JAIHC_overleaf_12pages/`
+(Yuvraj's Overleaf download of 2026-11-12). Contents: `paper.tex` (main text), `supplementary.tex` (Online Resource 1),
+`sn-jnl.cls`, `sn-basic.bst`, `figures/`. The main text was cut from the 22-page long version (`research/paper_springer/`,
+2026-10-20) by moving Sections S1–S12 into the supplement (2026-11-03 and 2026-11-09, per the supplement header).
+This section supersedes the "on hold" status of §18.17: JAIHC with the 12-page limit is the target again.
+
+### 21.1 Build check
+- tectonic on a clean copy: main text **12 pages** (references end halfway down the right column of p. 12, about
+  25 lines free), supplement 10 pages; 0 overfull boxes; 22 of 22 citations resolved, no uncited entries. The hyperref
+  "Object @table.3 already defined" warnings are cosmetic.
+- Abstract **251 words** (JAIHC: 150–250) → F2. Keywords 6, headings ≤ 3 levels, Statements and Declarations before
+  the references: compliant.
+
+### 21.2 Verdict
+Not ready to submit yet. Every number re-derived from the result files matches, and the method text matches the code
+(21.3). But the cut to 12 pages dropped qualifiers and produced several false or unsupported sentences (F1, F3–F11),
+the abstract is one word over the limit, the draw.io figures still need hand edits, and the author items are
+placeholders. The text fixes are about length-neutral, so the paper stays at 12 pages.
+
+### 21.3 Checked against results and code
+| Item | Source | Result |
+|---|---|---|
+| Table 2 (per seed, adjacent, MAE, macro-F1, sd) | `results/paper_springer/analysis.json` | match |
+| Table 3 (four decoders, AV and video-only) | `results/fullclip/A_av_s*/calibration*/calibration_results.json` | match |
+| Fig. 3 and 74.9 / 67.4 / 71.8 / 29.5 % | analysis.json `pooled_confusion` | match |
+| Error overlap (each wrong ≈ 34 %, both ≈ 22 %) | analysis.json `error_overlap` | match |
+| Tables S1, S3, S6 and Fig. S1 | `segment_count_sweep.log`, `complexity.json`, analysis.json | match |
+| Table S2 (14 runs) and sd 0.52 | `results/night/G*/calibration` | values match; label and design description wrong (F10, F11) |
+| Tables S7 and S9 (7 of 9, 1 tie, −0.13, 1.99, macro-F1 6 of 9, audio ≤ majority 9 of 9) | calibration JSONs of the A, B, C arms | match, except the mean is 66.15, not 66.16 (F6) |
+| 0.6/0.2/0.2 selected for 7 of 8 networks; 70.15 ± 0.25 over 8 | `results/fullclip/segtf/fusion_*_3way.json` | match; the 8 are 3 A + 3 B + 2 C (`C_behtext_s3` has no saved logits) |
+| Table S10 and "67.4–70.5" | §19.7.1 | numbers match; 3 of the 9 rules are missing from the table (F16) |
+| Dataset counts; majority 50.27 / 16.73, adjacent 68.84, MAE 1.012 | arithmetic on Table S8 | match |
+| Architecture (encoders, per-sample alignment, modality dropout per sample p = 0.15, three exchanges, no residual in the third, attention pooling, Linear 256→4) | `models/multimodal_cnn.py`, `models/transformer.py` | match |
+| Ordinal loss: label-smoothed CE + λ · batch mean of Σ p_k · abs(c_k − c_y), c_k = k/3 | `src/engine/runtime.py` (`OrdinalDistanceCrossEntropy`) | match |
+| Decoders (bias grid −2..2 step 0.1; grid 0.05; refine radius 0.15 step 0.005; fusion coordinate search) | `src/engine/calibration.py`, `scripts/fullclip/fuse_members.py` | match |
+| AV fine-tuning (SGD 0.9, 5e-5, wd 1e-3, batch 8, 6 epochs, sqrt-inverse sampler, 50 frames, 8 heads) | `A_av_s1/opts*.json` | match; SGD dampening 0.9 was missing from Table S5 (added in 21.11) |
+| Segment Transformer (pre-norm, class token, learned positions, AdamW, warm-up cosine, token dropout 0.1; T7 = d 64, 2 layers, FFN 128; 8 candidates) | `segment_transformer.py`, `sweep_segtf.py` | match; its 8 heads are not stated (F24) |
+| GBM (924-d, ≤ 15 leaves, L2 1.0, fits 0.05/300, 0.03/600, 0.05/300) | `gbm_member.py` | match, but the seeds have no effect (F12) |
+| Audio (22.05 kHz, 64-bin log-mel, librosa hop 512 → 431 frames) | `datasets/engagenet.py`, `datasets/ravdess.py` | match |
+| DOIs of OpenFace 2.0 and EfficientFace | Crossref | exist but missing from the list (F20) |
+
+### 21.4 Fixes (exact edits; applied 2026-11-13, see 21.9)
+**Must fix before submission**
+- **F1 Overclaim against the recent methods.** Abstract: "…, above the published baselines and the recent methods we
+  compare with."; contribution 3: "…, which exceeds the published baselines and the recent methods we compare with, …".
+  Table 1 lists ST-GCN 71.24 and PriorNet 73.58 (validation), both above 70.29; the long version said "whereas the best
+  published EngageNet test accuracy is 67.61%". → abstract "…, against 67.61\% for the best published test-split
+  result."; contribution 3 "which exceeds the best published test-split result,"; §5.1 "the highest top-1 accuracy on
+  the test split".
+- **F2 Abstract 251 words.** F1 saves 3 words; "on the official test split of the EngageNet dataset" → "on the official
+  EngageNet test split" saves 3 more: 245.
+- **F3 §5.7** "Barely engaged is recognized in 11--18% of cases by all three models" is false: GBM 1.6 %, Transformer
+  5.1 % (Table S6). → "in at most 18\% of cases by any model and in 2--5\% by the two behavior models".
+- **F4 §5.7** "EngageNet is the only engagement dataset with the official test labels released and with audio" is
+  unsupported (CMOSE has audio, as §2 says), and "recorded lectures" is wrong. → "\emph{Datasets.} The evaluation uses
+  a single dataset, whose participants watch short educational videos and rarely speak, so the audio contribution …".
+- **F5 §5.6** "would give 67.82% instead of 65.69%" reads as a contradiction of Table 2 (seed 1 = 65.78); 65.69 is the
+  same search fitted on validation. → "instead of the 65.69\% that the same search gives on the validation split".
+- **F6 §5.4.1 and Table S9** 66.16 → **66.15** (the exact mean of the nine networks is 66.154; 66.16 came from
+  averaging rounded arm means). Then 66.15 − 65.41 = 0.74, which matches §5.7. → "…, by 0.74 points on average (from
+  65.41\% to 66.15\%; Online Resource~1, Table~S9)".
+- **F7 §5.2** "For every model the adjacent accuracy is more than 20 points above the top-1 accuracy": the majority row
+  of the same table has 18.57. → "For every trained model".
+- **F8 §5.2** "the smallest seed spread of all trained models": the GBM row has zero spread. → "of the seeded models".
+- **F9 §5.1** "read only 22 of the 98 OpenFace features used by the best baseline" mixes per-frame channels (22) with
+  per-window statistics (98 = mean and sd of 49 channels). → "read only 22 of the 49 per-frame OpenFace channels behind
+  the 98 features of the best baseline".
+- **F10 Table S2** row "Mean of the 14 runs 65.69": 65.69 is the F03 ensemble, which averages class probabilities
+  (not logits, `scripts/night/ensemble.py`); the arithmetic mean of the 14 rows is 65.74. → "Probability average of the
+  14 networks" (first written as "logit average"; corrected in 21.11).
+- **F11 §S5 sweep design.** "a control, …, nine runs that each change one variable (…, the video frame cap, …)": the
+  control (G00) reads every frame for 8 epochs; every other run except the cropping run uses a 50-frame cap and
+  6 epochs, and G05 changes both the learning rate and the schedule. → "a control that reads every frame for 8 epochs;
+  a run with a frame cap of 50 and 6 epochs; eleven runs that keep this cap and epoch count and change one further
+  setting (three seeds of the square-root class-balanced sampler, the loss type, the ordinal penalty weight at two
+  values, label smoothing, an exponential moving average of the weights, the learning rate together with its schedule,
+  SpecAugment on the spectrogram, and a class-weighted loss); and one run with synchronized random temporal cropping
+  and a frame cap of 40." Also "no change raises accuracy by more than that spread" is false for one sampler seed
+  (66.67, +0.58) → "no change moves the mean accuracy by more than that spread (the three sampler seeds average
+  66.27\%, 0.18 points above the control)".
+- **F12 §3.2.2 and Table S5, GBM seeds.** "three fits with different seeds and learning-rate settings":
+  `HistGradientBoostingClassifier` with `early_stopping=False` on 7,879 clips is deterministic (random_state 0 and 2
+  give identical probabilities, checked 2026-11-13), so fits 1 and 3 are the same model. → "the class probabilities of
+  three fits with learning rates 0.05, 0.03 and 0.05 (300, 600 and 300 iterations) are averaged"; Table S5 "Seeds:
+  3 fits averaged" → "none (deterministic); 3 fits averaged".
+- **F13 Supplement abstract cross-references.** "Section 3.1" → "Section 3"; "Section 4.4" → "Section 5" (there is no
+  §4.4); "Section 3.2.4" → "Section 3.1.4"; add Sections S8–S12 to the list.
+- **F14 Supplement S1 duplicate.** The coordinate-search sentence appears twice (end of the first block and the
+  "Threshold search" paragraph); delete the first.
+- **F15 Reference label** "Abedi and Khan (2024b)" with no 2024a (that paper was cut) → "(2024)" in label and entry.
+
+**Should fix**
+- **F16 §5.4.3 and Table S10.** Both bounds of "Every rule and every seed gives between 67.4% and 70.5%" (67.42,
+  70.48) come from the AV + GBM "validation thresholds, 0.05 grid" rule, which Table S10 omits, and the AV + TF rule in
+  the next sentence has a seed at 66.31. → list all nine §19.7.1 rules in Table S10 (split "validation-selected
+  69.43–70.29" into 70.29 ± 0.14 and 69.43 ± 1.09; add 69.90 ± 0.41 and 69.12 ± 1.55) and write "Every weight rule that
+  includes the gradient-boosting model gives between 67.4\% and 70.5\% on every seed, the lowest values arising when
+  validation selects a weight of 0.8 or more for the network"; "gives 69.9--70.0\%" → "gives 69.95--70.04\% with fixed
+  weights".
+- **F17 §3.3** "five behavior-branch networks" → "three of the behavior-branch network and two of its text variant"
+  (§5.4.1 uses all nine networks; the third text-variant seed has no saved logits, so it is not in the fusion).
+- **F18 §5.4.2** "69.9--70.4%" → "69.9--70.3%" (B seeds 69.90 / 70.26 / 70.35; 70.35 = 1587/2256 = 70.346).
+- **F19 Conclusion** "completing the human survey" (no survey has started) → add "One shortcoming of this work is that
+  it uses a single dataset in which students rarely speak." and "…, and a human labeling study of the two middle
+  levels, are the directions of our future work."
+- **F20 References** add DOIs: OpenFace 2.0 `10.1109/FG.2018.00019`, EfficientFace `10.1609/aaai.v35i4.16465`
+  (Crossref-verified 2026-11-13); arXiv DOIs `10.48550/arXiv.2604.02397` (VE-MD), `10.48550/arXiv.2407.18552`
+  (AVT-CA), `10.48550/arXiv.1609.01885` (DAiSEE).
+- **F21 "lecture"** in the abstract, §1, §2 and §5.6: EngageNet stimuli are short avatar-narrated educational videos
+  (verified 2026-10-09) → "educational video".
+- **F22 Table 1** MARLIN rows 65.2 / 66.5 → 65.20 / 66.50 (two decimals, as in the EngageNet paper).
+- **F23 Table S3** sub-rows sum to 2.08 M of 2.38 M → add "Visual temporal conv. 0.28 M"; caption: GPU and CPU times
+  are means over 110 and 30 runs, OpenFace the median over 30 clips.
+- **F24 §3.2.3** add "eight heads" to the Transformer size.
+- **F25 Stale source comments** in `paper.tex`: the header still says "The 12-page limit is NOT applied to this
+  version", "MTAP is single-blind" and "paste the .bbl"; line 92 points to `research/paper/figures/architecture.drawio`,
+  which moves in the cleanup. Comments only, not in the PDF.
+- **F26 Style** (feedback_writing_style): the abstract and §1 open with the same 16-word sentence and share "…thresholds
+  fitted on the validation split, so that the order of the levels is used at prediction time"; "adds the audio track to
+  the facial and behavioral cues" appears in contribution 1 and at the end of §2. Reword the copies in §1.
+
+**By hand in draw.io (authors)**
+- **D1** Figs. 1–2: raw `p_AV`, `p_TF`, `p_GBM` → subscripts; lettering about 4–5.5 pt at print size → about 8–9 pt
+  (JAIHC: lettering similar to the body text).
+- **D2** Fig. 2 legend "the components evaluated in Section VI" → "Section 5".
+- **D3** Fig. 1 calls block B "Behavior statistics"; Fig. 2 and the text say "facial-behavior models" → one name.
+- **D4** Supervisor rule "the architecture diagram must not be AI-generated" vs `make_architecture_drawio.py` and the
+  AI statement, which says Claude generated the diagram source: redraw by hand and drop it from the statement, or keep
+  both as they are.
+
+**Author and administrative items (open)**
+- **A1** Title block: names, affiliations, corresponding e-mail, ORCIDs (placeholders now).
+- **A2** Funding, author contributions (CRediT), code availability, EngageNet licence in the ethics statement, final AI
+  statement (still a draft).
+- **A3** Submission files: `fig_confusion` (TikZ) → `Fig3.pdf`, draw.io PDFs as `Fig1.pdf`/`Fig2.pdf`, supplement as
+  `ESM_1.pdf`; recompile after A1–A2 to confirm 12 pages.
+
+### 21.5 Missing content and the supplement
+- Nothing more needs to move out of the main text: it has about 25 lines free, enough for A1–A2 and F19.
+- **Recommended addition (supplement + one sentence in §5.4):** paired tests on the same clips: McNemar (or a paired
+  bootstrap) for AVB-Engage vs the network (computable now from saved logits) and for audio + video vs video-only per
+  network (needs per-clip video-only predictions, one inference pass per network). The audio evidence is now the sign
+  over nine networks plus a binomial interval, which a reviewer can call weak for a paired comparison.
+- Optional: save logits for `C_behtext_s3` and fuse it, so §3.3 and §5.4.1 use the same nine networks.
+- Optional: the supplement names SpecAugment without a citation (the reference was cut).
+- Open and not fixable in text: a second dataset (both Springer exemplars use three); matched ablations of the
+  alignment and modality dropout (stated as future work).
+
+### 21.6 Prose
+The paper reads clearly and is honest about where the gain comes from (decoding and model averaging; audio is small).
+Related Work follows the FoleyGAN pattern. Weak points: the repeated sentences of F26; three or four sentences that
+stack four clauses (abstract sentence 3, the Related Work sentence on later methods, the last two sentences of §5.4.1);
+and the qualifiers lost in the cut (F1, F3–F11), which is where every error above came from.
+
+### 21.7 Cleanup plan (done 2026-11-13, see 21.9)
+1. Done: `research/paper/AVB-Engage_JAIHC_overleaf_12pages/` → `research/paper/AVB-Engage_JAIHC_final/`.
+2. Move the editable figure sources (tracked) into the final folder with `git mv`:
+   `research/paper/figures/{architecture,overview}.{drawio,svg}` and `figures/src/make_{architecture,overview}_drawio.py`
+   → `AVB-Engage_JAIHC_final/figures/src/`.
+3. Delete the tracked IEEE-draft files (recoverable from git, last at 46a84cc): `research/paper/paper.tex`,
+   `research/paper/paper_claude_draft_2026-09-08.tex`, the rest of `research/paper/figures/` (older `fig_*.tex` and
+   duplicate PDFs); delete the ignored build `research/paper/paper.pdf`.
+4. Delete the untracked folders, which cannot be recovered unless archived first: `research/paper_jaihc/` (stale
+   2026-10-01 12-page cut) and `research/paper_springer/` (22-page long version with 46 references, plus an identical
+   backup `.tex`).
+5. Delete the two unused figure sources in the final folder: `figures/fig_concept.tex`, `figures/fig_results.tex`
+   (untracked; older tracked copies stay in git).
+6. Keep `research/paper/.gitignore` (LaTeX build products).
+
+Safety net before steps 4–5: one commit that adds `research/paper_springer/` and the final folder, then the deletions,
+so every version stays in git history. Result:
+```
+research/paper/
+├── .gitignore
+└── AVB-Engage_JAIHC_final/
+    ├── paper.tex  supplementary.tex  sn-jnl.cls  sn-basic.bst
+    └── figures/
+        ├── architecture.pdf  overview.pdf  fig_colors.tex  fig_confusion.tex
+        └── src/  (architecture.drawio, overview.drawio, both .svg, both make_*_drawio.py)
+```
+Also uncommitted: the code behind the paper's 98-d and fusion numbers (`scripts/fullclip/*` edits of 2026-09-13,
+`scripts/paper/`, `scripts/fullclip/run_f98_pipeline.sh`, `preprocessing/engagenet/extract_behavior_full.py`).
+Commit it with the paper so every number traces to committed code.
+
+### 21.8 Tasks
+| ID | Task | Owner | Status |
+|---|---|---|---|
+| JF1 | Apply F1–F15 to the final folder, recompile, confirm 12 pages | Claude | **done 2026-11-13** (12 pp, abstract 246 words) |
+| JF2 | Apply F16–F26 | Claude | **done 2026-11-13** (arXiv DOI links left out for page space) |
+| JF3 | draw.io edits D1–D3; decide D4 | Yuvraj | open — sources now in `AVB-Engage_JAIHC_final/figures/src/` |
+| JF4 | Title block, declarations, AI statement (A1–A2) | Yuvraj / Sanchita | open |
+| JF5 | Paired significance tests for the supplement (21.5) | Claude | **done 2026-11-13** (Section S13, Tables S11–S12; 21.10) — not committed yet |
+| JF6 | Cleanup steps 2–6 of 21.7, with the archive commit | Claude | **done 2026-11-13** (archive `c2827d2`; fixes + cleanup `2461716`) |
+| JF7 | Commit the paper's analysis scripts | Claude | **done 2026-11-13** (`c2827d2`) |
+| JF8 | Submission bundle (A3); upload the fixed folder to Overleaf | Yuvraj | after JF3–JF4 |
+
+### 21.9 Applied (2026-11-13, Yuvraj: "Yes, fixes + cleanup")
+- **Archive commit `c2827d2`** (before any change): the Overleaf download as received, `research/paper_springer/`
+  (22 pp), `research/paper_jaihc/` (first 12-pp cut) and the uncommitted analysis scripts (`scripts/fullclip/*` edits,
+  `scripts/paper/`, `run_f98_pipeline.sh`, `extract_behavior_full.py`). Recover any old file with
+  `git show c2827d2:<path>` (the IEEE draft: `git show 46a84cc:research/paper/paper.tex`).
+- **Fixes F1–F26** applied to `paper.tex` (35 exact replacements) and `supplementary.tex` (13), each matched exactly
+  once; header comments rewritten, ASCII only. Deviations from 21.4, all for page space: the three arXiv DOI links were
+  not added (OpenFace and EfficientFace DOIs were); §5.4.3 drops the clause on the lowest values (Table S10 now lists
+  every rule); §5.6 reads "instead of the 65.69\% of the same search on validation"; §3.2.2 reads "three fits (learning
+  rates 0.05, 0.03 and 0.05; 300, 600 and 300 iterations) are averaged"; Table S5 GBM seeds = "deterministic".
+- **Build** (tectonic, clean copy of the final folder): main text 12 pp, supplement 10 pp, 0 overfull boxes, no
+  undefined references, abstract 246 words, 7-word cross-section repeats down from 32 to 8 (technical phrases).
+  Page 12 has about 14 free lines for the real title block and declarations (the fixes used about 10 of the 24).
+- **Cleanup**: draw.io sources and generator scripts moved to `AVB-Engage_JAIHC_final/figures/src/` (the scripts now
+  write next to themselves); deleted `research/paper/{paper.tex, paper_claude_draft_2026-09-08.tex, paper.pdf,
+  figures/}`, `research/paper_jaihc/`, `research/paper_springer/` and the unused `fig_concept.tex`/`fig_results.tex`.
+  `research/` now holds only `research/paper/.gitignore` and `research/paper/AVB-Engage_JAIHC_final/`.
+- **Committed** as `2461716` (research/ only; the docs changes stay uncommitted with earlier sessions' edits).
+  The local folder now differs from the 2026-11-12 Overleaf project: upload `paper.tex`, `supplementary.tex` and
+  `figures/` (the `figures/src/` folder is optional on Overleaf).
+
+### 21.10 Paired significance tests (2026-11-13, Yuvraj: "Yes, add them")
+- **Method.** Exact McNemar tests (two-sided binomial on the clips only one model gets right) on the 2,256 test clips,
+  Holm-adjusted within each table, with the paper's own decoders. Script `scripts/paper/significance_tests.py`
+  (`collect` on GPU, `analyze` on CPU) → `results/paper_jaihc/significance.json`; per-clip logits cached in
+  `results/paper_jaihc/sigtest/<run>.npz` (validation and test, without ablation and with audio zeroed).
+- **Reproduction checks (all pass).** The nine networks were re-run from the tree that produced them
+  (`~/AVTCA-collab-test`, commit 39ea143) with `preprocessing/engagenet/annotations_engagement_a10_subject.txt` (the
+  runs' own annotation file no longer exists; this copy has the same clip order and labels). No-ablation test logits
+  equal the saved `context/logits.npz` (max difference 0.0); every network × condition top-1 equals its stored
+  calibration value; the AVB-Engage and member predictions equal `analysis.json` (Table 2). About 90 s per network
+  alone; two concurrent jobs without `OMP_NUM_THREADS=1` oversubscribe the CPU (load ≈ 100), ~3 min per network.
+- **AVB-Engage vs. each member (Table S11):** significant on every seed against the network, the segment Transformer
+  and the GBM; largest p = 0.006 (seed 2 vs. Transformer), unchanged by Holm.
+- **Audio + video vs. video only (Table S12):** audio corrects more clips than it breaks in 7 of 9 networks; p < 0.05
+  in 3 (A s3 +1.99, p = 3.8e-4; B s2 +1.55, p = 0.009; C s2 +1.06, p = 0.040); after Holm only A s3 (p = 0.003).
+  The tests are not independent (one warm start), so they are not pooled.
+- **Paper changes.** Supplement: new Section S13 with Tables S11–S12 (11 pp). Main text: one sentence in §5.1
+  (fusion beats each member, p ≤ 0.006, Table S11); in §5.4.1 the unpaired-interval sentence now reads "Only one
+  difference (1.99 points) remains significant after adjustment for multiple testing (exact McNemar test; Online
+  Resource 1, Table S12)"; the back-matter "Supplementary information" list was condensed to keep page 12's space.
+  Build: main 12 pp with ≈ 14 free lines on p. 12, supplement 11 pp, 0 overfull, no undefined references.
+
+### 21.11 Independent re-verification and final fixes (2026-11-13, Yuvraj: "re-verify … with a subagent … give me the final thing")
+A fresh subagent (no access to the conclusions above) re-checked both files against the result files, the code, the run
+options, `papers/EngageNet.pdf`, Crossref and arXiv, and recompiled them. It recomputed Tables S11–S12 independently
+(match) and confirmed every other table, figure and cross-reference. Each finding below was re-checked before editing:
+- **Errors fixed:** (1) the 14-network ensemble F03 averages **probabilities**, not logits (S5 text, Table S2 row);
+  (2) Table S3 segment-Transformer FLOPs **3.1 M**, not 0.11 M — `complexity.json` was measured in eval mode, where
+  `nn.TransformerEncoder` takes PyTorch's fused fast path that `FlopCounterMode` cannot see (re-counted: eval 0.113,
+  train 3.091 MFLOPs; analytic 3.09 M). The stored JSON is left as is; this note is the source for 3.1 M.
+- **Inconsistencies fixed:** §5.6 granularity now names its network (seed 3, argmax; the oracle sentence before it is
+  seed 1); Table 3 "refined" is a local search, not the coordinate search; Table S5 adds SGD dampening 0.9 (all runs;
+  PyTorch's default is 0) and attention dropout 0.1; Table S10 marks the AV + GBM "argmax, step 0.1" row, whose
+  thresholds came from `ensemble_probe.py`'s exhaustive 0.02 grid (it chose 0.7/0.3 on every seed).
+- **Precision fixes:** decoding gain 1.99, not 2.00 (135/6768; Table 3 caption: "differences computed before
+  rounding"), Table S4 +14.01; "most errors are one-level" limited to models that see the face (audio-only: 40 %);
+  the earlier sweep's 13 networks include the three reported seeds → "ten further networks … nine"; "gap between most
+  baselines" → "the two best published baselines (1.11 points)"; §5.7 "on average over seeds" and "likely a lower
+  bound"; §5.4.3 scoped to Table S10, AV + GBM 69.95–70.07 % for weights 0.5–0.7, and the 98-d 69.15 ± 0.83 marked as
+  validation-selected; §3.2.3 "configuration … learning rate 10^-3"; Table S3 caption states each timing protocol;
+  S5 states the cropping run's 8 epochs; S4 no longer cites Table S5 before S1–S4; GLP-fusion reference now IEEE TMM
+  28:9000–9008 (Crossref).
+- **Left as is:** arXiv DOIs (page space), Abedi & Khan LNCS volume (Crossref gives none), hyperref duplicate-anchor
+  warnings (cosmetic), participants 90/11/26 as reported by EngageNet (the Train folder holds 91 subject numbers),
+  OpenFace 98.2 % / 11.3 s (sources are plan.md §18.16/§18.18 only). Author items D1–D4 and A1–A3 stay open.
+- **Final build:** main text 12 pp (≈ 14 free lines on p. 12), abstract 246 words; supplement 11 pp; 0 overfull, no
+  undefined references. PDFs saved as `AVB-Engage_JAIHC_final/paper.pdf` and `ESM_1.pdf` (git-ignored) and sent to
+  Yuvraj. Not committed: S13, the significance script and this round of fixes.
+
+### 21.12 Springer Nature template user manual applied (2026-11-13)
+Yuvraj put the template manual at `research/paper/user-manual.pdf` (v3.1, Dec 2024, 14 pp) and asked to follow it, then
+fix the images. Manual rule → state of the paper:
+
+| Manual | Before | Now |
+|---|---|---|
+| §7.3 one image file per figure, no subfigures, `\includegraphics` | Fig. 3 was TikZ code `\input` into the paper | `Fig3.pdf` compiled once from `figures/Fig3_source.tex` (same 8-pt Computer Modern lettering, 72 × 39 mm) |
+| §7.3 image files on the same level as the .tex, not in subfolders | `figures/overview.pdf`, `figures/architecture.pdf`, `\graphicspath` | `Fig1.pdf`, `Fig2.pdf`, `Fig3.pdf` next to `paper.tex`, included without extension; `\graphicspath` removed |
+| §1 do not add packages | `tikz`, `pgfplots` (+ libraries, colour file) in the paper | removed from `paper.tex` (still used by the supplement, which is submitted as a PDF) |
+| §7.3 table footnotes below the body | Table 1 note inside the caption | class `tablenotes` under the table (`table*` has no `\footnotetext` in sn-jnl); Table S10 uses `\footnotetext[a]` |
+| §8.1 back-matter heads with `\bmhead`; template order | Supplementary information inside the declarations | `\bmhead{Supplementary information}` first, optional Acknowledgements (comment), then `\section*{Statements and Declarations}` with Funding, Competing interests, Ethics, Consent for publication, Data, Materials, Code, Author contributions, Use of generative AI |
+| §8.3 BibTeX preferred | pasted `thebibliography` | `references.bib` + `\bibliography{references}`; the class selects `sn-basic.bst`. Output: titles in sentence case (proper nouns braced), lists of more than three authors cut to three + "et al" (the official style), DOIs as links. Citations unchanged |
+| §2 no fine-tuning commands | `\setlength{\tabcolsep}{3pt}` in four supplement tables | removed from Table S3; kept in S1, S2, S6, which overflow without it (supplement is a finished PDF, not re-typeset) |
+| §2.1 `[referee]` double spacing for review | two-column `[iicol]` | **not applied**: JAIHC's own instructions specify `[iicol,sn-basic]` and 12 pp in that layout, and the manual says journal-level instructions win (§1) |
+| §7.3 "LaTeX compiler accepts only .eps" | PDF figures | **EPS added 2026-11-13**: `Fig1.eps`, `Fig2.eps`, `Fig3.eps` next to the PDFs (Ghostscript 10.08 `eps2write`, installed into the session scratchpad from conda-forge; nothing on this machine had a converter). `\includegraphics{FigN}` has no extension, so pdfLaTeX keeps using the PDFs and latex/dvips uses the EPS. Checked: `EPSF-3.0` headers, fonts embedded, pure vector (no image operators), Ghostscript renders of PDF and EPS identical apart from glyph anti-aliasing, every symbol present (★ μ Σ τ ŷ ≤ →); paper still 12 pp with identical text. Regenerate an EPS after changing its PDF: `gs -q -dNOPAUSE -dBATCH -dSAFER -sDEVICE=eps2write -sOutputFile=FigN.eps FigN.pdf` |
+| §6 front matter (`\author*`, `\affil*`, `\email`, `\orgaddress{\street,\city,\postcode,\state,\country}`) | placeholders | unchanged — Yuvraj's item A1 (add `\street`, `\postcode` with the real address) |
+
+Build: main 12 pp (≈ 25 free lines on p. 12 after the shorter BibTeX author lists), abstract 246 words, supplement 11 pp,
+0 overfull, no undefined references; PDFs refreshed in the folder. Nothing committed yet.
+
+**Image rules for the next step (manual §7.3 + JAIHC artwork rules of §18.19):** one file per figure named Fig1, Fig2, …
+on the top level; vector art as EPS (plus PDF for pdflatex) with fonts embedded and no custom fonts (manual §3.2); drawn
+at final size — 84 mm wide for one column, 174 mm for the full width — so lettering is 8–12 pt (body text is 10 pt;
+the draw.io figures are 5–7 pt now); subscripts instead of `p_AV`; Fig. 2 legend "Section VI" → "Section 5"; one name for
+block B; colour still readable in grey; the program used (draw.io, TikZ) stated at submission; AI-generated artwork
+decision (D4) still open. Also seen while checking the EPS: in Fig. 2 the connector from block B to the fusion box runs
+through the legend text ("the components│evaluated …"); move the legend or reroute the line. Regenerate Fig1.eps and
+Fig2.eps after the redraw.
+
+### 21.13 Figures rebuilt to the manual's rules (2026-11-13, Yuvraj: "Now fix the images")
+- **Format kept: draw.io** (Sanchita's choice); the generators `figures/src/make_{overview,architecture}_drawio.py`
+  were rewritten and now draw at final size. Export without a display: `figures/src/export_drawio.js` runs draw.io's own
+  `export3.html` (app.diagrams.net) in headless Chrome via puppeteer with `crop: '1'` (diagram rendered locally, nothing
+  uploaded); Chrome needed only `libasound.so.2` (conda-forge alsa-lib), all installed in the session scratchpad.
+  Calibration: 1 draw.io px prints as 0.719 pt, so canvases of 331 px and 686 px give 84 mm and 174 mm, and 12.5 px text
+  gives 9 pt. Template widths measured for reference: `\columnwidth` 76.0 mm, `\textwidth` 160.0 mm (review layout).
+- **Fig. 1** (overview): 84.3 × 89.2 mm, 9-pt lettering (8.1 pt as printed in the review layout), real subscripts
+  *p*<sub>AV</sub>/*p*<sub>TF</sub>/*p*<sub>GBM</sub>, block B named "(B) Facial-behavior models", no line crosses text.
+- **Fig. 2** (architecture): 174.2 × 128.1 mm (was 231 × 201 mm, printed at 152 mm tall), 9-pt lettering (8.2 pt in the
+  review layout); tensor shapes in monospace, words in Helvetica/DejaVu; the network head (concatenate, linear, softmax)
+  moved into panel A, so panel C is only fusion and decoding; the in-figure legend ("Section VI", the line crossing it)
+  removed — the caption now says "Orange blocks marked with a star are the components evaluated in Section 5; dashed
+  arrows show the keys and values that each stream takes from the other in the first exchange"; italic *p* for the
+  dropout probability; connectors routed in free channels.
+- **EPS** regenerated for Fig1/Fig2 with Ghostscript `eps2write` (vector, fonts embedded, renders match apart from glyph
+  anti-aliasing; the grayscale render also shows the figure reads without colour). Fig3 unchanged (TikZ, 8 pt).
+- **Text:** AI statement now names "the two diagrams (Figs. 1 and 2)" instead of only the architecture diagram; paper
+  header comment documents the figure pipeline. Stale `figures/src/{architecture,overview}.svg` removed (old drawings).
+- **Build:** 12 pp, ≈ 25 free lines on p. 12, 0 overfull, no undefined references; `paper.pdf` refreshed. Not committed.
+- D1–D3 of §21.4 are done. D4 is now explicit: both diagrams are generated from code written with Claude and the AI
+  statement says so; Sanchita's "not AI-generated" rule is the authors' call.
+
