@@ -3035,12 +3035,12 @@ Commit it with the paper so every number traces to committed code.
 |---|---|---|---|
 | JF1 | Apply F1–F15 to the final folder, recompile, confirm 12 pages | Claude | **done 2026-11-13** (12 pp, abstract 246 words) |
 | JF2 | Apply F16–F26 | Claude | **done 2026-11-13** (arXiv DOI links left out for page space) |
-| JF3 | draw.io edits D1–D3; decide D4 | Yuvraj | open — sources now in `AVB-Engage_JAIHC_final/figures/src/` |
+| JF3 | draw.io edits D1–D3; decide D4 | Claude / Yuvraj | D1–D3 **done 2026-11-13** (21.13); D4 open — both diagrams are generated from code written with Claude (the AI statement says so); keeping that against Sanchita's "not AI-generated" rule is the authors' call |
 | JF4 | Title block, declarations, AI statement (A1–A2) | Yuvraj / Sanchita | open |
-| JF5 | Paired significance tests for the supplement (21.5) | Claude | **done 2026-11-13** (Section S13, Tables S11–S12; 21.10) — not committed yet |
+| JF5 | Paired significance tests for the supplement (21.5) | Claude | **done 2026-11-13** (Section S13, Tables S11–S12; 21.10) — committed `ed6d2c4` |
 | JF6 | Cleanup steps 2–6 of 21.7, with the archive commit | Claude | **done 2026-11-13** (archive `c2827d2`; fixes + cleanup `2461716`) |
 | JF7 | Commit the paper's analysis scripts | Claude | **done 2026-11-13** (`c2827d2`) |
-| JF8 | Submission bundle (A3); upload the fixed folder to Overleaf | Yuvraj | after JF3–JF4 |
+| JF8 | Submission bundle (A3); upload the fixed folder to Overleaf | Claude / Yuvraj | bundle and Overleaf **done 2026-11-13** (21.14); the journal upload itself waits for JF4; 5 unused old files in Overleaf wait for Yuvraj's OK to delete |
 
 ### 21.9 Applied (2026-11-13, Yuvraj: "Yes, fixes + cleanup")
 - **Archive commit `c2827d2`** (before any change): the Overleaf download as received, `research/paper_springer/`
@@ -3160,7 +3160,44 @@ Fig2.eps after the redraw.
   anti-aliasing; the grayscale render also shows the figure reads without colour). Fig3 unchanged (TikZ, 8 pt).
 - **Text:** AI statement now names "the two diagrams (Figs. 1 and 2)" instead of only the architecture diagram; paper
   header comment documents the figure pipeline. Stale `figures/src/{architecture,overview}.svg` removed (old drawings).
-- **Build:** 12 pp, ≈ 25 free lines on p. 12, 0 overfull, no undefined references; `paper.pdf` refreshed. Not committed.
+- **Build:** 12 pp, ≈ 25 free lines on p. 12, 0 overfull, no undefined references; `paper.pdf` refreshed. Committed `bcead4e`.
 - D1–D3 of §21.4 are done. D4 is now explicit: both diagrams are generated from code written with Claude and the AI
   statement says so; Sanchita's "not AI-generated" rule is the authors' call.
 
+### 21.14 JAIHC guidelines, submission package and Overleaf (2026-11-13, Yuvraj: "integrate this with my Overleaf account … include everything that we need for submission")
+- **Guideline check** against link.springer.com/journal/12652/submission-guidelines after 21.13: 12 pp including the
+  references; abstract 246 words (150–250); 6 keywords (4–6); at most three heading levels; Statements and Declarations
+  before the references; figures as EPS named `Fig1`–`Fig3`, Helvetica/Arial lettering at 8–12 pt, 84/174 mm wide;
+  no colour words in captions (figures may print in black and white); lettering contrast ≥ 4.5:1; supplement named
+  `ESM_1.pdf` with title, journal, authors and corresponding author.
+- **Fixes:** Fig. 2 caption "Orange blocks marked with a star" → "Blocks marked with a star"; panel-title text of Figs.
+  1–2 darkened to `#1D5FAF`/`#B4471A`/`#5A5954` (≥ 4.5:1 on the panel fills; the box strokes keep their colours);
+  Fig. 3 lettering moved from Computer Modern to TeX Gyre Heros, a Helvetica clone (`fontspec` in `Fig3_source.tex`,
+  so it builds with XeTeX; `tgheros` under tectonic silently fell back to Latin Modern and lost the bold), and white
+  cell text only where white has the higher contrast (77, 87, 73, 94; 57 and 52 are now black; lowest 5.31:1); all
+  Fig1–Fig3 PDF/EPS regenerated (Fig. 3: 70.6 × 39.4 mm, 8 pt).
+- **Submission package** `AVB-Engage_JAIHC_final/submission/`: `README.md` (what was checked, which file to upload as
+  what, author to-dos, items that exist only in the submission form, Overleaf notes, rebuilding) and `cover_letter.tex`
+  (draft with bracketed placeholders, facts as in `paper.tex`) are tracked; `cover_letter.pdf` and
+  `AVB-Engage_JAIHC_submission.zip` are ignored builds. The zip has 15 files (755 KB): `1_manuscript_source/` (paper.tex,
+  references.bib, sn-jnl.cls, sn-basic.bst, Fig1–3 .eps and .pdf), `paper.pdf`, `ESM_1.pdf`, the cover letter (.pdf and
+  .tex) and the README. The zipped source alone compiles to 12 pages.
+- **Cover letter:** no LaTeX code in the text (it quoted `\documentclass[iicol,sn-basic]{sn-jnl}`; the paper has
+  `pdflatex,iicol,sn-basic`); `letter.cls` sets the signature block at half the text width and computes
+  `\indentedwidth` when the class loads, so the letter widens it with
+  `\AtBeginDocument{\setlength{\indentedwidth}{\textwidth}}`.
+- **Overleaf** (Yuvraj's project "Springer Nature LaTeX Template", edited through the browser): the 9 final files
+  replaced the old ones in `SpringerNature/` (paper.tex, supplementary.tex, references.bib, sn-jnl.cls, sn-basic.bst,
+  Fig1–3 .pdf and .eps; `figures/fig_colors.tex` stays because the supplement inputs it), and a root-level `submission/`
+  folder holds `README.md` and `cover_letter.tex`. After the upload the main document read "None" and a recompile built
+  the supplement, so it is now set to `SpringerNature/paper.tex` (confirmed in Settings); check it after re-uploading
+  `paper.tex`. pdfLaTeX, TeX Live 2026: paper 12 pp, 0 errors, 3 warnings (hyperref "Difference (4/3/2) between bookmark
+  levels" at the first three `\bmhead`s; the template's `\bmhead` is a level-5 `\@startsection` following a level-1
+  section, so only the PDF bookmark tree is affected); supplement 11 pp, 0 errors, 0 warnings; cover letter 1 p. Pages
+  2, 4 and 10–12 were inspected: Figs. 1–3 and the back matter look as in the local build.
+- **Left in Overleaf, unused:** `SpringerNature/figures/{architecture.pdf, overview.pdf, fig_concept.tex,
+  fig_confusion.tex, fig_results.tex}` (figures of the pre-fix version, also in archive commit `c2827d2`). Overleaf's
+  dialog calls the deletion permanent, so they wait for Yuvraj's OK.
+- **Not changed:** a few reference lines with long DOIs are stretched, because the DOI suffix cannot break. The manual
+  asks "Wherever possible please do not add further packages to the template", so `xurl` was not added; Springer
+  re-typesets accepted papers.
