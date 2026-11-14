@@ -42,11 +42,10 @@
 
 \title[AVB-Engage: audio-visual and facial-behavior fusion for engagement recognition]{AVB-Engage: Audio-Visual and Facial-Behavior Fusion for Ordinal Student Engagement Recognition}
 
-% Placeholders: the names, affiliations, the corresponding author's e-mail and the ORCIDs are required at submission.
-\author*[1]{\fnm{First} \sur{Author}}\email{first.author@example.edu}
-\author[1]{\fnm{Second} \sur{Author}}
-\author[1]{\fnm{Third} \sur{Author}}
-\affil*[1]{\orgdiv{Department}, \orgname{Organization}, \orgaddress{\city{City}, \state{State}, \country{Country}}}
+% Title block filled 2026-11-14: Yuvraj Gupta is the corresponding author (*); ORCIDs go into the submission form.
+\author*[1]{\fnm{Yuvraj} \sur{Gupta}}\email{ygupta@sfsu.edu}
+\author[1]{\fnm{Sanchita} \sur{Ghose}}\email{sanchitaghose@sfsu.edu}
+\affil*[1]{\orgdiv{Department of Computer Science}, \orgname{San Francisco State University}, \orgaddress{\street{1600 Holloway Avenue}, \city{San Francisco}, \state{CA} \postcode{94132}, \country{USA}}}
 
 \abstract{Automatic engagement recognition estimates from a webcam recording how engaged a student is during online learning. The task is harder than its four classes suggest: the engagement levels are ordered and imbalanced, the two middle levels look alike within a ten-second clip, and the audio track of a student watching an educational video carries a weak signal, so recent methods read the visual stream only. In this paper, we present \ournet{} (audio, video and behavior), which fuses three sources of evidence. An audio-visual cross-attention network lets the face frames and the log-mel spectrogram attend to each other after the audio steps are pooled onto the video frames, and two models built on segment statistics of OpenFace action units, gaze and head pose read the facial behavior of the same clip. The class probabilities of the three models are averaged and decoded through the expected engagement level with thresholds fitted on the validation split, so that the order of the levels is used at prediction time. We evaluated \ournet{} on the official EngageNet test split over three training seeds. Adding audio to video raises top-1 accuracy in seven of nine trained networks, decoding through the expected level adds 1.99 points over argmax decoding on identical weights, and averaging the network with the two behavior models adds about four points more because the models make different errors. \ournet{} reaches 70.29\% top-1 accuracy and a mean absolute error of 0.401 levels, against 67.61\% for the best published test-split result.}
 
@@ -77,7 +76,7 @@ The main contributions of this paper are as follows:
 
 \section{Related work}\label{sec:related}
 
-Engagement recognition asks a model to judge from a recording what an annotator judges from a learner's gaze, expression and posture. The public datasets are DAiSEE \citep{gupta2016daisee}, EngageNet \citep{singh2023engagenet}, which labels ten-second clips of students watching educational videos with four ordered levels and has the most participants, and CMOSE \citep{wu2024cmose}, which provides audio as well as video. On EngageNet, the released baselines read OpenFace gaze, head-pose and action-unit statistics or MARLIN video features \citep{singh2023engagenet}; later methods read head-pose signals in the two-stream TCCT-Net \citep{vedernikov2024tcct}, facial landmarks in an ordinal spatial-temporal graph network \citep{abedi2024stgcn}, the face video in PriorNet \citep{vedernikov2026priornet} and in the variational encoder VE-MD, which has an audio branch for other datasets but uses video only for engagement \citep{augusma2026vemd}, or facial features, key points and physiological signals estimated from the video in GLP-fusion \citep{qin2026glpfusion}. Gradient boosting on action units has estimated the mental states of learners in a tutoring system \citep{wang2026shap} and reached higher accuracy than the deep networks trained alongside it on two engagement datasets \citep{das2025optimizing}. All of these methods read the visual stream only. The closest result to our use of audio comes from CMOSE: adding audio features to its visual features raises accuracy only slightly over all test segments, but clearly on the quarter of segments that contain speech \citep{wu2024cmose}.
+Engagement recognition asks a model to judge from a recording what an annotator judges from a learner's gaze, expression and posture. The main datasets are DAiSEE \citep{gupta2016daisee}, EngageNet \citep{singh2023engagenet}, which labels ten-second clips of students watching educational videos with four ordered levels and has the most participants, and CMOSE \citep{wu2024cmose}, which provides audio as well as video. On EngageNet, the released baselines read OpenFace gaze, head-pose and action-unit statistics or MARLIN video features \citep{singh2023engagenet}; later methods read head-pose signals in the two-stream TCCT-Net \citep{vedernikov2024tcct}, facial landmarks in an ordinal spatial-temporal graph network \citep{abedi2024stgcn}, the face video in PriorNet \citep{vedernikov2026priornet} and in the variational encoder VE-MD, which has an audio branch for other datasets but uses video only for engagement \citep{augusma2026vemd}, or facial features, key points and physiological signals estimated from the video in GLP-fusion \citep{qin2026glpfusion}. Gradient boosting on action units has estimated the mental states of learners in a tutoring system \citep{wang2026shap} and reached higher accuracy than the deep networks trained alongside it on two engagement datasets \citep{das2025optimizing}. All of these methods read the visual stream only. The closest result to our use of audio comes from CMOSE: adding audio features to its visual features raises accuracy only slightly over all test segments, but clearly on the quarter of segments that contain speech \citep{wu2024cmose}.
 
 Audio-visual fusion has been developed mainly for emotion recognition, where the voice and the face express the same affective state; AVT-CA \citep{venkatraman2025avtca} fuses the two streams with transformer cross-attention, in which each modality attends to the other. A student watching an educational video rarely speaks, so the audio track of an engagement clip carries a much weaker signal than the voice in emotion recognition. For the facial stream, EfficientFace \citep{zhao2021efficientface} is a lightweight expression encoder that combines a local-feature extractor with channel-spatial modulation.
 
@@ -298,43 +297,35 @@ We presented \ournet, which combines an audio-visual cross-attention network wit
 \backmatter
 
 \bmhead{Supplementary information}
-Online Resource 1 (ESM\_1.pdf) gives the decoding rules and threshold search, the metric definitions, the cross-attention configuration, the training procedure and configuration, the full ablation, per-level, cost and dataset tables, and paired significance tests.
+The supplementary file, Online Resource 1 (ESM\_1.pdf), gives the decoding rules and threshold search, the training objective, metrics, alignment, cross-attention blocks, training procedure and configuration, and further ablation, cost, label-granularity, per-level, behavior-branch, dataset, modality, fusion-weight and significance results.
 
 % \bmhead{Acknowledgements} -- optional in the template; add here if the authors wish to acknowledge anyone.
 
 \section*{Statements and Declarations}
 
 \bmhead{Funding}
-% TODO (authors): replace if any funding was received.
 The authors did not receive support from any organization for the submitted work.
 
 \bmhead{Competing interests}
 The authors have no relevant financial or non-financial interests to disclose.
 
 \bmhead{Ethics approval and consent to participate}
-This study uses only the publicly released EngageNet dataset \citep{singh2023engagenet}; no new data were collected from human participants. % TODO (authors): add the EngageNet licence/EULA terms and confirm with the institution whether an exemption statement is required.
-
-\bmhead{Consent for publication}
-Not applicable.
+No new data were collected for this study. It uses the EngageNet dataset, obtained from its authors on request, whose participants consented to the use of their data when it was recorded \citep{singh2023engagenet}.
 
 \bmhead{Data availability}
-The EngageNet dataset is available from its authors \citep{singh2023engagenet} under their access conditions; the per-clip predictions and derived features of this study are available from the corresponding author on reasonable request.
+The EngageNet dataset is available from its authors on request \citep{singh2023engagenet}. The per-clip predictions of this study are available from the corresponding author on reasonable request.
 
 \bmhead{Materials availability}
 Not applicable.
 
 \bmhead{Code availability}
-% TODO (authors): add a repository link or state "available on request".
-The code is available from the corresponding author on reasonable request.
+The code is publicly available at \url{https://github.com/YuvrajGupta1808/AVTCA-Research}.
 
 \bmhead{Author contributions}
-% TODO (authors): CRediT statement, e.g. Conceptualization, Methodology, Software, Writing.
-To be completed by the authors.
+Yuvraj Gupta: Conceptualization, Methodology, Software, Validation, Formal analysis, Investigation, Data curation, Visualization, Writing -- original draft. Sanchita Ghose: Conceptualization, Supervision, Writing -- review and editing. Both authors read and approved the final manuscript.
 
 \bmhead{Use of generative AI}
-% DRAFT -- the authors must review and edit this statement so that it is accurate (Springer Nature AI
-% policy: describe the tool, its purpose and the extent of its contribution; authors remain accountable).
-The authors used Claude (Anthropic) under their direction to write and debug experiment and analysis code, to check bibliographic metadata, to generate the source code of the charts and of the two diagrams (Figs.~\ref{fig:overview} and~\ref{fig:arch}) from the authors' result files and model, and to draft and restructure manuscript text from the authors' results and earlier drafts. All experiments were designed and run by the authors, every number was computed by the authors' code, and the authors reviewed and edited all text, figures and references and take full responsibility for the content.
+The authors used generative AI tools, following their specifications, to help write and debug the experiment and analysis code, check bibliographic metadata, and draft and edit text. The authors designed and ran all experiments, reviewed and revised all content, and take full responsibility for the article.
 
 \bibliography{references}% formatted by sn-basic.bst (selected by the sn-basic class option)
 

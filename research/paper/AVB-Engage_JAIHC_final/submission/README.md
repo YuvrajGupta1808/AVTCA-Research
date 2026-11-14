@@ -27,19 +27,34 @@ Prepared 2026-11-13 from `research/paper/AVB-Engage_JAIHC_final/` against the jo
 | Manuscript, LaTeX source | `1_manuscript_source/paper.tex`, `references.bib`, `sn-jnl.cls`, `sn-basic.bst` |
 | Figures | `1_manuscript_source/Fig1.eps`, `Fig2.eps`, `Fig3.eps` (the `.pdf` versions are used when the system compiles with pdfLaTeX) |
 | Manuscript PDF, for checking the system's build | `paper.pdf` |
-| Supplementary material, "Online Resource 1" | `ESM_1.pdf` (caption: decoding rules, threshold search, metrics, cross-attention configuration, training procedure and configuration, full ablation, per-level, cost and dataset tables, and paired significance tests) |
+| Supplementary material, "Online Resource 1" | `ESM_1.pdf` (caption, as in the paper's Supplementary information: decoding rules and threshold search, training objective, metrics, alignment, cross-attention blocks, training procedure and configuration, and further ablation, cost, label-granularity, per-level, behavior-branch, dataset, modality, fusion-weight and significance results) |
 | Cover letter | `cover_letter.pdf` (draft: fill in `cover_letter.tex` and rebuild first) |
 
 ## Still to do by the authors, before uploading
 
-1. Title block in `paper.tex` and `supplementary.tex`: author names, affiliations (department, institution, city,
-   state, country), corresponding author's e-mail, ORCIDs.
-2. Statements and Declarations in `paper.tex`: Funding, Ethics (EngageNet licence terms; whether the institution
-   needs an exemption statement), Code availability, Author contributions (CRediT), the AI statement (marked DRAFT).
-   Delete the four `% TODO (authors)` comments once these are filled in, since the source goes to the journal.
-3. `cover_letter.tex`: names, affiliation, e-mail, ORCID; optional suggested reviewers with institutional e-mails.
-4. Sanchita's agreement that Figs. 1–2 were generated from code written with an AI assistant (the AI statement says so).
-5. Rebuild `paper.pdf` and `ESM_1.pdf` and confirm 12 pages (page 12 has about 25 free lines for the real author block).
+1. Title block in `paper.tex` and `supplementary.tex`: filled 2026-11-14. Yuvraj Gupta (corresponding author,
+   ygupta@sfsu.edu) and Sanchita Ghose (sanchitaghose@sfsu.edu, as on her SFSU faculty page), both at the Department
+   of Computer Science, San Francisco State University, 1600 Holloway Avenue, San Francisco, CA 94132, USA (chosen by
+   Yuvraj; her faculty page lists Computer Engineering in the School of Engineering, so Professor Sanchita should
+   confirm her line). ORCIDs go into the submission form.
+2. Statements and Declarations in `paper.tex`: written 2026-11-14 (no funding; no competing interests; no new data,
+   EngageNet obtained from its authors on request; code at the GitHub repository, whose `main` branch holds the
+   paper's code since 2026-11-14 (`development` merged into `main`); CRediT contributions of Yuvraj Gupta and Sanchita Ghose; a short
+   AI statement naming "generative AI tools"). Still to confirm with Professor Sanchita: the contribution split.
+3. `cover_letter.tex`: signature filled 2026-11-14 (Yuvraj Gupta, corresponding author); fill in or delete the
+   optional bracketed sentence suggesting reviewers (with institutional e-mails).
+4. Professor Sanchita's approval of the generative-AI statement (it covers the code, including the code that draws Figs. 1–2).
+5. Rebuilt 2026-11-14 with the real title block: paper 12 pages, supplement 11 pages, 0 overfull boxes. The address
+   and the e-mail lines each wrap to two lines (10 mm taller than the placeholder). On Overleaf (pdfLaTeX, as the
+   journal compiles it) Section 5 still starts at the foot of page 6 and page 12 has about 11 free lines; the local
+   tectonic build breaks lines slightly differently (Section 5 on page 7, about 6 free lines), so judge the page
+   budget on Overleaf, and before submitting put Overleaf's PDF in the zip as `paper.pdf`.
+6. Preprint: the manuscript (LaTeX source and figures) is public in the GitHub repository since 2026-11-14. Springer
+   Nature's preprint policy, which covers all its journals, allows this (a preprint is not prior publication and may
+   be posted on any legal platform, before or during review) but asks authors to disclose it at submission: the cover
+   letter says so, and if the submission form asks about preprints, answer yes and give the repository URL (there is
+   no DOI). After acceptance, never post the publisher's typeset PDF, check the licence before pushing the accepted
+   version, and add the article's DOI to the repository once it is published.
 
 ## Also required in the submission form itself
 
@@ -54,7 +69,8 @@ Prepared 2026-11-13 from `research/paper/AVB-Engage_JAIHC_final/` against the jo
 The Overleaf project "Springer Nature LaTeX Template" holds the same manuscript files in its `SpringerNature/` folder
 (main document `SpringerNature/paper.tex`, pdfLaTeX, TeX Live 2026), and this checklist with `cover_letter.tex` in
 its `submission/` folder. Built there on 2026-11-13: paper 12 pages, supplement 11 pages, 0 errors; the redesigned Fig. 1 (with Fig. 2 and
-`paper.tex`) was uploaded on 2026-11-14 and builds at 12 pages, 0 errors. The three hyperref
+`paper.tex`) was uploaded on 2026-11-14 and builds at 12 pages, 0 errors; so does the filled title block (`paper.tex`,
+`supplementary.tex`, `cover_letter.tex` and this checklist, uploaded the same day). The three hyperref
 warnings ("Difference ... between bookmark levels") come from the template's `\bmhead`, a level-5 heading that follows
 a level-1 section, as the template manual prescribes for the back matter; they only flatten the PDF bookmark tree,
 not the printed pages.
