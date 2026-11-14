@@ -9,7 +9,7 @@ class TestOpts(unittest.TestCase):
     """Smoke test: opts parse without errors and key values are set."""
 
     def test_parse_does_not_crash(self):
-        from src.opts import parse_opts
+        from src.config.opts import parse_opts
         with patch('sys.argv', ['main.py', '--n_epochs', '1', '--no_train', '--no_val']):
             opt = parse_opts()
             self.assertEqual(opt.n_epochs, 1)
@@ -20,7 +20,7 @@ class TestModelFactory(unittest.TestCase):
     """Smoke test: generate_model builds without errors for multimodal_cnn."""
 
     def test_generate_model_cpu(self):
-        from src.model import generate_model
+        from src.models.factory import generate_model
         opt = MagicMock()
         opt.model = 'multimodal_cnn'
         opt.n_classes = 8
@@ -32,6 +32,35 @@ class TestModelFactory(unittest.TestCase):
         model, params = generate_model(opt)
         self.assertIsNotNone(model)
         self.assertIsNotNone(params)
+
+    def test_generate_model_cpu_ignores_non_primitive_optional_values(self):
+        from src.models.factory import generate_model
+        opt = MagicMock()
+        opt.model = 'multimodal_cnn'
+        opt.n_classes = 8
+        opt.fusion = 'it'
+        opt.sample_duration = 15
+        opt.pretrain_path = 'None'
+        opt.num_heads = 1
+        opt.device = 'cpu'
+        opt.visual_backbone = MagicMock()
+        opt.visual_stem_pooling = MagicMock()
+        opt.audio_channel_attention = MagicMock()
+        opt.it_fusion_mode = MagicMock()
+
+        model, params = generate_model(opt)
+
+        self.assertEqual(model.visual_backbone, 'efficientface')
+        self.assertFalse(model.audio_channel_attention)
+        self.assertIsNotNone(params)
+
+    def test_unknown_model_raises_value_error(self):
+        from src.models.factory import generate_model
+        opt = MagicMock()
+        opt.model = 'token_fusion'
+
+        with self.assertRaisesRegex(ValueError, 'Unknown model'):
+            generate_model(opt)
 
 
 if __name__ == '__main__':

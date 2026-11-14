@@ -1,0 +1,16 @@
+%% Source of Fig3.pdf (row-normalized test confusion matrices). The manual (Sec. 7.3) wants every figure as one image
+%% file on the same level as paper.tex, so the TikZ drawing is compiled here once:
+%%   cd figures && tectonic Fig3_source.tex   (XeTeX engine, for fontspec) && cp Fig3_source.pdf ../Fig3.pdf
+%%   cd .. && gs -q -dNOPAUSE -dBATCH -dSAFER -sDEVICE=eps2write -sOutputFile=Fig3.eps Fig3.pdf
+%% Lettering: TeX Gyre Heros (Helvetica clone), \small = 9 pt; drawn at 84 x 45 mm (one Springer column) and included at
+%% \columnwidth, so it prints at 8.1 pt in the template's 76-mm review column. Body: fig_confusion.tex, written by
+%% src/make_confusion_tikz.py from the result file.
+\documentclass[border=0pt]{standalone}
+\usepackage{fontspec}% Helvetica clone TeX Gyre Heros (JAIHC artwork rules prefer Helvetica/Arial lettering)
+\setmainfont{texgyreheros}[Extension=.otf, UprightFont=*-regular, BoldFont=*-bold, ItalicFont=*-italic, BoldItalicFont=*-bolditalic]
+\usepackage{xcolor}
+\usepackage{tikz}
+\input{fig_colors}
+\begin{document}
+\input{fig_confusion}%
+\end{document}

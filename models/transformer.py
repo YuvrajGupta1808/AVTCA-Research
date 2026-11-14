@@ -81,7 +81,7 @@ class Attention(nn.Module):
         self.proj = nn.Linear(out_dim, out_dim)
         self.proj_drop = nn.Dropout(proj_drop)
 
-    def forward(self, x, x_q):
+    def forward(self, x, x_q, key_padding_mask=None, query_padding_mask=None):
         B, Nk, Ck = x.shape
         B, Nq, Cq = x_q.shape
         q = self.q(x_q).reshape(B, Nq, 1, self.num_heads, -1).permute(2, 0, 3, 1, 4)
@@ -90,11 +90,18 @@ class Attention(nn.Module):
         q = q.squeeze(0)
 
         attn = (q @ k.transpose(-2, -1)) * self.scale
+        if key_padding_mask is not None:
+            expanded_mask = key_padding_mask[:, None, None, :].to(dtype=torch.bool)
+            attn = attn.masked_fill(expanded_mask, torch.finfo(attn.dtype).min)
         attn = attn.softmax(dim=-1)
+        if query_padding_mask is not None:
+            attn = attn * (~query_padding_mask[:, None, :, None]).to(attn.dtype)
         attn_weights = attn
         attn = self.attn_drop(attn)
 
         x = (attn @ v).transpose(1, 2).reshape(B, Nq, -1)
+        if query_padding_mask is not None:
+            x = x.masked_fill(query_padding_mask.unsqueeze(-1), 0.0)
         x = self.proj(x)
         x = self.proj_drop(x)
 
@@ -116,9 +123,15 @@ class AttentionBlock(nn.Module):
         mlp_hidden_dim = int(out_dim * mlp_ratio)
         self.mlp = Mlp(in_features=out_dim, hidden_features=mlp_hidden_dim, act_layer=act_layer, drop=drop, use_conv1=use_conv1)
 
-    def forward(self, xk,xq):
-        
-        x, a = self.attn(self.norm1_k(xk), self.norm1_q(xq))
+    def forward(self, xk, xq, key_padding_mask=None, query_padding_mask=None):
+        x, a = self.attn(
+            self.norm1_k(xk),
+            self.norm1_q(xq),
+            key_padding_mask=key_padding_mask,
+            query_padding_mask=query_padding_mask,
+        )
         x = self.drop_path(x)
         x = x + self.drop_path(self.mlp(self.norm2(x)))
+        if query_padding_mask is not None:
+            x = x.masked_fill(query_padding_mask.unsqueeze(-1), 0.0)
         return x

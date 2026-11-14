@@ -7,6 +7,11 @@ __pycache__/
 # Dataset raw data (large — stored locally, not in repo)
 datasets/RAVDESS/
 datasets/CMU-MOSEI/
+datasets/CREMAD/
+datasets/EngageNet/
+datasets/DAISEE/
+datasets/SFSU/
+
 
 # Preprocessed artifacts inside dataset folders
 datasets/**/*.npy
@@ -17,6 +22,7 @@ datasets/**/*_facecroppad.*
 # Training outputs
 results/
 results*/
+papers/
 
 # Pretrained weights (large binary files)
 pretrained/*.pth
@@ -27,9 +33,15 @@ preprocessing/ravdess/processed.txt
 
 # Claude Code local settings
 .claude/
+.cursor/
+.vscode/
 
 # OS / editor
 .DS_Store
 .env
 *.swp
 *.swo
+
+# Session/runtime logs and generated media (large, machine-specific)
+logs/
+generated/

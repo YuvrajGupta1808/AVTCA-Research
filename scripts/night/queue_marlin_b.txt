@@ -1,0 +1,5 @@
+# Higher LR arm — MARLIN features are frozen, so the trainable head is small
+# (1.11 M params vs 2.38 M) and can take a larger step than the fine-tuned CNN.
+train M02_marlin_lr2e3_s1 --visual_features marlin --max_video_frames 0 --learning_rate 0.002 --lr_scheduler warmup_cosine --warmup_ratio 0.05 --grad_clip_norm 5.0 --n_epochs 30 --manual_seed 1 --n_threads 4
+train M02_marlin_lr2e3_s2 --visual_features marlin --max_video_frames 0 --learning_rate 0.002 --lr_scheduler warmup_cosine --warmup_ratio 0.05 --grad_clip_norm 5.0 --n_epochs 30 --manual_seed 2 --n_threads 4
+train M02_marlin_lr2e3_s3 --visual_features marlin --max_video_frames 0 --learning_rate 0.002 --lr_scheduler warmup_cosine --warmup_ratio 0.05 --grad_clip_norm 5.0 --n_epochs 30 --manual_seed 3 --n_threads 4

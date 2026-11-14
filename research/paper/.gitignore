@@ -1,0 +1,13 @@
+# LaTeX build products
+*.aux
+*.log
+*.out
+*.bbl
+*.blg
+*.synctex.gz
+*.fdb_latexmk
+*.fls
+paper.pdf
+ESM_1.pdf
+*.zip
+cover_letter.pdf
