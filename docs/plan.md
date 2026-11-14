@@ -1848,9 +1848,9 @@ label-blind generated-chat proxy (`annotations_engagement_v3_a10.txt`) exists fo
 | C9 | Ablate `--behavior` alone vs `--text_fusion` alone | **done 2026-09-12** — §19.5: B 66.08 ± 0.59, C 66.12 ± 0.59, A 66.27 ± 0.45 — neither stream moves any metric |
 | C10 | Report filename fix, presence guard, calibration flags and baseline leakage to the author | open |
 
-## 18. Paper plan after the 2026-09-08 supervisor meeting (Sanchita Ghose)
+## 18. Paper plan after the 2026-09-08 supervisor meeting (Professor Sanchita Ghose)
 
-**Status: plan only — nothing below is implemented.** Next review: **Tuesday 2026-09-15, 7 PM** (Sanchita sends the invite).
+**Status: plan only — nothing below is implemented.** Next review: **Tuesday 2026-09-15, 7 PM** (Professor Sanchita sends the invite).
 Owners: Yuvraj = results/evaluation section + related-work citations + architecture diagram; Akshit = methodology section.
 
 ### 18.1 Correct the number reported in the meeting before it reaches the paper
@@ -1872,7 +1872,7 @@ the single experiment that must finish before the results table is written.
 ### 18.2 Paper structure (journal target; source now at `research/paper/paper.tex`, moved from gitignored `papers/research/` on 2026-09-23)
 
 Order agreed: Introduction → Related Work → **Preliminaries (~1 page, journal only)** → Methodology → Experimental
-Results / Model Evaluation → Conclusion. Follow the format of Sanchita's previous paper (`papers/research/prof papeer.pdf`).
+Results / Model Evaluation → Conclusion. Follow the format of Professor Sanchita's previous paper (`papers/research/prof papeer.pdf`).
 
 | Section | Owner | What changes vs current draft | Done when |
 |---|---|---|---|
@@ -1880,14 +1880,14 @@ Results / Model Evaluation → Conclusion. Follow the format of Sanchita's previ
 | Related Work | Yuvraj | Grow from 9 to **15–20 citations**. Mine the survey papers already in `papers/` (`qarbal2025review`, `s41019-025-00335-5.pdf`, `applsci-14-01190-v2.pdf`) and add recent multimodal audio-visual learning work (2023–2026). Keep the four subsections; add citations under "Multimodal Audio-Visual Learning" first. | ≥15 `\cite` keys, all in the bib |
 | Preliminaries | Yuvraj | New ~1 page: ordinal engagement labels, decoder definitions (argmax / bias / expected / refined expected), the four metrics (top-1, adjacent, MAE, macro-F1) and why each matters for an ordinal task. | 1 page |
 | Methodology | Akshit | Group the many blocks into **major components**: (1) audio encoder, (2) video encoder + OpenFace behavior stream, (3) temporal alignment + two-stage cross-attention fusion, (4) ordinal head + calibration. One paragraph per component, one equation where needed. Must describe Akshit's visual-emphasis variant honestly as a design choice, not assume it (see 18.4). | Draft with the diagram from 18.3 |
-| Model Evaluation | Yuvraj | Sanchita's structure: datasets (EngageNet primary; DAiSEE and RAVDESS as secondary), training parameters, then results **grouped by metric** with a one-line explanation of what each metric measures and why it is significant; then ablation analysis (modality ablation on identical weights, decoder ablation, behavior-stream ablation); then discussion of the hard categories (the middle levels) and *why* the model fails there; then limitations/clarifications for reviewers. Human-survey subsection is N/A until classroom data exists — say so explicitly. Keep it concise. | Tables + text for the Tuesday review |
+| Model Evaluation | Yuvraj | Professor Sanchita's structure: datasets (EngageNet primary; DAiSEE and RAVDESS as secondary), training parameters, then results **grouped by metric** with a one-line explanation of what each metric measures and why it is significant; then ablation analysis (modality ablation on identical weights, decoder ablation, behavior-stream ablation); then discussion of the hard categories (the middle levels) and *why* the model fails there; then limitations/clarifications for reviewers. Human-survey subsection is N/A until classroom data exists — say so explicitly. Keep it concise. | Tables + text for the Tuesday review |
 
 ### 18.3 Architecture diagram — technical, hand-drawn in draw.io
 
 - Produce in draw.io (or equivalent), **not** AI-generated. Export SVG + PDF into `papers/research/figures/`.
 - Content must match `docs/architecture.md` Architecture 2 and the code: audio `(B,64,T)` → AudioCNNPool → `_adaptive_align_audio_to_video` → early cross-attention (av1/va1) → stage-2 conv → self-attention → final cross-attention → maxpool → concat (+ behavior tokens where the branch merges) → ordinal head → calibrated decoder.
 - Mark tensor shapes at every boundary; mark the modality-dropout and alignment points, since those are two of the six contributions.
-- Also upload it to the shared folder (Sanchita could not find one there).
+- Also upload it to the shared folder (Professor Sanchita could not find one there).
 
 ### 18.4 Coordination with Akshit (call tonight, 2026-09-08)
 
@@ -1897,7 +1897,7 @@ Results / Model Evaluation → Conclusion. Follow the format of Sanchita's previ
 
 ### 18.5 New data — psychology professor's asynchronous class recordings
 
-Sanchita meets the professor 2026-09-09. What we need from that meeting, in order of importance:
+Professor Sanchita meets the professor 2026-09-09. What we need from that meeting, in order of importance:
 
 1. **Breakout-room recordings**, with "Record each participant separately" ON so per-student audio exists (plan §10/§11 — mixed gallery audio is unusable).
 2. **Zoom chat export** per session (plan §17 — the text modality is waiting on real chat; no substitute is acceptable).
@@ -1923,7 +1923,7 @@ Answer to give Tuesday, with the reasoning:
 | # | Task | Owner | Due | Depends on |
 |---|---|---|---|---|
 | P1 | Finish C7 matched re-run (behavior vs AV at mvf 50) so the results table is confound-free | Yuvraj | before P5 | **done 2026-09-12 (§19.5): behavior branch null; paper updated 2026-09-23** |
-| P2 | Correct the 65.47/65.25 framing with Sanchita (email or Tuesday) | Yuvraj | 2026-09-15 | — |
+| P2 | Correct the 65.47/65.25 framing with Professor Sanchita (email or Tuesday) | Yuvraj | 2026-09-15 | — |
 | P3 | Related work → 15–20 citations, bib entries verified | Yuvraj | **done** (21 entries; verify `dan2026multimodal` authors and `li2025mersurvey` volume) | — |
 | P4 | Preliminaries section | Yuvraj | **done** (Yuvraj wrote it; merged 2026-09-08 as §III with eq labels; Method/Eval now cite its equations instead of re-deriving) | — |
 | P5 | Model Evaluation section: metric-grouped tables + ablation + hard-category discussion | Yuvraj | 2026-09-15 | **done 2026-09-23 (§18.11)**; open: alignment ablation re-run, human study |
@@ -1931,8 +1931,8 @@ Answer to give Tuesday, with the reasoning:
 | P7 | Call Akshit; capture his variant + agree section split | Yuvraj | 2026-09-08 | — |
 | P8 | Methodology section grouped into 4 components | Akshit | 2026-09-15 | P6, P7 |
 | P9 | Conceptual diagram for the Introduction | Yuvraj | 2026-09-15 | **done 2026-09-23** (`figures/fig_concept.tex`, Fig. 1) |
-| P10 | Feasibility note on personalized retraining (18.6) ready to present | Yuvraj | 2026-09-15 | Sanchita's 09-09 meeting outcome |
-| P11 | Data-collection asks list (18.5) sent to Sanchita before her 09-09 meeting | Yuvraj | 2026-09-09 AM | — |
+| P10 | Feasibility note on personalized retraining (18.6) ready to present | Yuvraj | 2026-09-15 | Professor Sanchita's 09-09 meeting outcome |
+| P11 | Data-collection asks list (18.5) sent to Professor Sanchita before her 09-09 meeting | Yuvraj | 2026-09-09 AM | — |
 
 ### 18.8 Draft written 2026-09-08 (`papers/research/paper.tex`)
 
@@ -1987,7 +1987,7 @@ figure stands in for the draw.io one (P6); swap if the "not AI-generated" rule a
 ### 18.12 Paper moved under version control, retitled, draw.io architecture figure (2026-09-23)
 
 - **Location:** `research/paper/` (tracked; `.gitignore` there drops LaTeX build products and `paper.pdf`).
-  `papers/` stays gitignored — it holds other authors' PDFs, the template and Sanchita's paper.
+  `papers/` stays gitignored — it holds other authors' PDFs, the template and Professor Sanchita's paper.
 - **Title:** "Audio-Visual Cross-Attention and Facial-Behavior Fusion for Ordinal Student Engagement
   Recognition" — names the three contributions that have evidence; drops "Role-Aware" (not implemented)
   and "Collaborative" (EngageNet is not collaborative). Spelling normalised to American ("behavior").
@@ -2005,13 +2005,13 @@ figure stands in for the draw.io one (P6); swap if the "not AI-generated" rule a
 
 ### 18.13 Paper rewritten on the FoleyGAN structure (2026-09-23)
 
-Yuvraj: Sanchita's FoleyGAN paper (`papers/research/prof papeer.pdf`, IEEE TMM 2023) is the only format
+Yuvraj: Professor Sanchita's FoleyGAN paper (`papers/research/prof papeer.pdf`, IEEE TMM 2023) is the only format
 benchmark; every statement must be specific and true. `research/paper/paper.tex` was rewritten section
 for section on it (previous version kept in git, commit 9e5adca):
 
 | FoleyGAN | Ours |
 |---|---|
-| I Intro: application → problem → named model → Fig. 1 "Problem description" → Fig. 2 overview → "significant contributions" bullets → section roadmap | same; model named `\ournet` = **AVB-Engage** (one-line macro, placeholder — Yuvraj/Sanchita to confirm) |
+| I Intro: application → problem → named model → Fig. 1 "Problem description" → Fig. 2 overview → "significant contributions" bullets → section roadmap | same; model named `\ournet` = **AVB-Engage** (one-line macro, placeholder — Yuvraj/Professor Sanchita to confirm) |
 | II Related Work A–D, each ending "In our work, we …" | A engagement recognition, B EngageNet, C audio-visual learning, D ordinal modeling; old "Research Gap" subsection removed |
 | III GAN Basics | III Cross-Attention and Ordinal Decoding Basics (metric equations moved to VI A–D) |
 | IV Method: "two networks A) B)", numbered steps 1) 2), Fig. 3 detailed, Algorithm 1 | three blocks A network / B behavior-statistics models / C late fusion + decoding; Fig. 3 = `architecture.drawio`; Algorithm 1 added; neural behavior branch moved to ablation 2 |
@@ -2557,7 +2557,7 @@ builds from an empty folder with tectonic: 28 pp, no overfull boxes, no undefine
 - **Story:** abstract, contributions and conclusion now say that most of the gain over 67.61 comes from expected-level
   decoding and from averaging models with different errors; audio is a small, sign-consistent addition. Contribution 2
   is a *measurement* on identical weights (CMOSE/EmotiW already threshold a scalar score). The per-sample alignment
-  left the contribution list (its effect is not measured). Title unchanged (Yuvraj/Sanchita to decide).
+  left the contribution list (its effect is not measured). Title unchanged (Yuvraj/Professor Sanchita to decide).
 - **Facts corrected:** "lowers in eight of nine" → higher in 7 of 9 (1 tie, 1 −0.13), Table 7 likewise; macro-F1 6/9;
   "no single difference exceeds the noise floor" → one (1.99) reaches the ±1.95 interval; the 12-of-13 sweep is not
   independent; gap point 3 rewritten (CMOSE thresholds; EngageNet baselines use softmax); GLP-fusion moved to §2.2 and
@@ -2839,7 +2839,7 @@ S3 1:31, S4 3:16, S5 ~0:04.
 |---|---|---|---|
 | SF1 | Re-transfer the full 2026-10-29 recording (≈ 700 MB, 83.6 min) | Yuvraj | open |
 | SF2 | Get the session's companion files from the host's cloud-recording page: audio-only `.m4a`, transcript `.vtt`, chat `.txt`, any gallery-view file | Yuvraj → instructor | open |
-| SF3 | Send the §20.6 settings to the instructor/Sanchita **before the next session**; run a 2-person test call to confirm the gallery and per-participant files appear | Yuvraj | open |
+| SF3 | Send the §20.6 settings to the instructor/Professor Sanchita **before the next session**; run a 2-person test call to confirm the gallery and per-participant files appear | Yuvraj | open |
 | SF4 | Session metadata: which session number this was, how many sessions are planned, whether students recur (student-independent splits) | Yuvraj → instructor | open |
 | SF5 | De-identified consent + follow-up survey + stop-2 pulse responses, keyed to participant | Yuvraj → instructor | open (needs IRB/consent check) |
 | SF6 | Review the remaining 64 minutes (stops 2–5) once SF1 lands: screen-share share of time, confusion moments, student turn density | Claude | blocked on SF1 |
@@ -3035,14 +3035,14 @@ Commit it with the paper so every number traces to committed code.
 |---|---|---|---|
 | JF1 | Apply F1–F15 to the final folder, recompile, confirm 12 pages | Claude | **done 2026-11-13** (12 pp, abstract 246 words) |
 | JF2 | Apply F16–F26 | Claude | **done 2026-11-13** (arXiv DOI links left out for page space) |
-| JF3 | draw.io edits D1–D3; decide D4 | Claude / Yuvraj | D1–D3 **done 2026-11-13** (21.13); D4 open — both diagrams are generated from code written with Claude (the AI statement says so); keeping that against Sanchita's "not AI-generated" rule is the authors' call |
-| JF4 | Title block, declarations, AI statement (A1–A2) | Yuvraj / Sanchita | open |
+| JF3 | draw.io edits D1–D3; decide D4 | Claude / Yuvraj | D1–D3 **done 2026-11-13** (21.13); D4 open — both diagrams are generated from code written with Claude (the AI statement says so); keeping that against Professor Sanchita's "not AI-generated" rule is the authors' call |
+| JF4 | Title block, declarations, AI statement (A1–A2) | Yuvraj / Professor Sanchita | declarations **written 2026-11-14** (21.20), on Overleaf the same day; **title block filled 2026-11-14** (21.21: Yuvraj corresponding, both Dept. of Computer Science, SFSU), on Overleaf the same day (12 pp; judge the layout there, not in the tectonic build); open: Professor Sanchita confirms her line and the contribution split |
 | JF5 | Paired significance tests for the supplement (21.5) | Claude | **done 2026-11-13** (Section S13, Tables S11–S12; 21.10) — committed `ed6d2c4` |
 | JF6 | Cleanup steps 2–6 of 21.7, with the archive commit | Claude | **done 2026-11-13** (archive `c2827d2`; fixes + cleanup `2461716`) |
 | JF7 | Commit the paper's analysis scripts | Claude | **done 2026-11-13** (`c2827d2`) |
 | JF8 | Submission bundle (A3); upload the fixed folder to Overleaf | Claude / Yuvraj | bundle and Overleaf **done 2026-11-13** (21.14); the journal upload itself waits for JF4; unused old Overleaf files deleted |
-| JF10 | Figs. 2–3 improved: generated 84-mm Fig. 3 (21.17); Fig. 2 redesigned in the token-and-lane style after a survey of the papers' architecture figures (21.18) | Claude | **done 2026-11-14** (12 pp, p. 12 unchanged); on Overleaf the same day (same layout); commit later (Yuvraj) |
-| JF9 | Fig. 1 with the real data of one test clip; Figs. 1–2 relettered in FreeSans (21.15) | Claude | **done 2026-11-14** (21.15–21.16; Fig. 1 now 102 mm, 12 pp); all changed files on Overleaf (12 pp, 0 errors, same layout as local); not committed |
+| JF10 | Figs. 2–3 improved: generated 84-mm Fig. 3 (21.17); Fig. 2 redesigned in the token-and-lane style after a survey of the papers' architecture figures (21.18) | Claude | **done 2026-11-14** (12 pp, p. 12 unchanged); on Overleaf the same day (same layout); committed `42efe1d` and pushed 2026-11-14 |
+| JF9 | Fig. 1 with the real data of one test clip; Figs. 1–2 relettered in FreeSans (21.15) | Claude | **done 2026-11-14** (21.15–21.16; Fig. 1 now 102 mm, 12 pp); all changed files on Overleaf (12 pp, 0 errors, same layout as local); committed `42efe1d` and pushed 2026-11-14 |
 
 ### 21.9 Applied (2026-11-13, Yuvraj: "Yes, fixes + cleanup")
 - **Archive commit `c2827d2`** (before any change): the Overleaf download as received, `research/paper_springer/`
@@ -3144,7 +3144,7 @@ through the legend text ("the components│evaluated …"); move the legend or r
 Fig2.eps after the redraw.
 
 ### 21.13 Figures rebuilt to the manual's rules (2026-11-13, Yuvraj: "Now fix the images")
-- **Format kept: draw.io** (Sanchita's choice); the generators `figures/src/make_{overview,architecture}_drawio.py`
+- **Format kept: draw.io** (Professor Sanchita's choice); the generators `figures/src/make_{overview,architecture}_drawio.py`
   were rewritten and now draw at final size. Export without a display: `figures/src/export_drawio.js` runs draw.io's own
   `export3.html` (app.diagrams.net) in headless Chrome via puppeteer with `crop: '1'` (diagram rendered locally, nothing
   uploaded); Chrome needed only `libasound.so.2` (conda-forge alsa-lib), all installed in the session scratchpad.
@@ -3164,7 +3164,7 @@ Fig2.eps after the redraw.
   header comment documents the figure pipeline. Stale `figures/src/{architecture,overview}.svg` removed (old drawings).
 - **Build:** 12 pp, ≈ 25 free lines on p. 12, 0 overfull, no undefined references; `paper.pdf` refreshed. Committed `bcead4e`.
 - D1–D3 of §21.4 are done. D4 is now explicit: both diagrams are generated from code written with Claude and the AI
-  statement says so; Sanchita's "not AI-generated" rule is the authors' call.
+  statement says so; Professor Sanchita's "not AI-generated" rule is the authors' call.
 
 ### 21.14 JAIHC guidelines, submission package and Overleaf (2026-11-13, Yuvraj: "integrate this with my Overleaf account … include everything that we need for submission")
 - **Guideline check** against link.springer.com/journal/12652/submission-guidelines after 21.13: 12 pp including the
@@ -3296,7 +3296,7 @@ Fig2.eps after the redraw.
   (DeepAVFusion CVPR 2024, NeurIPS MBT, GLP-fusion, DSTC, CORE-Net) draw token sequences as strips or grids of coloured
   squares per modality, encoders as trapezoids or 3D blocks, attention blocks with labelled q and k, v inputs and (+)
   nodes for residuals (AVT-CA, our base model, uses two vertical streams that way), inputs as pictures and outputs as
-  charts. Sanchita's FoleyGAN (IEEE TMM 2023) uses a colour-panelled box flowchart for the model and data-rich
+  charts. Professor Sanchita's FoleyGAN (IEEE TMM 2023) uses a colour-panelled box flowchart for the model and data-rich
   thumbnails for the problem figure. Web: an evidence-based guideline framework for neural-network diagrams
   (Marshall, Freitas, Jay, PLoS ONE 2025: guideline-conforming diagrams are cited more), MulT and arXiv 2201.09165 for
   directional cross-modal attention between two streams.
@@ -3316,3 +3316,124 @@ Fig2.eps after the redraw.
   `cover_letter.tex` and `README.md` into `submission/` (overwrites confirmed in Overleaf's dialog). pdfLaTeX there:
   12 pp, the 3 bookmark warnings, new Fig. 2 on p. 4 and Fig. 3 on p. 10, section 5 starting at the foot of p. 6,
   p. 12's right column ending about halfway — the same layout as the local build. Commit later (Yuvraj).
+
+### 21.19 Statements and Declarations — what each one needs (2026-11-14, Yuvraj: "look at the manual and tell exactly what we need to do")
+Sources: the template user manual only fixes the mechanics (back-matter heads with `\bmhead` after `\backmatter`, Sec. 8.1);
+the content rules are in the JAIHC submission guidelines (read 2026-11-14): a "Statements and Declarations" section before
+the references is required ("submissions that do not include relevant declarations will be returned as incomplete");
+Competing Interests is named as mandatory; the summary asks for Funding and/or Competing interests plus "Ethics approval,
+Consent, Data, Material and/or Code availability and Authors' contribution statements"; funding must also be entered in
+the submission system (it feeds CrossMark); all original research needs a data availability statement (Springer Nature
+research data policy). paper.tex already has the section with all nine heads in the template order.
+
+| Item | Current text | Status / what is needed | From |
+|---|---|---|---|
+| Funding | "did not receive support from any organization" | confirm no grant, fund or paid assistantship supported the work; else funder in full + grant number (also in the form) | Prof. Sanchita, Yuvraj |
+| Competing interests | "no relevant financial or non-financial interests" | both authors confirm (3-year window: employment, consulting, shares, editorial-board roles incl. JAIHC) | both |
+| Ethics approval and consent to participate | "uses only the publicly released EngageNet dataset; no new data were collected" + TODO | add that EngageNet's participants consented to the scope of data use (EngageNet paper, Sec. 3) and that the data were used under the dataset's access conditions; ask whether SFSU's IRB wants a determination for secondary use of identifiable video; the corresponding author must be able to show documentation | Prof. Sanchita (IRB), Yuvraj (access e-mail/terms) |
+| Consent for publication | "Not applicable" | correct: no participant is shown (drawn face, a clip without speech) | — |
+| Data availability | EngageNet from its authors; predictions and derived features on request | acceptable; optional: deposit the per-clip predictions (no personal data) in a repository | Yuvraj |
+| Materials availability | "Not applicable" | correct | — |
+| Code availability | "on reasonable request" + TODO | decide: link the now-public GitHub repo (ideally a tagged release or Zenodo DOI) or keep "on request" | Prof. Sanchita, Yuvraj |
+| Author contributions | "To be completed by the authors" | CRediT statement once the author list is settled (journal recommends it; also entered in the form); names without titles, journal style | both |
+| Use of generative AI | DRAFT paragraph + one sentence in Sec. 4.3 | later: JAIHC wants LLM use documented in the Methods; copy-editing for grammar/readability needs no declaration; LLMs cannot be authors; plus D4 (Prof. Sanchita's view on code-generated diagrams) | later |
+| Acknowledgements (optional) | commented out | e.g. the EngageNet authors for data access; contributors who are not authors | both |
+
+**Authorship to settle first:** the 2026-09-08 notes list Akshit as "co-author on the paper" (methodology section), and
+Gakshith's behavior branch is the model of Sec. 5.4.2. Whether they are authors or acknowledged is for Yuvraj and
+Professor Sanchita to decide (Springer: authors made substantial contributions and approve the final version; others
+go to the acknowledgements). Tracked as JF4.
+
+### 21.20 Statements and Declarations written (2026-11-14, Yuvraj's decisions)
+- Funding: none ("The authors did not receive support from any organization for the submitted work"). Competing
+  interests: none. Ethics: "No new data were collected for this study. It uses the EngageNet dataset, obtained from its
+  authors on request, whose participants consented to the use of their data when it was recorded" (EngageNet paper:
+  "Participants' consent was also requested for the scope of usage of the data"). Consent for publication and materials:
+  not applicable (no participant is shown). Data: EngageNet from its authors on request; per-clip predictions on request.
+  Code: https://github.com/YuvrajGupta1808/AVTCA-Research/tree/development — `main` holds none of the paper's code
+  (47 commits behind), so merge before submission or keep the branch link. Author contributions: Yuvraj Gupta
+  (conceptualization, methodology, software, experiments, analysis, original draft), Sanchita Ghose (conceptualization,
+  supervision, review and editing); author order Yuvraj first, Professor Sanchita last (Springer: the student is usually
+  the principal author of student-led work). AI statement shortened to two sentences at Yuvraj's request (Claude,
+  following the authors' specifications: code, bibliographic metadata, drafting and editing text; authors designed and
+  ran all experiments and take responsibility); no figure-specific wording. None of the papers in papers/ carries an
+  AI statement; the Springer ones keep declarations to one line each.
+- Related work: "The public datasets are" became "The main datasets are" (EngageNet is shared on request).
+- All `% TODO (authors)` / DRAFT comments in the back matter removed. Layout unchanged (12 pp, p. 12 at 138 mm).
+- **Revised the same day (Yuvraj):** code link to the repository itself
+  (https://github.com/YuvrajGupta1808/AVTCA-Research, i.e. `main`; `development` was merged into `main` on 2026-11-14, §21.23), "publicly
+  available"; author contributions in CRediT role names (Yuvraj Gupta: Conceptualization, Methodology, Software,
+  Validation, Formal analysis, Investigation, Data curation, Visualization, Writing – original draft; Sanchita Ghose:
+  Conceptualization, Supervision, Writing – review and editing); the AI statement names "generative AI tools", not the
+  product; "Consent for publication" removed (not required by JAIHC when no participant is shown; consent to participate
+  stays in the ethics item). Still 12 pp, p. 12 at 138 mm.
+- **On Overleaf 2026-11-14** (Yuvraj: "Yes, upload"): `paper.tex` and the checklist `submission/README.md`
+  replaced there; Overleaf builds 12 pp with no errors (3 warnings, the known bookmark ones), and the declarations
+  on p. 11 match the local build. These changes (paper.tex, README, docs) are not committed yet.
+
+### 21.21 Title block filled (2026-11-14, Yuvraj: "You didn't edit the first or the second or the department org and corresponding emails")
+- Yuvraj's answers: corresponding author **Yuvraj Gupta** (`ygupta@sfsu.edu`, the address in the project notes);
+  co-author **Sanchita Ghose** (`sanchitaghose@sfsu.edu`, as on her SFSU faculty page and her AI-LAMP lab page); one
+  affiliation for both, "choose computer science for both": Department of Computer Science, San Francisco State
+  University, 1600 Holloway Avenue, San Francisco, CA 94132, USA. Her faculty page lists her under Computer Engineering in
+  the School of Engineering, so she should confirm her line. The third placeholder author was removed. ORCIDs go into the
+  submission form (the class's `\orcid` needs an `Orcidlogo.eps` the template does not ship).
+- Same block in `supplementary.tex`; the cover-letter signature is Yuvraj (corresponding author) with the same
+  affiliation and e-mail, and its ORCID placeholder was dropped. Only the optional reviewer sentence is still bracketed.
+- The class prints `\orgaddress` in the order given, so `\state{CA} \postcode{94132}` is written in that order to get the
+  US form "San Francisco, CA 94132".
+- **Layout:** still 12 pp, supplement 11 pp, cover letter 1 p, 0 overfull boxes. The address and the e-mail line ("Contributing
+  authors: …") each wrap to two lines, so the title block is 9.6 mm taller than the placeholder. **The two engines now
+  differ.** The local tectonic build reflows: section 5 moves from the foot of p. 6 to p. 7 and p. 12's right column
+  ends at 216 mm (about 6 free lines); a shorter address (no street, or no postcode) still wraps, and even a single
+  e-mail line keeps that reflow. **Overleaf (pdfLaTeX, TeX Live 2026, as the journal's system compiles it) does not
+  reflow:** section 5 still starts at the foot of p. 6 (heading at 220 mm), and p. 12's right column ends at 171 mm
+  (was ~138), leaving about 16 free lines (measured from the viewer's text layer). Judge the page budget on Overleaf
+  from now on; the local `paper.pdf` and the zip's copy have the tectonic page breaks, so put Overleaf's PDF in the
+  zip before submitting.
+- **On Overleaf 2026-11-14** (Yuvraj: "Yes, upload"): `paper.tex` and `supplementary.tex` replaced in `SpringerNature/`,
+  `cover_letter.tex` and the checklist in `submission/`; 12 pp, no errors (the 3 bookmark warnings), title block as
+  local. Not committed.
+
+### 21.22 Supplementary information paragraph corrected (2026-11-14, Yuvraj: "Is this section correct?" … "Okay, go ahead")
+- The old text said "the full ablation" (the full ablation is Section 5.4 of the paper; the supplement adds the
+  segment-count table, the training sweep and the fusion-weight sensitivity) and left out five parts the main text
+  cites: the training objective (S1), the temporal alignment (S3), the label-granularity analysis (S7, Table S4), the
+  behavior-branch table (S10, Table S7) and the modality and fusion-weight tables (S12, Tables S9–S10). Its first line
+  was stretched (Underfull \hbox, badness 10000), because "Online Resource 1 (ESM\_1.pdf)" cannot break after the
+  run-in heading.
+- New text: "The supplementary file, Online Resource 1 (ESM\_1.pdf), gives the decoding rules and threshold search, the
+  training objective, metrics, alignment, cross-attention blocks, training procedure and configuration, and further
+  ablation, cost, label-granularity, per-level, behavior-branch, dataset, modality, fusion-weight and significance
+  results." One line longer, no badness-10000 line, local tectonic build still 12 pp (p. 12 unchanged at 216 mm).
+  Fuller variants that also spelled out "metric definitions" and "paired significance tests" cost two lines and reached
+  13 pp in the tectonic build. The checklist's ESM caption (for the submission form) now matches. The file name
+  `ESM_1.pdf` is unchanged (Springer's ESM naming); copying it from Overleaf's PDF gives "ESM 1.pdf" because the OT1
+  underscore is a drawn rule.
+- **On Overleaf 2026-11-14** (Yuvraj: "Yes, upload"): `paper.tex` and the checklist replaced; 12 pp, no errors (the 3
+  bookmark warnings); the paragraph breaks exactly as in the local build; section 5 still at the foot of p. 6. On
+  Overleaf p. 12's right column now ends at 192 mm (was 171: a reference entry moved over from p. 11), so **about 11
+  free lines** remain there. Not committed.
+
+### 21.23 On GitHub: commit, push, and `development` merged into `main` (2026-11-14, Yuvraj: "do everything that's required for … committing it to GitHub or push it to main … if we cannot [push the paper before it is published], then remove the paper from GitHub and then push what we can")
+- **May the manuscript be public before publication? Yes.** Springer Nature's preprint policy, "a unified policy across
+  all Springer Nature journals" (so JAIHC): posting a preprint "is not considered prior publication and will not
+  jeopardize consideration"; it may be posted before submission or during peer review, on "any legal preprint sharing
+  platform"; authors should disclose it at submission and, once the article is published, update the preprint record
+  with the DOI (springer.com editorial policies, "Preprint sharing"; Springer Nature blog "Four things to know about
+  Springer Nature's new preprint policy"). JAIHC's own guideline page could not be fetched (login redirect). After
+  acceptance the self-archiving rules apply instead: the publisher's PDF is never posted, and the accepted version only
+  as the licence allows. So the paper stays in the repository (it has been public on `development` since the first
+  push that morning).
+- **Disclosure added:** the cover letter now says that a preprint of the manuscript is public, with the code, in the
+  repository named in the Code availability statement (still 1 p.), and the checklist has item 6 (answer "yes" to a
+  preprint question in the submission form, with the repository URL; no DOI; after acceptance no publisher PDF, check the
+  licence, add the DOI once published).
+- **`main`:** `origin/main` (2a96cac, "Merge production …") was 1 commit ahead and 47 behind `development`; its only extra
+  commit is a merge whose tree equals the merge base `d0e00ac`, and a trial merge of `development` into it (scratch
+  worktree) was clean, with a tree identical to `development`. So `development` was merged into `main` with a merge
+  commit (no force push) and both branches were pushed: the repository root, which the Code availability statement
+  links, now holds the paper's code.
+- Before committing, the changes were scanned for private data: no Overleaf project ID, no personal e-mail, no token;
+  the only e-mail addresses are the two SFSU addresses of the title block, which the published paper prints anyway.
+  The untracked `preprocessing/engagenet/backup_2026-08-17/` stays out of git.
