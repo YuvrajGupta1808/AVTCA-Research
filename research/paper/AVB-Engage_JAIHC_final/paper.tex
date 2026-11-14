@@ -14,8 +14,9 @@
 %% results/exp2026/E04_* (ordinal, 5e-5, 8 ep).
 %% Follows the Springer Nature template user manual (v3.1): figures are single image files Fig1-Fig3 on the same level
 %% as this file (manual Sec. 7.3; Fig3.pdf is compiled from figures/Fig3_source.tex, Fig1/Fig2 are draw.io exports
-%% with sources in figures/src/: make_*_drawio.py write the .drawio files at final size, 84/174 mm with 9-pt lettering,
-%% and export_drawio.js exports them), references are in references.bib and formatted by sn-basic.bst (Sec. 8.3), back-matter
+%% with sources in figures/src/: make_*_drawio.py write the .drawio files at final size, 84/174 mm with 9-pt lettering
+%% (FreeSans, a Helvetica clone), Fig1 with the data of one test clip read from the result files, and export_drawio.js
+%% exports them), references are in references.bib and formatted by sn-basic.bst (Sec. 8.3), back-matter
 %% heads use \bmhead (Sec. 8.1). Not [referee]: JAIHC's own 12-page two-column rule takes precedence (manual Sec. 1).
 %% Each figure exists as FigN.pdf and FigN.eps (manual Sec. 7.3: "LaTeX compiler accepts only .eps"); \includegraphics{FigN}
 %% has no extension, so pdfLaTeX uses the PDF and latex/dvips the EPS. After changing a PDF, regenerate its EPS with
@@ -63,7 +64,7 @@ In this paper, we propose \ournet{} (audio, video and behavior), which predicts 
 \begin{figure}[t]
 \centering
 \includegraphics[width=\columnwidth]{Fig1}
-\caption{Overview of \ournet. (A) The audio-visual network produces class probabilities $p_{\mathrm{AV}}$ from face frames and audio; (B) two models on segment statistics of the OpenFace descriptor produce $p_{\mathrm{TF}}$ and $p_{\mathrm{GBM}}$; (C) the three vectors are averaged and decoded into one of four ordered levels}
+\caption{Overview of \ournet, shown on a test clip whose true level is \emph{engaged} (models of the first seed). (A) The audio-visual network reads the face frames, drawn here schematically, and the log-mel spectrogram; (B) two models read segment statistics of the OpenFace descriptor (three of its 22 channels shown); (C) the class probabilities of the three models are averaged with fixed weights, and the expected level $\mu$ of the average is cut at the thresholds $\tau_1$--$\tau_3$ fitted on the validation split}
 \label{fig:overview}
 \end{figure}
 
@@ -90,7 +91,7 @@ We separate \ournet{} into three blocks: A) an audio-visual cross-attention netw
 \begin{figure*}[t]
 \centering
 \includegraphics[width=\textwidth]{Fig2}
-\caption{Proposed \ournet{} architecture in detail. Tensor shapes are traced from a forward pass of the trained configuration ($B$ = batch). (A) Audio tokens are pooled onto the 50-step visual clock of the same clip before the first cross-attention exchange; after the second convolutional stage the audio stream has 12 tokens and the video stream 50; every attention block is cross-modal, and the final pair has no residual connection. (B) Two models on segment statistics of the per-frame OpenFace descriptor. (C) The three class-probability vectors are averaged with fixed weights, reduced to an expected level, and cut by thresholds fitted on the validation split. Blocks marked with a star are the components evaluated in Section~\ref{sec:results}; dashed arrows show the keys and values that each stream takes from the other in the first exchange}
+\caption{Proposed \ournet{} architecture in detail. Token shapes (length $\times$ width) are traced from a forward pass of the trained configuration. (A) Audio tokens are pooled onto the 50-step visual clock of the same clip before the first cross-attention exchange; after the second convolutional stage the audio stream has 12 tokens and the video stream 50; every attention block is cross-modal, and the final pair has no residual connection. (B) Two models on segment statistics of the per-frame OpenFace descriptor. (C) The three class-probability vectors are averaged with fixed weights, reduced to an expected level, and cut by thresholds fitted on the validation split. Blocks marked with a star are the components evaluated in Section~\ref{sec:results}; dashed arrows show the keys and values that each stream takes from the other in the first exchange}
 \label{fig:arch}
 \end{figure*}
 
@@ -279,7 +280,7 @@ Fig.~\ref{fig:confusion} presents the row-normalized test confusion matrices of 
 
 \begin{figure}[t]
 \centering
-\includegraphics{Fig3}
+\includegraphics[width=\columnwidth]{Fig3}
 \caption{Row-normalized test confusion matrices (\%) of the audio-visual network (left) and \ournet{} (right), pooled over three seeds. Levels 0--3: not, barely, engaged, highly engaged}
 \label{fig:confusion}
 \end{figure}
