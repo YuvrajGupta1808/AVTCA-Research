@@ -3437,3 +3437,6 @@ go to the acknowledgements). Tracked as JF4.
 - Before committing, the changes were scanned for private data: no Overleaf project ID, no personal e-mail, no token;
   the only e-mail addresses are the two SFSU addresses of the title block, which the published paper prints anyway.
   The untracked `preprocessing/engagenet/backup_2026-08-17/` stays out of git.
+- The cover letter and checklist with the preprint disclosure were then uploaded to Overleaf's `submission/` folder
+  (Yuvraj: "Yes, upload") and checked there; `paper.tex` was reopened so that Recompile builds the paper. This note
+  is the only change since the push.
