@@ -3041,6 +3041,8 @@ Commit it with the paper so every number traces to committed code.
 | JF6 | Cleanup steps 2–6 of 21.7, with the archive commit | Claude | **done 2026-11-13** (archive `c2827d2`; fixes + cleanup `2461716`) |
 | JF7 | Commit the paper's analysis scripts | Claude | **done 2026-11-13** (`c2827d2`) |
 | JF8 | Submission bundle (A3); upload the fixed folder to Overleaf | Claude / Yuvraj | bundle and Overleaf **done 2026-11-13** (21.14); the journal upload itself waits for JF4; unused old Overleaf files deleted |
+| JF10 | Figs. 2–3 improved: generated 84-mm Fig. 3 (21.17); Fig. 2 redesigned in the token-and-lane style after a survey of the papers' architecture figures (21.18) | Claude | **done 2026-11-14** (12 pp, p. 12 unchanged); on Overleaf the same day (same layout); commit later (Yuvraj) |
+| JF9 | Fig. 1 with the real data of one test clip; Figs. 1–2 relettered in FreeSans (21.15) | Claude | **done 2026-11-14** (21.15–21.16; Fig. 1 now 102 mm, 12 pp); all changed files on Overleaf (12 pp, 0 errors, same layout as local); not committed |
 
 ### 21.9 Applied (2026-11-13, Yuvraj: "Yes, fixes + cleanup")
 - **Archive commit `c2827d2`** (before any change): the Overleaf download as received, `research/paper_springer/`
@@ -3201,3 +3203,116 @@ Fig2.eps after the redraw.
 - **Not changed:** a few reference lines with long DOIs are stretched, because the DOI suffix cannot break. The manual
   asks "Wherever possible please do not add further packages to the template", so `xurl` was not added; Springer
   re-typesets accepted papers.
+
+### 21.15 Fig. 1 redesigned with the data of one test clip (2026-11-14, Yuvraj: "Yes, redesign Fig. 1", "continue to redesign")
+- **Why:** Yuvraj found the figures "very basic". The template's plain look does not matter (Springer re-typesets
+  accepted papers), so the upgrade is content: the flowchart's text boxes now show real data. Same slot (p. 2, one
+  column), same panels (A)/(B)/(C); 84.3 × 94.2 mm (was 89.2 mm tall). Still 12 pp, p. 12 unchanged (right column
+  ends at 138 mm), build warnings identical to `HEAD`.
+- **Example clip:** `subject_82_gofy9p13pj_vid_1_29` (test split, true level 2, *engaged*) with the seed-1 models of
+  the headline fusion (reproduced 70.17 / 70.26 / 70.43 → 70.29 ± 0.14; seed-1 τ = 0.89, 1.15, 1.90):
+  p_AV (0.03, 0.22, 0.60, 0.14), p_TF (0.19, 0.43, 0.34, 0.04), p_GBM (0.03, 0.15, 0.82, 0.02), fused
+  (0.06, 0.25, 0.59, 0.10), μ = 1.73 → level 2. Chosen because all three seeds classify it correctly (μ 1.73–1.76),
+  the members disagree (the Transformer alone says level 1), the fused vector is not flat, the audio has no voiced
+  frame (librosa.pyin, 70–400 Hz; the spectrogram is steady room noise, so no voice is published) and OpenFace tracked
+  all 300 frames.
+- **Panels:** (A) a drawn stack of face crops (no participant: Springer needs written consent for identifiable faces)
+  and the clip's log-mel spectrogram as the network computes it (`get_mel`, 64 × 431; colours scaled to the clip's dB
+  range); (B) AU45 (blinks), gaze y and head pitch from the clip's 22 OpenFace channels; (C) "0.6 p_AV + 0.2 p_TF +
+  0.2 p_GBM = p" as bar charts over levels 0–3, then μ on the 0–3 scale cut at τ1–τ3 → "Level 2, engaged". Caption
+  rewritten (the clip, first seed, face drawn, 3 of 22 channels, μ and τ).
+- **Generator:** `figures/src/make_overview_drawio.py` (avtca env) reads the three members' result files, refits the
+  thresholds with `fuse_members.fit_thresholds`, asserts the seed-1 top-1 70.17 and the clip's level, and writes
+  `overview.drawio` (data panels embedded as SVG; the spectrogram as a PNG upsampled ×2/×6 by nearest neighbour, about
+  1000 dpi). Boxes still editable in draw.io.
+- **Fonts:** headless Chrome here has no Helvetica, so the 2026-11-13 exports of Figs. 1–2 had silently used DejaVu
+  Sans. TeX Gyre Heros (CFF) gets embedded as Type 3; FreeSans (TrueType Nimbus Sans clone, fetched from the tectonic
+  bundle) embeds as TrueType. Export with `FONTCONFIG_FILE` pointing to a private fonts.conf that prepends FreeSans for
+  Helvetica (no system change). Fig. 2 re-exported the same way, geometry unchanged; its ★ now comes from DejaVu Sans
+  explicitly (a faked-bold fallback had produced a Type 3 font). Figs. 1–2 now embed only TrueType fonts; both read
+  in grey.
+- **EPS:** plain `gs -sDEVICE=eps2write`; `-dColorImageFilter=/FlateEncode` fails (Level-2 PostScript has no Flate)
+  and is not needed: an EPS → PDF round trip returns the 862 × 384 spectrogram byte-identical.
+- **Also updated:** paper.tex header comment, `paper.pdf`, cover letter (data panels from the result files, "a drawn
+  face, not a participant"; still 1 p), submission README (fonts, the one bitmap, graphics programs, rebuild steps),
+  zip (15 files).
+- **Overleaf (2026-11-14, Yuvraj: "Yes, upload"):** Fig1/Fig2 (.pdf, .eps) and `paper.tex` uploaded into
+  `SpringerNature/` (Overleaf asked to overwrite the five files; history keeps the old ones). Overwriting kept the
+  main document at `SpringerNature/paper.tex`. Recompiled: 12 pp, 0 errors, the same 3 hyperref bookmark warnings,
+  new Fig. 1 and caption on p. 2. Not uploaded (not part of the request): the updated `submission/cover_letter.tex`
+  and `submission/README.md`. Not committed yet (JF9).
+
+### 21.16 Fig. 1 given more room (2026-11-14, Yuvraj: "there is some space after 12th page … extend the image vertically … it's kind of looking cluttered … can we improve that section")
+- **Layout:** same content as 21.15, with more space: data panels 50 px tall (were 44), probability bars 36 px for
+  p = 1 (were 28) spread over the full width, larger "+"/"=" signs, the scale row labelled "Expected level ▼ μ = 1.73",
+  "Segment Transformer" spelled out again, wider gaps between rows. 84.3 × 101.9 mm (was 94.2 mm).
+- **Height limit** (sweep with blank 84-mm placeholders for Fig1.pdf, local XeTeX build): up to 106.0 mm nothing after
+  p. 2 moves, because p. 2's columns absorb the height (p. 12's right column still ends at 138 mm, about 100 mm free).
+  From 106.5 mm on, "5 Results and discussion" no longer fits at the bottom of p. 6, the floats reflow and p. 12 fills
+  to 233 mm. A 112-mm version (tried first) still gave 12 pp but would leave almost no room for the real author block
+  and the declarations. Chosen: 102 mm, 4 mm under the flip, since Overleaf's pdfLaTeX breaks lines slightly
+  differently from XeTeX.
+- **Checks:** 12 pp; section 5 on p. 6; Fig. 3 on p. 10; p. 12 unchanged (right column ends at 138 mm); no overfull
+  box; the other build messages are the same as for `HEAD`. Fig1.eps rewritten (bounding box 239 × 289 bp); its
+  spectrogram round-trips byte-identical. `paper.pdf` and the zip refreshed. paper.tex unchanged since the 21.15 upload.
+- **Overleaf (2026-11-14, Yuvraj: "Yes, upload"):** Fig1.pdf/.eps into `SpringerNature/`, `cover_letter.tex` and
+  `README.md` into `submission/` (each overwrite confirmed in Overleaf's dialog). pdfLaTeX there matches the local
+  layout: 12 pp, 0 errors, the 3 bookmark warnings, section 5 starts at the foot of p. 6, p. 12's right column ends
+  about halfway down; the cover letter builds to 1 p. with the new figure sentence.
+- **Overleaf compiles the open file if it declares a document class.** With README.md open, Recompile ran
+  `pdflatex README` and failed ("README.tex" not found), because the checklist quoted the class command; with
+  `cover_letter.tex` open it built the letter although `paper.tex` is the main document; with `references.bib` open it
+  built the paper. The checklist no longer contains the command and says so; its Overleaf note now reads: open
+  `supplementary.tex` or `cover_letter.tex` and recompile to get those PDFs. The stored main document was also
+  re-selected from the file tree (it still held the paper's ID from before the 21.15 overwrite).
+- **Open:** nothing committed (JF9).
+
+### 21.17 Figs. 2 and 3 improved (2026-11-14, Yuvraj: "Let's fix the other figures and then we can commit later on")
+- **Fig. 3** (confusion matrices) is now generated: `figures/src/make_confusion_tikz.py` writes `figures/fig_confusion.tex`
+  from the pooled counts in `results/paper_springer/analysis.json` (row percentages rounded once, as before; values
+  unchanged). 84 × 45 mm (was 70.6 × 39.4 mm at natural size), 9-pt TeX Gyre Heros, included at `\columnwidth`
+  (8.1 pt in the 76-mm review column). The two matrices share the row axis, which names the levels (not, barely,
+  engaged, highly) next to their numbers, with "true level" as the corner header; cells on the ColorBrewer Blues ramp
+  of the Fig. 1 spectrogram (fixed 0–100 %), white numbers only where the contrast reaches 4.5:1, diagonal in bold,
+  panel titles in the network blue and fusion orange of Figs. 1–2. A white ground at the full size makes the EPS
+  bounding box equal the page (eps2write measures marks, so it had cut 2.5 mm). Reads in grey.
+- **Fig. 2** (architecture) keeps its 174 × 128 mm footprint and every box position: the three input boxes carry
+  thumbnails of the Fig. 1 clip (face drawing, spectrogram, OpenFace curves), and panel C draws the ordered scale cut at
+  the seed-1 thresholds between "Expected level" and "Level ŷ", filling its former blank. The clip data and the panel
+  drawings moved to the shared `figures/src/clip_panels.py` (Fig. 1's `overview.drawio` regenerates byte-identical);
+  `make_architecture_drawio.py` now needs the avtca environment.
+- **Layout guard:** a caption note on Fig. 2 ("with the inputs of Fig. 1 as thumbnails", or the shorter "input
+  thumbnails as in Fig. 1" at the end) pushed its full-width caption from 7 to 8 lines, and that one line moved p. 12's
+  right column from 138 to 188 mm (variant builds isolated it; the new Figs. 2–3 alone change nothing). Dropped: the
+  thumbnails are the drawings Fig. 1's caption already explains.
+- **Checks:** 12 pp, section 5 on p. 6, Fig. 3 on p. 10, p. 12 unchanged (138 mm), no overfull box; all figure fonts
+  TrueType or CID (no Type 3); Fig2.eps's spectrogram round-trips byte-identical; EPS bounding boxes 494 × 363 and
+  239 × 128 bp. Cover letter: "Figures 1 and 2 show a drawn face" (still 1 p). Checklist, `paper.pdf` and zip refreshed.
+- **Open:** upload Fig2/Fig3 (.pdf, .eps), `paper.tex` (Fig. 3 now at `\columnwidth`), the cover letter and the
+  checklist to Overleaf; commit later, as Yuvraj asked.
+
+### 21.18 Fig. 2 redesigned after a survey of architecture figures (2026-11-14, Yuvraj: "it looks like a very ordinary looking flowchart … go through all the papers we have … do a little bit search and then build it")
+- **Survey** of the architecture figures in `papers/` (14 papers; crops in the session scratchpad): the modern ones
+  (DeepAVFusion CVPR 2024, NeurIPS MBT, GLP-fusion, DSTC, CORE-Net) draw token sequences as strips or grids of coloured
+  squares per modality, encoders as trapezoids or 3D blocks, attention blocks with labelled q and k, v inputs and (+)
+  nodes for residuals (AVT-CA, our base model, uses two vertical streams that way), inputs as pictures and outputs as
+  charts. Sanchita's FoleyGAN (IEEE TMM 2023) uses a colour-panelled box flowchart for the model and data-rich
+  thumbnails for the problem figure. Web: an evidence-based guideline framework for neural-network diagrams
+  (Marshall, Freitas, Jay, PLoS ONE 2025: guideline-conforming diagrams are cited more), MulT and arXiv 2201.09165 for
+  directional cross-modal attention between two streams.
+- **New Fig. 2** (same 174 × 128 mm footprint, panels and box order): (A) video and audio lanes, inputs as the Fig. 1
+  clip's face crops and spectrogram, trapezoid encoders, token strips with one square per eight steps (audio 107 steps
+  → ★ per-sample alignment → 50; after stage 2 video 50 and audio 12 tokens), the ★ modality-dropout frame around both
+  aligned sequences, three amber cross-attention blocks per lane with q and dashed k, v inputs drawn for the first
+  exchange, (+) nodes with skip lines for exchanges 1–2 and none for 3, attention pooling, the 128-wide pooled vectors,
+  the head and the clip's p_AV bars; (B) the OpenFace curves, 20 segment tokens (20 × 44) forking into the segment
+  Transformer and gradient boosting, with p_TF and p_GBM bars; (C) late fusion, the fused bars, expected level, the
+  τ-cut scale and ŷ. Token shapes are written length × width (batch omitted); the caption's "(B = batch)" became
+  "Token shapes (length × width) are traced…", still 7 lines. Fonts TrueType only; one lossless bitmap; reads in grey.
+- **Checks:** 12 pp, section 5 on p. 6, Fig. 3 on p. 10, p. 12 unchanged (138 mm), no overfull box; Fig2.eps spectrogram
+  round-trips byte-identical; cover letter ("data panels of Figures 1 and 2 computed from the dataset and our result
+  files", 1 p.), checklist and zip refreshed.
+- **Overleaf (2026-11-14, Yuvraj: "Yes, upload"):** Fig2/Fig3 (.pdf, .eps) and `paper.tex` into `SpringerNature/`,
+  `cover_letter.tex` and `README.md` into `submission/` (overwrites confirmed in Overleaf's dialog). pdfLaTeX there:
+  12 pp, the 3 bookmark warnings, new Fig. 2 on p. 4 and Fig. 3 on p. 10, section 5 starting at the foot of p. 6,
+  p. 12's right column ending about halfway — the same layout as the local build. Commit later (Yuvraj).
