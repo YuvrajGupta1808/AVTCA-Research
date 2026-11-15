@@ -12,9 +12,9 @@ Exact McNemar tests on the 2,256 test clips, with the same decoders as the paper
      stored value before testing.
 
 Provenance: the stored results/paper_jaihc/sigtest/*.npz files were collected (2026-11-13) with the code of
-commit 39ea143, the commit the nine networks were trained and calibrated with (see their calib.log).
+commit 88f8652, the commit the nine networks were trained and calibrated with (see their calib.log).
 `collect` now runs this repository by default (--code_tree selects another checkout, e.g. a worktree of
-39ea143); later code reproduces the seed-1 logits to about 3e-4 on CPU, which `analyze` checks clip by clip.
+88f8652); later code reproduces the seed-1 logits to about 3e-4 on CPU, which `analyze` checks clip by clip.
 The paper's numbers come from `analyze` on the stored files; `collect` (GPU) was not rerun after 2026-11-13.
 
 Usage (avtca environment):
@@ -36,7 +36,7 @@ FC = os.path.join(ROOT, 'results', 'fullclip')
 OUT = os.path.join(ROOT, 'results', 'paper_jaihc')
 CACHE = os.path.join(OUT, 'sigtest')
 # Code tree that `collect` imports the model from: this repository unless --code_tree names another
-# checkout (the nine networks were trained and calibrated with commit 39ea143; see their calib.log).
+# checkout (the nine networks were trained and calibrated with commit 88f8652; see their calib.log).
 CODE_TREE = ROOT
 ANN = os.path.join(ROOT, 'preprocessing', 'engagenet', 'annotations_engagement_a10_subject.txt')
 RUNS = [f'{arm}_s{s}' for arm in ('A_av', 'B_beh', 'C_behtext') for s in (1, 2, 3)]
@@ -128,7 +128,7 @@ def analyze():
     sys.path.insert(0, os.path.join(ROOT, 'scripts', 'paper'))
     sys.path.insert(0, ROOT)
     import springer_analysis as sa
-    from src.engine.calibration import decode_expected_thresholds  # unchanged since the runs (39ea143)
+    from src.engine.calibration import decode_expected_thresholds  # unchanged since the runs (88f8652)
     res = dict(fusion_vs_members=[], audio_vs_video=[])
     gbm = sa.load(os.path.join(FC, 'gbm', 'probs.npz'))
     stored = json.load(open(os.path.join(ROOT, 'results', 'paper_springer', 'analysis.json')))['per_seed']

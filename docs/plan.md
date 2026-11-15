@@ -1441,8 +1441,8 @@ in which case the labels, not the model, are the ceiling.
 ## 15. Collaborator branch evaluation — `feat/behavior-text-fusion` (2026-08-16)
 
 First external contribution to the repo (author: Gakshith). Evaluated **without merging**, in a detached
-git worktree at `~/AVTCA-collab-test` on `f9cce71`. Six commits, +1595/-23 across 25 files,
-branched from `development` at `3def305`.
+git worktree at `~/AVTCA-collab-test` on `a1ff448`. Six commits, +1595/-23 across 25 files,
+branched from `development` at `80b432d`.
 
 ### What the branch adds
 
@@ -2008,7 +2008,7 @@ figure stands in for the draw.io one (P6); swap if the "not AI-generated" rule a
 
 Yuvraj: Professor Sanchita's FoleyGAN paper (`papers/research/prof papeer.pdf`, IEEE TMM 2023) is the only format
 benchmark; every statement must be specific and true. `research/paper/paper.tex` was rewritten section
-for section on it (previous version kept in git, commit 9e5adca):
+for section on it (previous version kept in git, commit 2803a77):
 
 | FoleyGAN | Ours |
 |---|---|
@@ -2940,7 +2940,7 @@ and the qualifiers lost in the cut (F1, F3–F11), which is where every error ab
 2. Move the editable figure sources (tracked) into the final folder with `git mv`:
    `research/paper/figures/{architecture,overview}.{drawio,svg}` and `figures/src/make_{architecture,overview}_drawio.py`
    → `AVB-Engage_JAIHC_final/figures/src/`.
-3. Delete the tracked IEEE-draft files (recoverable from git, last at 46a84cc): `research/paper/paper.tex`,
+3. Delete the tracked IEEE-draft files (recoverable from git, last at 934091e): `research/paper/paper.tex`,
    `research/paper/paper_claude_draft_2026-09-08.tex`, the rest of `research/paper/figures/` (older `fig_*.tex` and
    duplicate PDFs); delete the ignored build `research/paper/paper.pdf`.
 4. Delete the untracked folders, which cannot be recovered unless archived first: `research/paper_jaihc/` (stale
@@ -2972,18 +2972,18 @@ Commit it with the paper so every number traces to committed code.
 | JF2 | Apply F16–F26 | Claude | **done 2026-11-13** (arXiv DOI links left out for page space) |
 | JF3 | draw.io edits D1–D3; decide D4 | Claude / Yuvraj | D1–D3 **done 2026-11-13** (21.13); D4 open — both diagrams are generated from code written with Claude (the AI statement says so); keeping that against Professor Sanchita's "not AI-generated" rule is the authors' call |
 | JF4 | Title block, declarations, AI statement (A1–A2) | Yuvraj / Professor Sanchita | declarations **written 2026-11-14** (21.20), on Overleaf the same day; **title block filled 2026-11-14** (21.21: Yuvraj corresponding, both Dept. of Computer Science, SFSU), on Overleaf the same day (12 pp; judge the layout there, not in the tectonic build); open: Professor Sanchita confirms her line and the contribution split |
-| JF5 | Paired significance tests for the supplement (21.5) | Claude | **done 2026-11-13** (Section S13, Tables S11–S12; 21.10) — committed `ed6d2c4` |
-| JF6 | Cleanup steps 2–6 of 21.7, with the archive commit | Claude | **done 2026-11-13** (archive `c2827d2`; fixes + cleanup `2461716`) |
-| JF7 | Commit the paper's analysis scripts | Claude | **done 2026-11-13** (`c2827d2`) |
+| JF5 | Paired significance tests for the supplement (21.5) | Claude | **done 2026-11-13** (Section S13, Tables S11–S12; 21.10) — committed `8b5b6f1` |
+| JF6 | Cleanup steps 2–6 of 21.7, with the archive commit | Claude | **done 2026-11-13** (archive `4dcf929`; fixes + cleanup `0ff89c8`) |
+| JF7 | Commit the paper's analysis scripts | Claude | **done 2026-11-13** (`4dcf929`) |
 | JF8 | Submission bundle (A3); upload the fixed folder to Overleaf | Claude / Yuvraj | bundle and Overleaf **done 2026-11-13** (21.14); the journal upload itself waits for JF4; unused old Overleaf files deleted |
-| JF10 | Figs. 2–3 improved: generated 84-mm Fig. 3 (21.17); Fig. 2 redesigned in the token-and-lane style after a survey of the papers' architecture figures (21.18) | Claude | **done 2026-11-14** (12 pp, p. 12 unchanged); on Overleaf the same day (same layout); committed `42efe1d` and pushed 2026-11-14 |
-| JF9 | Fig. 1 with the real data of one test clip; Figs. 1–2 relettered in FreeSans (21.15) | Claude | **done 2026-11-14** (21.15–21.16; Fig. 1 now 102 mm, 12 pp); all changed files on Overleaf (12 pp, 0 errors, same layout as local); committed `42efe1d` and pushed 2026-11-14 |
+| JF10 | Figs. 2–3 improved: generated 84-mm Fig. 3 (21.17); Fig. 2 redesigned in the token-and-lane style after a survey of the papers' architecture figures (21.18) | Claude | **done 2026-11-14** (12 pp, p. 12 unchanged); on Overleaf the same day (same layout); committed `073b06b` and pushed 2026-11-14 |
+| JF9 | Fig. 1 with the real data of one test clip; Figs. 1–2 relettered in FreeSans (21.15) | Claude | **done 2026-11-14** (21.15–21.16; Fig. 1 now 102 mm, 12 pp); all changed files on Overleaf (12 pp, 0 errors, same layout as local); committed `073b06b` and pushed 2026-11-14 |
 
 ### 21.9 Applied (2026-11-13, Yuvraj: "Yes, fixes + cleanup")
-- **Archive commit `c2827d2`** (before any change): the Overleaf download as received, `research/paper_springer/`
+- **Archive commit `4dcf929`** (before any change): the Overleaf download as received, `research/paper_springer/`
   (22 pp), `research/paper_jaihc/` (first 12-pp cut) and the uncommitted analysis scripts (`scripts/fullclip/*` edits,
   `scripts/paper/`, `run_f98_pipeline.sh`, `extract_behavior_full.py`). Recover any old file with
-  `git show c2827d2:<path>` (the IEEE draft: `git show 46a84cc:research/paper/paper.tex`).
+  `git show 4dcf929:<path>` (the IEEE draft: `git show 934091e:research/paper/paper.tex`).
 - **Fixes F1–F26** applied to `paper.tex` (35 exact replacements) and `supplementary.tex` (13), each matched exactly
   once; header comments rewritten, ASCII only. Deviations from 21.4, all for page space: the three arXiv DOI links were
   not added (OpenFace and EfficientFace DOIs were); §5.4.3 drops the clause on the lowest values (Table S10 now lists
@@ -2996,7 +2996,7 @@ Commit it with the paper so every number traces to committed code.
   write next to themselves); deleted `research/paper/{paper.tex, paper_claude_draft_2026-09-08.tex, paper.pdf,
   figures/}`, `research/paper_jaihc/`, `research/paper_springer/` and the unused `fig_concept.tex`/`fig_results.tex`.
   `research/` now holds only `research/paper/.gitignore` and `research/paper/AVB-Engage_JAIHC_final/`.
-- **Committed** as `2461716` (research/ only; the docs changes stay uncommitted with earlier sessions' edits).
+- **Committed** as `0ff89c8` (research/ only; the docs changes stay uncommitted with earlier sessions' edits).
   The local folder now differs from the 2026-11-12 Overleaf project: upload `paper.tex`, `supplementary.tex` and
   `figures/` (the `figures/src/` folder is optional on Overleaf).
 
@@ -3006,7 +3006,7 @@ Commit it with the paper so every number traces to committed code.
   (`collect` on GPU, `analyze` on CPU) → `results/paper_jaihc/significance.json`; per-clip logits cached in
   `results/paper_jaihc/sigtest/<run>.npz` (validation and test, without ablation and with audio zeroed).
 - **Reproduction checks (all pass).** The nine networks were re-run from the tree that produced them
-  (`~/AVTCA-collab-test`, commit 39ea143) with `preprocessing/engagenet/annotations_engagement_a10_subject.txt` (the
+  (`~/AVTCA-collab-test`, commit 88f8652) with `preprocessing/engagenet/annotations_engagement_a10_subject.txt` (the
   runs' own annotation file no longer exists; this copy has the same clip order and labels). No-ablation test logits
   equal the saved `context/logits.npz` (max difference 0.0); every network × condition top-1 equals its stored
   calibration value; the AVB-Engage and member predictions equal `analysis.json` (Table 2). About 90 s per network
@@ -3097,7 +3097,7 @@ Fig2.eps after the redraw.
   anti-aliasing; the grayscale render also shows the figure reads without colour). Fig3 unchanged (TikZ, 8 pt).
 - **Text:** AI statement now names "the two diagrams (Figs. 1 and 2)" instead of only the architecture diagram; paper
   header comment documents the figure pipeline. Stale `figures/src/{architecture,overview}.svg` removed (old drawings).
-- **Build:** 12 pp, ≈ 25 free lines on p. 12, 0 overfull, no undefined references; `paper.pdf` refreshed. Committed `bcead4e`.
+- **Build:** 12 pp, ≈ 25 free lines on p. 12, 0 overfull, no undefined references; `paper.pdf` refreshed. Committed `51b5517`.
 - D1–D3 of §21.4 are done. D4 is now explicit: both diagrams are generated from code written with Claude and the AI
   statement says so; Professor Sanchita's "not AI-generated" rule is the authors' call.
 
@@ -3134,7 +3134,7 @@ Fig2.eps after the redraw.
   2, 4 and 10–12 were inspected: Figs. 1–3 and the back matter look as in the local build.
 - **Removed from Overleaf** (Yuvraj: "Yes, delete them"): `SpringerNature/figures/{architecture.pdf, overview.pdf,
   fig_concept.tex, fig_confusion.tex, fig_results.tex}`, unused figures of the pre-fix version (copies in archive
-  commit `c2827d2`). Recompiled afterwards: still 12 pp, 0 errors, the same 3 bookmark warnings.
+  commit `4dcf929`). Recompiled afterwards: still 12 pp, 0 errors, the same 3 bookmark warnings.
 - **Not changed:** a few reference lines with long DOIs are stretched, because the DOI suffix cannot break. The manual
   asks "Wherever possible please do not add further packages to the template", so `xurl` was not added; Springer
   re-typesets accepted papers.
@@ -3364,8 +3364,8 @@ go to the acknowledgements). Tracked as JF4.
   repository named in the Code availability statement (still 1 p.), and the checklist has item 6 (answer "yes" to a
   preprint question in the submission form, with the repository URL; no DOI; after acceptance no publisher PDF, check the
   licence, add the DOI once published).
-- **`main`:** `origin/main` (2a96cac, "Merge production …") was 1 commit ahead and 47 behind `development`; its only extra
-  commit is a merge whose tree equals the merge base `d0e00ac`, and a trial merge of `development` into it (scratch
+- **`main`:** `origin/main` (05cf572, "Merge production …") was 1 commit ahead and 47 behind `development`; its only extra
+  commit is a merge whose tree equals the merge base `a9ee0cf`, and a trial merge of `development` into it (scratch
   worktree) was clean, with a tree identical to `development`. So `development` was merged into `main` with a merge
   commit (no force push) and both branches were pushed: the repository root, which the Code availability statement
   links, now holds the paper's code.
@@ -3419,7 +3419,7 @@ files) is not in the state that the paper's "Code availability" statement implie
 |---|---|---|---|---|
 | P1 | §4.3 "The test split is used only for the final evaluation … each reported test result is computed once" | The network's training recipe (class-balanced sampler) was the best of 14 sweep runs **by test top-1**; that run is network seed 1. By validation the control would have won | `scripts/night/collect.py:49-58`, `phase2.py:59`, `results/night/WINNER`; validation (refined) control 68.63, sampler run 67.97 | "No checkpoint, model size, fusion weight or threshold was fitted on the test split. The training recipe of the network was taken from the sweep of Table S2, in which test accuracy was inspected; its three-seed mean is 0.18 points above the control of that sweep." |
 | P2 | Abstract, contribution 2, §5.3, conclusion: decoding adds 1.99 points, "more than any training change" | 1.99 is the gain of the reported recipe only. Same network without the sampler: +0.80; the other 11 sweep runs: −0.04 to +1.33 (median 0.80). The sampler lowers argmax accuracy by 0.76 and thresholds give it back, so the comparison with "any training change" is partly circular. Thresholds lower both behaviour models (Transformer 67.58 → 66.99, GBM 66.53 → 66.27). By validation accuracy the logit-bias decoder would be chosen (test 65.06) | calibration files of the 14 `results/night/G*` runs; recomputed argmax of the members | Keep 1.99 as the measured value, add in §5.3: "The size of the gain depends on the training recipe (from −0.04 to +2.39 points over the fourteen runs of Table S2, 0.80 for the same network without the class-balanced sampler), and thresholds do not raise the accuracy of the two behavior models." Soften contribution 2 to "by up to two points". |
-| P3 | §2, §3.1, §3.1.2, §3.1.5 | The network code descends from Chumachenko, Iosifidis and Gabbouj (ICPR 2022): the repository's `LICENSE` carries her copyright, and the intermediate fusion and the modality dropout are hers. The paper cites only AVT-CA. The backbone is also not stock EfficientFace: the modulator runs before stage 2 on 29 channels and its 27 tensors are not pre-trained | `LICENSE:3`; `models/multimodal_cnn.py:81,104` (commit `210d2d0`); run logs "loaded 389 layers, skipped 27" | Add the reference (Proc. ICPR 2022, pp. 2822–2828, doi 10.1109/ICPR56361.2022.9956592) at the fusion and at the modality dropout; write "a modified EfficientFace backbone, in which the modulator precedes the second stage and is trained from random initialization". One reference is about 4 lines of the ~11 free lines on p. 12: check on Overleaf. |
+| P3 | §2, §3.1, §3.1.2, §3.1.5 | The network code descends from Chumachenko, Iosifidis and Gabbouj (ICPR 2022): the repository's `LICENSE` carries her copyright, and the intermediate fusion and the modality dropout are hers. The paper cites only AVT-CA. The backbone is also not stock EfficientFace: the modulator runs before stage 2 on 29 channels and its 27 tensors are not pre-trained | `LICENSE:3`; `models/multimodal_cnn.py:81,104` (commit `42f2845`); run logs "loaded 389 layers, skipped 27" | Add the reference (Proc. ICPR 2022, pp. 2822–2828, doi 10.1109/ICPR56361.2022.9956592) at the fusion and at the modality dropout; write "a modified EfficientFace backbone, in which the modulator precedes the second stage and is trained from random initialization". One reference is about 4 lines of the ~11 free lines on p. 12: check on Overleaf. |
 | P4 | §5.4.3 "any network weight from 0.5 to 0.7 gives 69.95–70.07%" | True only for 0.5, 0.6, 0.7. Stored 0.05 grid: 0.55 → 69.52 ± 1.40 (one seed 67.91), 0.65 → 70.23 ± 0.33 | `results/paper_springer/analysis.json` → `sensitivity.two_way_av_gbm` | "network weights of 0.5, 0.6 and 0.7 give 69.95–70.07%" (optionally: "at 0.55 the thresholds of one seed transfer poorly, 69.52 ± 1.40%") |
 | P5 | Fig. 2 caption "Blocks marked with a star are the components evaluated in Section 5"; §5.7 "adopted from the emotion-recognition setting" | Alignment and modality dropout carry stars but are never ablated, as §5.7 itself says; the alignment is this work's addition, not adopted | caption; §5.7 | Caption: "… are the components added to the AVT-CA fusion in this work" (keep 7 caption lines). §5.7: "were fixed before the experiments". |
 | P6 | §5.1 "Table 1 lists the published results … together with AVB-Engage and its components" | Table 1 has one row for this work; the components are in Table 2 | Table 1 | Drop "and its components". |
@@ -3556,3 +3556,40 @@ now gitignored) stops future commits from carrying them. Every earlier commit on
 6. Whether §20 (the recorded class session) and the internal notes should stay in the public repository.
 7. Before captions are generated again, refit `preprocessing/engagenet/behavior_caption_stats.json` (fitted at the old
    fixed 30 fps).
+
+### 22.9 Repository clean-up and history rewrite (2026-11-15, Yuvraj: "do all the stuff which is remaining")
+
+Yuvraj's choices in the question dialog: rewrite the history and force-push; delete the three stale branches; untrack
+the EfficientFace weights; shorten §20; attribute the three commits from another SFSU cluster account to himself.
+
+- **Commits** on `development`: `cd9c37f` (paper), `188b409` (code), `92921a8` (scripts; untracks the dataset files,
+  the weights and the login helper), `f5bc772` (repository files), `30b5ca0` (docs). The caption statistics were
+  refitted with the frame-rate-aware code: only the blink-rate thresholds changed (0.066 / 0.205 → 0.100 / 0.300).
+- **Branches deleted on GitHub:** `EngageNet`, `feat/cmu-mosei-and-streamlit-ui`, `yuvraj/ui-streamlit`. All three were
+  merged into `main`; their tips are in its history.
+- **History rewrite** (git-filter-repo, on a mirror of GitHub plus the local branches):
+  - removed the 22 historical paths of the dataset-derived files and the login helper;
+  - replaced the home path with the account number, and the bare number, in every file of every commit;
+  - replaced the MOSEI share link;
+  - mapped the cluster-account identity to Yuvraj's noreply address.
+  94 commits before and after; none was dropped.
+- **Checked before the push:**
+  - no object contains the account number, the second ID, the share link or the cluster host name;
+  - none of the 22 paths occurs in any commit;
+  - `development`'s tree is byte-identical to before;
+  - on each of the 21 GitHub branches, the tip differs only in the stripped files or the replaced paths.
+- **Force-push:** 21 branches in one atomic push with a lease per branch. New tips: `main` `f8b7d7b`, `development`
+  `30b5ca0` (before this note). The local branches were moved to the rewritten history; the files are unchanged.
+- **Backups**, outside the repository, in `~/AVTCA-Research-backups/2026-11-15-before-history-rewrite/`:
+  - `local-all-refs.bundle`: every local ref before the rewrite;
+  - `github-mirror.git`: GitHub as it was;
+  - `commit-map.txt`: old → new SHA for all 94 commits.
+  Every commit hash cited in the README, docs, scripts and memory notes was mapped to its new value.
+- **What a rewrite cannot reach:**
+  - Gakshith's fork (`Gakshith/AVTCA-Research`, created 2026-08-16) keeps the old history.
+  - GitHub keeps old commits reachable by SHA, including through the pull-request ref, until GitHub Support purges
+    them; `commit-map.txt` lists the affected commits.
+  - Any clone made before today keeps the old history too.
+- **Local leftovers, not touched:** the stale `refs/remotes/old-origin/*` refs (no such remote is configured) and the
+  reflog still reach the old commits locally. The 28 GB `.git` is mostly unreachable old blobs. Deleting those refs,
+  expiring the reflog and running `git gc --prune=now` would free the space.

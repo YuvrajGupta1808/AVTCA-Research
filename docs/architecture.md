@@ -46,7 +46,7 @@ not drawn separately. The Streamlit UI runs the same architecture with the earli
 checkpoints (`ui/inference.py`), not these runs and not the fusion. The neural behavior branch (`--behavior`,
 arm B) is not drawn: it scores the same as arm A and is not part of the headline pipeline. It is still
 in the code and is documented in the "Behavior stream" section below. The pre-September RAVDESS 8-class
-diagram is retained as history in git (commit 0043f9f and earlier).
+diagram is retained as history in git (commit adf5e97 and earlier).
 
 ```mermaid
 flowchart TD

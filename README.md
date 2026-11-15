@@ -303,8 +303,8 @@ OpenFace models or the fusion. It loads the stage-3 (E04) and stage-2 checkpoint
 - **The EfficientFace starting weights.** Download them from the EfficientFace repository (Installation).
 - **Run outputs.** `results/` and `logs/` are git-ignored.
 - **The exact code of the pre-training stages.**
-  - Stages 1–3 ran on uncommitted code between commits `49f1918` (2026-06-11) and `39ea143` (2026-09-12).
-  - The reported fine-tunes ran on the tree of `39ea143`.
+  - Stages 1–3 ran on uncommitted code between commits `9c82bc4` (2026-06-11) and `88f8652` (2026-09-12).
+  - The reported fine-tunes ran on the tree of `88f8652`.
   - The current code reproduces the stored validation logits of seed 1 to within 3e-4 (24 clips checked,
     2026-11-14).
   - The four stages have not been re-run from the AffectNet initialization with the current code.
