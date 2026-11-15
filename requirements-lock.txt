@@ -1,0 +1,31 @@
+# Exact package versions of the environment that produced the paper's results
+# (conda environment "avtca": Python 3.10.20, Linux x86_64, PyTorch CUDA 12.1 build, NVIDIA RTX 3090).
+#
+#   conda create -n avtca python=3.10 && conda activate avtca
+#   pip install torch==2.5.1 torchvision==0.20.1 --index-url https://download.pytorch.org/whl/cu121
+#   pip install -r requirements-lock.txt
+#
+# librosa 0.8.1 is required to reproduce the mel features bit for bit: from 0.10 the STFT is padded with zeros
+# instead of reflection, which changes the first two and the last of the 431 mel frames of a 10 s clip (README).
+# librosa 0.8.1 needs numpy < 1.24 and setuptools with pkg_resources (< 82).
+torch==2.5.1
+torchvision==0.20.1
+numpy==1.23.5
+scipy==1.15.3
+scikit-learn==1.7.2
+librosa==0.8.1
+numba==0.65.1
+llvmlite==0.47.0
+resampy==0.4.3
+audioread==3.1.0
+soundfile==0.13.1
+opencv-python==4.9.0.80
+Pillow==12.2.0
+tqdm==4.67.3
+facenet-pytorch==2.5.3
+imageio-ffmpeg==0.6.0
+setuptools==81.0.0
+pytest==9.0.3
+# Streamlit UI only
+streamlit==1.57.0
+pandas==2.3.3

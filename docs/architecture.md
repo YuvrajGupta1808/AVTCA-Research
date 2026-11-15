@@ -1,8 +1,11 @@
-# Current Architecture: RAVDESS Best Verified Model
+# Architecture: AVB-Engage (EngageNet) and the legacy RAVDESS model
 
-This file documents the best verified RAVDESS architecture, the current late text add-on path, and the V4 visual-backbone experiment.
+This file documents the architecture of the paper, AVB-Engage: the audio-visual network (block A) and its late fusion
+with two OpenFace-statistics models (blocks B and C), drawn under "Architecture Diagram". It also covers the
+components tried along the way (late text add-on, behavior branch, V4 visual backbone) and the legacy RAVDESS models,
+starting with the RAVDESS best checkpoint below.
 
-## Best Checkpoint
+## Legacy RAVDESS Best Checkpoint
 
 | Item | Value |
 |---|---|
@@ -38,8 +41,9 @@ V4 is useful as an overfitting study: it lowers train accuracy compared with Eff
 
 The 70.29 pipeline: the AVT-CA network (EngageNet, 4 ordinal classes, `--fusion it --it_fusion_mode
 modern`, arm A) followed by inference-time late fusion with two OpenFace-statistics models. The
-network alone, decoded from `classifier_1` with its own validation thresholds, scores 66.27 and is
-what the UI serves today; that path is not drawn separately. The neural behavior branch (`--behavior`,
+network alone, decoded from `classifier_1` with its own validation thresholds, scores 66.27; that path is
+not drawn separately. The Streamlit UI runs the same architecture with the earlier E04 and V12-05
+checkpoints (`ui/inference.py`), not these runs and not the fusion. The neural behavior branch (`--behavior`,
 arm B) is not drawn: it scores the same as arm A and is not part of the headline pipeline. It is still
 in the code and is documented in the "Behavior stream" section below. The pre-September RAVDESS 8-class
 diagram is retained as history in git (commit 0043f9f and earlier).
@@ -70,7 +74,7 @@ flowchart TD
     subgraph LATE["Inference-time late fusion"]
         OF --> SEG["20 segments × [mean,std] + clip stats = 924-d"]
         SEG --> GBM["HistGradientBoosting × 3 fits, averaged → p_GBM"]
-        SEG --> TF["SegmentTransformer (2 layers, d 64, FFN 128, ~0.1 M) → p_TF"]
+        SEG --> TF["SegmentTransformer (2 layers, d 64, FFN 128, 71.6 k params) → p_TF"]
         CLS1 --> PAV["softmax → p_AV"]
         PAV --> MIX["0.6·p_AV + 0.2·p_TF + 0.2·p_GBM<br/>val-selected on 0.1 simplex; fixed weights give the same 70.29"]
         GBM --> MIX
@@ -99,17 +103,19 @@ Diagram notes (verified against `models/multimodal_cnn.py` and `scripts/fullclip
 
 | Aspect | RAVDESS model (≤ Aug 2026) | EngageNet model (Sep 2026) |
 |---|---|---|
-| Task / head | 8 emotions, `Linear(256→8)`, argmax | 4 ordinal levels, `Linear(448→4)`, expected-level + thresholds |
+| Task / head | 8 emotions, `Linear(256→8)`, argmax | 4 ordinal levels, `Linear(256→4)` (`classifier_1`; the unused behavior branch widens it to `classifier_fused` 448→4), expected-level + thresholds |
 | Inputs | 15 frames, 3.6 s audio, optional hashed text | 50 frames @ 5 fps, full-clip audio, OpenFace (T, 22) |
 | Clock | 11× audio/video mismatch at cross-attention | audio and behavior both on the 50-token video clock |
 | Third modality | late hashed-text add-on (label oracle, dropped) | OpenFace statistics via late fusion (GBM + SegmentTransformer); neural behavior branch exists but unused |
 | Pooling | MaxPool (legacy) | masked learned `AttentionPool` (modern) |
 | Robustness | none | modality dropout p=0.15, missing-modality token |
-| Best result | 71.25% RAVDESS | 66.27 AV alone; 70.29 with GBM + transformer late fusion |
+| Best result | 81.88% RAVDESS (`v3_01`, 4 heads; the earlier 8-head run gave 71.25%) | 66.27 AV alone; 70.29 with GBM + transformer late fusion |
 
 ## Late Text Add-On
 
-The current training path does not fuse audio, visual, and text in parallel. Instead, it follows a staged order:
+Optional and off (`--no_late_text_fusion`) in every reported EngageNet run; see "Late text fusion" below for its
+measured cost and the label-oracle defect of the v1 text. When enabled, the path does not fuse audio, visual, and
+text in parallel. Instead, it follows a staged order:
 
 1. The model first reads facial and vocal behavior through the existing audio-visual attention stack.
 2. It compresses that joint audio-visual evidence into an intermediate AV context.
@@ -138,7 +144,7 @@ This keeps text as a late add-on instead of letting it dominate early fusion. If
 | AV summary projection | `self.av_context` in `MultiModalCNN.__init__` |
 | Late text refinement | `LateTextFusion` and `self.text_addon` in `models/multimodal_cnn.py` |
 | Optional text token batching | `collate_variable_length_batch` in `src/data/temporal.py` |
-| 8-class classifier | `classifier_1` in `models/multimodal_cnn.py` |
+| Classifier `Linear(256 → n_classes)` (4 levels for EngageNet, 8 emotions for RAVDESS) | `classifier_1` in `models/multimodal_cnn.py` |
 
 ## Paper Mapping
 
@@ -270,9 +276,10 @@ Three variants are produced by `scripts/calibrate_engagement_logits.py`, in incr
 refinement: `logit_bias` (per-class additive bias on the logits), `expected_thresholds` (coarse grid,
 step 0.05), `refined_expected_thresholds` (local re-search, radius 0.15, step 0.005).
 
-**This is worth +2.35 points over argmax with no retraining** (64.10 → 66.36 on the corrected test set),
-and it reproduces across every checkpoint tested (V11, V12, V13, E04, R01–R06). It is the single
-highest-leverage component in the pipeline relative to its cost.
+**For the three reported networks it is worth +1.99 points over argmax with no retraining** (64.27 ± 0.22 →
+66.27 ± 0.45 test top-1; manuscript Table 3). The size of the gain depends on the training recipe: over the
+fourteen runs of the August sweep it ranges from −0.04 to +2.39 points (+0.80 for the same network trained without
+the class-balanced sampler), and thresholds do not raise the accuracy of the two OpenFace models (plan.md §22.3).
 
 ### Temporal augmentation has never actually run
 
@@ -294,40 +301,27 @@ because the model overfits from epoch 3 onward and augmentation is the indicated
 simply never had it. Also note that at 96, every 50-frame clip is padded with 46 empty frames — setting
 the cap to 50 removes that waste even when augmentation is not wanted.
 
-### Provenance of the current 66.36% baseline
+### Provenance of the reported network (resolved 2026-09-12)
 
-The best verified configuration to date combines the ordinal-distance loss (weight **0.15**) with
-**refined expected-threshold** decoding on top of the EfficientFace + mel-CNN `it`-fusion model described
-above. Measured on the corrected 50-frame test split: **66.36% top-1 / 90.96% adjacent / 52.03 macro-F1 /
-0.449 MAE**. Calibration alone contributes +2.35 points of that over argmax, with no retraining.
+The reported audio-visual network (66.27 ± 0.45 test top-1, 91.55 adjacent, 0.440 MAE, 52.31 macro-F1 over
+three seeds) is a 6-epoch fine-tune of the E04 checkpoint on the corrected 50-frame splits, with the G04
+recipe of the August sweep (frame cap 50, inverse-square-root class-balanced sampler, ordinal loss 0.15,
+lr 5e-5; `scripts/fullclip/common.sh`). E04 is the third of three warm-started stages:
+- stage 1: cross-entropy, lr 1e-2, 30 epochs, 3.6 s audio;
+- stage 2: ordinal, lr 1e-4, two epochs resumed from the stage-1 best;
+- stage 3 (E04): ordinal, lr 5e-5, 10 s audio, best epoch 3.
 
-Important caveat on provenance: that checkpoint was **trained before the preprocessing corrections** and
-had its best epoch selected against a validation set that was 96.2% 15-frame clips, so the selection
-criterion was scoring the wrong distribution. It is a model chosen by a broken signal and then evaluated
-correctly.
+The exact commands are in `README.md`, "Reproducing the paper".
 
-**F01 and F02 are the first retraining attempts against fully corrected data** (all three splits at
-`--target_fps 5`, median 50 frames): F01 with `--max_video_frames 50` and no augmentation, F02 with
-`--max_video_frames 40 --train_frame_sampling random` so the synced crop fires. Until one of them
-completes, no model in this repository has been trained end-to-end under valid conditions.
+How this route was chosen:
+- F01/F02, retrained from the AffectNet initialisation, failed their stopping criterion (plan.md §13.10.5).
+  The result therefore comes from fine-tuning the existing best checkpoint.
+- The G04 recipe was picked as the best of the fourteen sweep runs by test accuracy (`scripts/night/collect.py`,
+  `phase2.py`). By validation accuracy the control would have been chosen (plan.md §22.3, P1). The three-seed
+  mean of G04 is 0.18 points above the control.
 
-> **Do not cite the 66.36% figure in any submission document.** It comes from a checkpoint whose best
-> epoch was selected against a validation set that was 96.2% 15-frame clips while training was 50-frame —
-> a criterion scoring the wrong distribution. The number is a correct evaluation of a badly-selected
-> model. It is retained here for reference and provenance only, and it is **not predictive of post-F01/F02
-> performance** in either direction. Use the F01/F02 results once available.
-
-> **This section is provisional.** F01/F02 are in progress; when they complete, replace the provenance
-> note and the do-not-cite warning above with the winning configuration and its measured result
-> (top-1, adjacent, MAE, macro-F1), plus the modality ablation on that checkpoint. Until then this
-> section can only describe the defect-selected baseline and reference F01/F02 as running.
-
-> **Possible change of provenance for the post-F01/F02 baseline.** F01/F02 train from the EfficientFace
-> AffectNet pretrain and were declining below the majority baseline through epoch 2. If they do not cross
-> 55% top-1 by epoch 5–6 they will be stopped, and the corrected-data result will instead come from a
-> **finetune of the existing best checkpoint** on corrected splits (plan.md §13.10.2). Either way the
-> architecture above is unchanged — only the initialisation and training length differ — but the
-> provenance note should record which route produced the final number.
+The earlier 66.36% figure (E04 alone) came from a checkpoint selected against a validation set that was
+96.2% 15-frame clips. It is kept in plan.md as history and is not cited.
 
 ### Late text fusion — architecture and measured cost
 
@@ -378,64 +372,16 @@ helps" is claimed only from the matched-seed T10 (AV control) vs T11 (text resid
 
 ---
 
-**Architecture documentation state — 2026-08-07.** This file is current and synchronised with
-`docs/plan.md`, `docs/memory.md` and `docs/progress.md`. It records the fusion stack, the per-sample
-audio→video alignment, the eval-time modality ablation mechanism, the ordinal loss and expected-threshold
-calibration that produce the current baseline, the temporal-augmentation no-op and its fix, and the late
-text-fusion add-on with its measured cost and synthetic-text caveat.
-
-The only section that will change is the baseline provenance note: F01/F02 are at epoch 3 of 18 and the
-epoch 5–6 pivot criterion (plan.md §13.10.2) is still live, so the configuration that produces the final
-reported number — retrain from pretrain, or finetune the best existing checkpoint — is not yet settled.
-
-> **Baseline provenance is still pending — and the route has changed.** F01/F02 (retrain from the
-> AffectNet pretrain) **failed** their pre-committed stopping criterion: neither crossed 55% top-1 by
-> epoch 5–6, and both then oscillated 8–13 points with no trend (plan.md §13.10.5). The corrected-data
-> result will instead come from **G01/G02 — a finetune of the existing best checkpoint** on consistent
-> splits, which isolates the preprocessing variable rather than confounding it with initialisation and
-> training length. **G01/G02 are proposed but not launched** (awaiting approval), so the configuration
-> that will produce the final reported number is still unsettled. The architecture above is unchanged
-> either way; only initialisation and training length differ.
-
-**Architecture documentation is complete and version-controlled as of 2026-08-07.** The fusion stack,
-per-sample audio→video alignment, eval-time modality ablation, ordinal loss, expected-threshold
-calibration, temporal-augmentation behaviour and its fix, and the late text-fusion add-on with its
-measured cost and synthetic-text caveat are all recorded and current.
-
-**One section remains contingent:** the baseline provenance note. F01/F02 failed their stopping criterion
-and the corrected-data result will come from G01/G02 (finetune of the best checkpoint) instead — pending
-approval. No other part of this file depends on that outcome; the architecture itself is unchanged either
-way.
-
-*Final state at session close, 2026-08-07: all architecture documentation above is settled. The single
-contingent item is the baseline-provenance note, pending the G01/G02 outcome.*
-
-*No corrected-data baseline is written into this file until the F01/F02-vs-G01/G02 choice is resolved.
-The 66.36% figure above remains flagged do-not-cite, and the provenance section stays contingent.*
-
-> **Canonical source for parameter-sweep and ablation results:**
-> `docs/evidence_tables.md` (removed). It consolidates all 60 run directories and 105 recorded
-> evaluations — attention-head, learning-rate, epoch, loss, class-balancing, audio-augmentation,
-> visual-backbone, temporal-sampling and audio-span sweeps, plus the modality ablation (2 models × 3
-> conditions × 4 decoders) and the decoding ladder across 9 checkpoints. Prefer it over reading individual
-> run logs; this file documents the architecture, that one documents what the configurations measured.
-
-*Architecture documentation settled. Parameter-sweep and ablation numbers now live in
-`docs/evidence_tables.md`; the only contingent item here remains the baseline-provenance note, pending
-the F01/F02 vs G01/G02 choice.*
-
-> **Evidence document audited against run configs (2026-08-07).** Every sweep in
-> `docs/evidence_tables.md` was checked against the `opts*.json` of the runs it cites, and each table is
-> now labelled **matched** or **confounded**. Six comparisons are matched and defensible (epoch budget,
-> audio augmentation, temporal sampling, modality ablation, encoder-free probe, ordinal decoding); four
-> carry confounds (attention heads via batch size, learning rate across datasets, loss function via
-> heads/LR, class balancing via three co-varying settings) and one — audio span — compares different
-> checkpoints with all gaps inside the confidence interval. Full table in plan.md §13.12.
+**Architecture documentation state — 2026-11-14.** The baseline provenance is settled (section above), and the
+architecture is the one in the manuscript (`research/paper/AVB-Engage_JAIHC_final/`). Sweep and ablation numbers
+live in `docs/plan.md`: §13.12 labels each early comparison matched or confounded, §13.14 has the 14-run sweep,
+§19 the full-clip runs and the late fusion, and §22 the review of the paper and code. The former
+`docs/evidence_tables.md` was removed.
 
 ### Behavior stream (OpenFace AUs) — temporal contract (2026-09-12)
 
 Merged into `development` on 2026-09-12 (branch `feat/behavior-fullclip`, on top of the collaborator's
-`feat/behavior-text-fusion`; the worktree `/home/user/AVTCA-collab-test` is retired). Per clip, `datasets/EngageNet/behavior/<stem>.npy` holds OpenFace 2.x output for **every source
+`feat/behavior-text-fusion`; the separate worktree `AVTCA-collab-test` used for the runs is retired). Per clip, `datasets/EngageNet/behavior/<stem>.npy` holds OpenFace 2.x output for **every source
 frame** — `(T, 22)` = 17 AU intensities + gaze (x, y) + head pose (Rx, Ry, Rz); T is 300 at 30 fps and up to
 10,000 for the 1,038 clips encoded at a nominal 1000 fps.
 
@@ -477,7 +423,7 @@ expected level E = Σ_c c · p_c  ──thresholds fit on validation──► cl
 
 A second behavior member (2026-09-12 evening, plan.md §19.7): our `SegmentTransformer` over the same 20
 segment tokens — Linear(44→64) + CLS + learned positions → 2 pre-norm encoder layers (8 heads, FFN 128,
-dropout 0.3) → LayerNorm → Linear(64→4), ~0.1 M parameters, trained with `OrdinalDistanceCrossEntropy`
+dropout 0.3) → LayerNorm → Linear(64→4), 71.6 k parameters, trained with `OrdinalDistanceCrossEntropy`
 (`scripts/fullclip/segment_transformer.py`). Alone it scores 67.0 test (thresholds) / 67.6 (argmax).
 Three-way fusion `0.6·p_AV + 0.2·p_TF + 0.2·p_GBM` (weights val-selected, identical on 7 of 8 members):
 **70.29 ± 0.14** on the three A seeds, 70.15 ± 0.25 over all eight neural checkpoints.

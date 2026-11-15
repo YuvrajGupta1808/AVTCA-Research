@@ -27,7 +27,7 @@ jobs:
 
       - name: Install CPU-only PyTorch (CI — no GPU needed)
         run: |
-          pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
+          pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
 
       - name: Install project dependencies
         run: |
@@ -56,8 +56,12 @@ jobs:
           python -c "
           import sys; sys.path.insert(0, '.')
           from src.data.dataset import DATASET_REGISTRY
-          assert set(DATASET_REGISTRY.keys()) == {'RAVDESS', 'CREMAD'}, f'Unexpected: {set(DATASET_REGISTRY.keys())}'
-          print('Dataset registry OK')
+          # EngageNet is the dataset of the paper; RAVDESS is the legacy emotion setup.
+          # Other datasets may be added without touching this check.
+          required = {'ENGAGENET', 'RAVDESS'}
+          missing = required - set(DATASET_REGISTRY)
+          assert not missing, f'Missing dataset loaders: {sorted(missing)}; registered: {sorted(DATASET_REGISTRY)}'
+          print('Dataset registry OK:', sorted(DATASET_REGISTRY))
           "
 
       - name: Run tests
