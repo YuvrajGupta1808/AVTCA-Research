@@ -6,9 +6,12 @@ Reads the three artifact shapes the repo has produced over time:
   - evaluation_testing.json   (single-decode test metrics)
   - opts*.json                (run configuration)
 
-Emits results/exp2026/all_experiments.csv and a markdown table on stdout.
+Emits results/exp2026/all_experiments.csv and a markdown table on stdout. The table is ranked by
+VALIDATION top-1 (rows without validation metrics last); test is shown alongside. ``--rank_by test``
+restores the old ranking by test top-1, for reading old notes only; never select a model from it.
 """
 
+import argparse
 import csv
 import glob
 import json
@@ -71,7 +74,8 @@ def rows_for_run(run_dir):
             block = calib.get(decode)
             if not block or 'testing' not in block:
                 continue
-            row = {'run': rel, 'decode': decode, 'modality': ablate, 'source': 'calibration'}
+            row = {'run': rel, 'decode': decode, 'modality': ablate, 'source': 'calibration',
+                   'val_top1_accuracy': (block.get('validation') or {}).get('top1_accuracy')}
             row.update({k: block['testing'].get(k) for k in METRIC_KEYS})
             row.update(cfg)
             out.append(row)
@@ -80,7 +84,8 @@ def rows_for_run(run_dir):
     if evaluation:
         metrics = evaluation.get('metrics', evaluation)
         if isinstance(metrics, dict) and any(k in metrics for k in METRIC_KEYS):
-            row = {'run': rel, 'decode': 'eval_default', 'modality': 'none', 'source': 'evaluation'}
+            row = {'run': rel, 'decode': 'eval_default', 'modality': 'none', 'source': 'evaluation',
+                   'val_top1_accuracy': None}
             row.update({k: metrics.get(k) for k in METRIC_KEYS})
             row.update(cfg)
             out.append(row)
@@ -88,7 +93,11 @@ def rows_for_run(run_dir):
     return out
 
 
-def main():
+def main(argv=None):
+    ap = argparse.ArgumentParser(description=__doc__)
+    ap.add_argument('--rank_by', choices=['validation', 'test'], default='validation')
+    ap.add_argument('--out', default=os.path.join(RESULTS, 'exp2026', 'all_experiments.csv'))
+    a = ap.parse_args(argv)
     run_dirs = set()
     for pattern in ('calibration_results.json', 'evaluation_testing.json'):
         for path in glob.glob(os.path.join(RESULTS, '**', pattern), recursive=True):
@@ -102,28 +111,32 @@ def main():
         print('no experiment artifacts found', file=sys.stderr)
         return
 
-    out_dir = os.path.join(RESULTS, 'exp2026')
-    os.makedirs(out_dir, exist_ok=True)
-    csv_path = os.path.join(out_dir, 'all_experiments.csv')
-    fields = ['run', 'decode', 'modality', 'source'] + METRIC_KEYS + CONFIG_KEYS + ['audio_span']
+    csv_path = a.out
+    os.makedirs(os.path.dirname(os.path.abspath(csv_path)), exist_ok=True)
+    fields = ['run', 'decode', 'modality', 'source', 'val_top1_accuracy'] + METRIC_KEYS + CONFIG_KEYS + ['audio_span']
     with open(csv_path, 'w', newline='') as handle:
         writer = csv.DictWriter(handle, fieldnames=fields, extrasaction='ignore')
         writer.writeheader()
         writer.writerows(rows)
 
     engagenet = [r for r in rows if r.get('dataset') == 'ENGAGENET' and r.get('top1_accuracy') is not None]
-    engagenet.sort(key=lambda r: r['top1_accuracy'], reverse=True)
+    if a.rank_by == 'validation':
+        engagenet.sort(key=lambda r: (r.get('val_top1_accuracy') is None, -(r.get('val_top1_accuracy') or 0.0), r['run']))
+        title = 'ranked by validation top-1 (rows without validation metrics last)'
+    else:
+        engagenet.sort(key=lambda r: r['top1_accuracy'], reverse=True)
+        title = 'ranked by TEST top-1 (legacy view; not a valid selection)'
 
     print(f'\nWrote {len(rows)} rows to {csv_path}\n')
-    print('## EngageNet — all decodes, ranked by test top-1\n')
-    print('| Run | Decode | Modality | Audio | Top-1 | Adjacent | MAE | Macro F1 |')
-    print('|---|---|---|---|---:|---:|---:|---:|')
+    print(f'## EngageNet — all decodes, {title}\n')
+    print('| Run | Decode | Modality | Audio | Val top-1 | Test top-1 | Adjacent | MAE | Macro F1 |')
+    print('|---|---|---|---|---:|---:|---:|---:|---:|')
     for r in engagenet:
         def fmt(key, nd=4):
             v = r.get(key)
             return f'{v:.{nd}f}' if isinstance(v, (int, float)) else '—'
         print(f"| {r['run']} | {r['decode']} | {r['modality']} | {r['audio_span']} | "
-              f"{fmt('top1_accuracy')} | {fmt('adjacent_accuracy')} | "
+              f"{fmt('val_top1_accuracy')} | {fmt('top1_accuracy')} | {fmt('adjacent_accuracy')} | "
               f"{fmt('mean_absolute_class_error')} | {fmt('f1_macro')} |")
 
 

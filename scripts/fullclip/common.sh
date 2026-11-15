@@ -10,7 +10,8 @@
 #
 WT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"   # repo root (merged into development 2026-09-12)
 ROOT="$WT"
-PY="/home/user/.conda/envs/avtca/bin/python"
+# Python interpreter: set PY, or activate the environment (conda activate avtca) before running.
+PY="${PY:-python}"
 OUT_ROOT="${OUT_ROOT:-$ROOT/results/fullclip}"
 QUEUE_DIR="$WT/scripts/fullclip"
 

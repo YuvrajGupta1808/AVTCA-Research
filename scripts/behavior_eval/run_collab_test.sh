@@ -10,9 +10,11 @@
 # it for BOTH arms keeps them on equal footing.
 set -uo pipefail
 
-ROOT=/home/user/AVTCA-Research
-WT=/home/user/AVTCA-collab-test
-PY=/home/user/.conda/envs/avtca/bin/python
+# Historical (August 2026; docs/plan.md Sec. 15-16), not used for the paper. It ran from the retired
+# collaborator worktree WT; set WT (and PY, the interpreter) to rerun it.
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+WT="${WT:-$ROOT/../AVTCA-collab-test}"
+PY="${PY:-python}"
 OUT=$WT/results/collab
 A10=$ROOT/preprocessing/engagenet/annotations_engagement_a10.txt
 WARM=$WT/warmstart_E04_noopt.pth

@@ -77,7 +77,8 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--videos_glob", default="datasets/EngageNet/*/*.mp4")
     parser.add_argument("--out_dir", default="datasets/EngageNet/behavior98")
-    parser.add_argument("--openface_bin", default=os.environ.get("OPENFACE_BIN", "/home/user/openface_build/build/bin/FeatureExtraction"))
+    parser.add_argument("--openface_bin", default=os.environ.get("OPENFACE_BIN", "FeatureExtraction"),
+                        help="OpenFace FeatureExtraction binary (default: $OPENFACE_BIN, else FeatureExtraction on PATH)")
     parser.add_argument("--workers", type=int, default=18)
     parser.add_argument("--limit", type=int, default=0)
     args = parser.parse_args()

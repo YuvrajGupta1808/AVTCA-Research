@@ -21,7 +21,7 @@ from sklearn.metrics import precision_recall_fscore_support
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, os.path.join(ROOT, 'scripts', 'fullclip'))
-from fuse_members import fit_thresholds, load, metrics  # noqa: E402
+from fuse_members import align_members, fit_thresholds, load, metrics  # noqa: E402
 
 FC = os.path.join(ROOT, 'results', 'fullclip')
 OUT = os.path.join(ROOT, 'results', 'paper_springer')
@@ -60,6 +60,13 @@ def mean_sd(vals):
     return float(a.mean()), float(a.std(ddof=1)) if len(a) > 1 else 0.0
 
 
+def assert_same_count(pred, y, stored_top1, what):
+    """The stored top-1 (percent, 4 decimals) must name exactly the same number of correct clips."""
+    got = int((pred == y).sum())
+    ref = int(round(stored_top1 / 100 * len(y)))
+    assert got == ref, (what, got, ref, stored_top1)
+
+
 def main():
     os.makedirs(OUT, exist_ok=True)
     gbm = load(os.path.join(FC, 'gbm', 'probs.npz'))
@@ -71,11 +78,12 @@ def main():
         av = av_member(s)
         yv, yt = av['validation_y'], av['testing_y']
         tf = load(os.path.join(FC, 'segtf', f'T7_d64_L2_lr1e3_s{s}', 'logits.npz'))
-        assert np.array_equal(tf['testing_y'], yt) and np.array_equal(gbm['testing_y'], yt), 'member order mismatch'
-        # sanity: the stored calibration result must be reproduced from the saved logits
+        # same clips in the same order, checked by clip key (raises on any missing or extra clip)
+        align_members([av, tf, gbm], [f'A_av_s{s}', f'T7_s{s}', 'gbm'])
+        # sanity: the stored calibration result must be reproduced from the saved logits, clip for clip
         ref = cal_json(s)['refined_expected_thresholds']['testing']['top1_accuracy']
+        assert_same_count(av['pred_test'], yt, ref, f'A_av_s{s} refined thresholds')
         got = metrics(av['pred_test'], yt)
-        assert abs(got['top1'] - ref) < 0.05, (s, got['top1'], ref)
         rows['av'].append(got)
         for cond, key in (('_video_only', 'video_only'), ('_audio_only', 'audio_only')):
             t = cal_json(s, cond)['refined_expected_thresholds']['testing']

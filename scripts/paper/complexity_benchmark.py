@@ -6,9 +6,17 @@ seed-1 audio-visual checkpoint of the fixed full-clip protocol (results/fullclip
 counted with torch.utils.flop_counter (one multiply-add = 2 FLOPs). Latency excludes data loading,
 face detection and OpenFace extraction; those are upstream preprocessing steps reported separately.
 
-Run with the training environment:  ~/.conda/envs/avtca/bin/python scripts/paper/complexity_benchmark.py
-Output: results/paper_springer/complexity.json
+The segment Transformer is counted in eval mode with PyTorch's fused multi-head-attention fast path
+disabled and the math attention kernel forced: the fused paths are invisible to the FLOP counter, which
+then reports 0.11 M instead of 3.09 M (results/paper_springer/complexity.json, written before this fix,
+still holds the 0.11 M value). The count is checked against the analytic count.
+
+Run with the training environment (conda activate avtca):
+  python scripts/paper/complexity_benchmark.py                # everything (GPU); results/paper_springer/complexity.json
+  python scripts/paper/complexity_benchmark.py --flops_only   # segment-Transformer FLOPs only (CPU);
+                                                              # results/paper_jaihc/segment_transformer_flops.json
 """
+import argparse
 import importlib.util
 import json
 import os
@@ -25,6 +33,46 @@ sys.path.insert(0, os.path.join(ROOT, 'scripts', 'fullclip'))
 os.chdir(ROOT)
 RUN = os.path.join(ROOT, 'results', 'fullclip', 'A_av_s1')
 OUT = os.path.join(ROOT, 'results', 'paper_springer', 'complexity.json')
+FLOPS_OUT = os.path.join(ROOT, 'results', 'paper_jaihc', 'segment_transformer_flops.json')
+# The reported segment Transformer (T7): 20 tokens of 44 features, width 64, 2 layers, 8 heads, FFN 128.
+TF_CFG = dict(in_dim=44, n_seg=20, d_model=64, n_layers=2, n_heads=8, ffn=128, n_classes=4)
+
+
+def analytic_transformer_flops(in_dim, n_seg, d_model, n_layers, n_heads, ffn, n_classes):
+    """Matmul FLOPs of SegmentTransformer for one clip (2 per multiply-add; CLS token included)."""
+    t = n_seg + 1
+    per_layer = (2 * t * d_model * 3 * d_model      # Q, K, V projections
+                 + 2 * 2 * t * t * d_model           # Q K^T and attention x V, summed over the heads
+                 + 2 * t * d_model * d_model         # output projection
+                 + 2 * 2 * t * d_model * ffn)        # two feed-forward layers
+    return 2 * n_seg * in_dim * d_model + n_layers * per_layer + 2 * d_model * n_classes
+
+
+def count_transformer_flops(model, x):
+    """FLOPs of one forward pass with the attention matmuls visible to the counter."""
+    from torch.nn.attention import SDPBackend, sdpa_kernel
+    from torch.utils.flop_counter import FlopCounterMode
+    model.eval()
+    prev = torch.backends.mha.get_fastpath_enabled()
+    torch.backends.mha.set_fastpath_enabled(False)
+    try:
+        with torch.no_grad(), sdpa_kernel(SDPBackend.MATH), FlopCounterMode(display=False) as fc:
+            model(x)
+    finally:
+        torch.backends.mha.set_fastpath_enabled(prev)
+    return int(fc.get_total_flops())
+
+
+def segment_transformer_flops():
+    from segment_transformer import SegmentTransformer
+    c = TF_CFG
+    tf = SegmentTransformer(c['in_dim'], c['n_seg'], c['d_model'], c['n_layers'], c['n_heads'], c['ffn'], 0.3, pool='cls')
+    counted = count_transformer_flops(tf, torch.randn(1, c['n_seg'], c['in_dim']))
+    analytic = analytic_transformer_flops(**c)
+    assert abs(counted - analytic) <= 0.01 * analytic, (counted, analytic)
+    return tf, dict(config=c, params=count(tf), flops_counted=counted, flops_analytic=analytic,
+                    mflops_per_clip=counted / 1e6, torch=torch.__version__,
+                    method='eval mode, MHA fast path disabled, math SDPA kernel, torch.utils.flop_counter (multiply-add = 2)')
 
 
 def load_cal():
@@ -98,6 +146,17 @@ def time_model(model, data, device, warmup=10):
 
 
 def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument('--flops_only', action='store_true', help='only count the segment-Transformer FLOPs (CPU) and write ' + FLOPS_OUT)
+    ap.add_argument('--out', default='', help='output path (default depends on --flops_only)')
+    a = ap.parse_args()
+    if a.flops_only:
+        _, r = segment_transformer_flops()
+        out = a.out or FLOPS_OUT
+        os.makedirs(os.path.dirname(out), exist_ok=True)
+        json.dump(r, open(out, 'w'), indent=1)
+        print(json.dumps(r, indent=1))
+        return
     res = {}
     cal = load_cal()
     torch.manual_seed(0)
@@ -124,19 +183,18 @@ def main():
     cpu_model = model.module if hasattr(model, 'module') else model
     cpu_model = cpu_model.to('cpu')
     res['cpu'] = dict(threads=8, **time_model(cpu_model, data[:30], 'cpu', warmup=3))
-    # segment Transformer member (T7: d64, L2, ffn 128, 8 heads, CLS pooling)
-    from segment_transformer import SegmentTransformer
-    tf = SegmentTransformer(44, 20, 64, 2, 8, 128, 0.3, pool='cls').eval()
-    x = torch.randn(1, 20, 44)
-    with torch.no_grad(), FlopCounterMode(display=False) as fc2:
-        tf(x)
+    # segment Transformer member (T7: d64, L2, ffn 128, 8 heads, CLS pooling); timed with the fast path on
+    tf, flops = segment_transformer_flops()
+    tf.eval()
+    x = torch.randn(1, TF_CFG['n_seg'], TF_CFG['in_dim'])
     ts = []
     with torch.no_grad():
         for _ in range(10):
             tf(x)
         for _ in range(200):
             t0 = time.perf_counter(); tf(x); ts.append(1000 * (time.perf_counter() - t0))
-    res['segment_transformer'] = dict(params=count(tf), mflops_per_clip=fc2.get_total_flops() / 1e6,
+    res['segment_transformer'] = dict(params=flops['params'], mflops_per_clip=flops['mflops_per_clip'],
+                                      mflops_analytic=flops['flops_analytic'] / 1e6,
                                       cpu_mean_ms=float(np.mean(ts)), cpu_threads=8)
     # gradient-boosting member: same recipe as gbm_member.py (three fits), timed on CPU
     from segment_features import build

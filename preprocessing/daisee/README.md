@@ -31,15 +31,13 @@ and extracts the contents directly under:
 
 `datasets/DAISEE/`
 
-## Why This Preprocessing Looks Like RAVDESS
+## What the scripts produce
 
-The current training path expects:
-
-- `15` visual frames per sample
-- one cropped/padded audio waveform per sample
-- one annotation file with `video_path;audio_path;label;split`
-
-So this bootstrap DAiSEE pipeline produces:
+The scripts keep the whole clip by default: every frame (cap them with `--target_fps`, `--frame_stride`
+or `--max_frames`) and the whole audio track (cap it with `--max_video_seconds`, which keeps the first
+N seconds). The training loader handles variable-length clips with `--full_video_preprocessing`; without
+that flag it reduces every clip to 15 frames and a centred 3.6 s audio window, the RAVDESS contract.
+The pipeline produces:
 
 - `<clip>_facecroppad.npy`
 - `<clip>_croppad.wav`
@@ -66,10 +64,10 @@ That means this is a temporary 4-class engagement experiment, not the final mult
 ## Preprocessing Steps
 
 ```bash
-# 1. Extract centered 3.6 s mono audio clips.
+# 1. Extract mono audio at 22,050 Hz (whole clip; --max_video_seconds N keeps the first N seconds).
 python preprocessing/daisee/extract_audios.py --data_root datasets/DAISEE
 
-# 2. Extract 15 face-focused frames per clip.
+# 2. Extract face crops (224 x 224, BGR) from every frame; e.g. --target_fps 5 or --max_frames 15 to cap them.
 python preprocessing/daisee/extract_faces.py --data_root datasets/DAISEE
 
 # 3. Build an annotation file for the current architecture.
@@ -87,5 +85,6 @@ python preprocessing/daisee/prepare_daisee.py --data_root datasets/DAISEE
 - DAiSEE audio is weak compared with discussion-heavy classroom data, but we still preserve it so the current multimodal stack can be tested end-to-end.
 - The official archive may contain a small number of damaged clips. If decoding fails on an individual sample, exclude that sample rather than discarding the dataset.
 - The official manifests list `9068` clips, but `Labels/AllLabels.csv` only labels `8925` of them. The annotation builder skips the `143` unlabeled manifest entries automatically.
-- If `facenet_pytorch` is unavailable in the current environment, `extract_faces.py` falls back to OpenCV Haar face detection and then to whole-frame resize.
+- `extract_faces.py` needs `facenet_pytorch` (MTCNN) and stops without it; `--allow_opencv_fallback` lets it use OpenCV Haar face detection instead. A frame without a detected face is resized whole.
+- DAiSEE was explored but is not used by the EngageNet paper; its derived annotation file is not part of the repository (regenerate it with step 3).
 - The optional bounding-box annotation archive is not required for the current AVT-CA pipeline, so it is not part of the official download script here.

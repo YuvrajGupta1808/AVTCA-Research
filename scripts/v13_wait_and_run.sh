@@ -2,12 +2,13 @@
 # Wait for free GPU, then:
 # 1) recalibrate best AV checkpoint with current alignment-fixed code
 # 2) short AV-only finetune (2-3 epochs) + calibrate
+# Historical (July 2026), not used for the paper.
 set -euo pipefail
 
-ROOT="/home/user/AVTCA-Research"
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
-PY="/home/user/.conda/envs/avtca/bin/python"
-export PATH="/home/user/.conda/envs/avtca/bin:$PATH"
+PY="${PY:-python}"
+export PATH="$(dirname "$(command -v "$PY")"):$PATH"
 
 NEED_MB="${NEED_MB:-5500}"
 RESULT_ROOT="${RESULT_ROOT:-$ROOT/results/v13_alignfix_avonly_short}"
@@ -127,9 +128,9 @@ fi
 echo "[v13] STEP 3: calibrate short-finetune checkpoint"
 run_calib "$BEST" "$FINETUNE_DIR/calibration"
 
-"$PY" - <<'PY'
+RESULT_ROOT="$RESULT_ROOT" "$PY" - <<'PY'
 import json, os
-root = "/home/user/AVTCA-Research/results/v13_alignfix_avonly_short"
+root = os.environ["RESULT_ROOT"]
 paths = [
     ("V12 recalib (align fix only)", os.path.join(root, "v12_recalib_alignfix", "calibration_results.json")),
     ("Short finetune + calib", os.path.join(root, "finetune_e3_randcrop", "calibration", "calibration_results.json")),

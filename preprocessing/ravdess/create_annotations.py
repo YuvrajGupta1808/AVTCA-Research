@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+"""RAVDESS annotation file (legacy emotion pipeline): one row per face clip, actor-independent split
+(actors 1-4 test, 5-8 validation, 9-24 training), written to preprocessing/ravdess/annotations.txt."""
 
 import argparse
 import os
@@ -8,13 +10,13 @@ def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument(
         '--data_root',
-        default=os.environ.get('RAVDESS_ROOT', 'RAVDESS'),
+        default=os.environ.get('RAVDESS_ROOT', 'datasets/RAVDESS'),
         help='Directory containing ACTORxx folders',
     )
     parser.add_argument(
         '--annotation_file',
-        default='annotations.txt',
-        help='Output annotation filename',
+        default=os.path.join('preprocessing', 'ravdess', 'annotations.txt'),
+        help='Output annotation file',
     )
     return parser.parse_args()
 

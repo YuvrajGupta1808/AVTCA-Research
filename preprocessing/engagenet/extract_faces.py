@@ -1,5 +1,11 @@
 #!/usr/bin/env python3
-"""Extract face-focused frame tensors for EngageNet clips."""
+"""Extract face-focused frame tensors for EngageNet clips.
+
+Default: every frame at 5 frames per second (--target_fps 5, the setting of the paper's runs;
+about 50 frames per 10 s clip), each the first MTCNN face box cropped and resized to 224 x 224
+(BGR, uint8), or the whole frame resized when no face is found. Writes <clip>_facecroppad.npy
+next to each <clip>.mp4. --target_fps 0 keeps every source frame.
+"""
 
 from __future__ import annotations
 
@@ -28,7 +34,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--shard_index", type=int, default=0)
     parser.add_argument("--max_video_seconds", default=0.0, type=float)
     parser.add_argument("--max_frames", default=0, type=int)
-    parser.add_argument("--target_fps", default=0.0, type=float)
+    parser.add_argument("--target_fps", default=5.0, type=float,
+                        help="sampling rate in frames per second (default 5, as used for the paper; 0 = every frame)")
     parser.add_argument("--frame_stride", default=1, type=int)
     parser.add_argument("--output_size", default=224, type=int)
     parser.add_argument("--force", action="store_true")

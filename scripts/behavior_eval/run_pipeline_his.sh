@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# Historical (August 2026; the collaborator branch's driver, docs/plan.md Sec. 15), not used for the paper.
 # run_pipeline.sh — one-command driver for the AVT-CA behavior + text pipeline.
 #
 # Modes:

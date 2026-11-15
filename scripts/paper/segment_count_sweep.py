@@ -9,7 +9,8 @@ validation) and the fixed-weight fusions with the three audio-visual seeds (AV +
 AV + Transformer + GBM 0.6/0.2/0.2; the Transformer member stays the S = 20 model).
 
 Nothing is cached under results/fullclip; output: results/paper_springer/segment_count_sweep.json.
-Usage: segment_count_sweep.py [S ...]   (default 1 5 10 20 40)
+Usage: segment_count_sweep.py [S ...] [--allow_missing]   (default 1 5 10 20 40; a clip without an
+OpenFace series is an error unless --allow_missing, which gives it zero features)
 """
 import csv
 import json
@@ -25,6 +26,7 @@ from sklearn.ensemble import HistGradientBoostingClassifier
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, os.path.join(ROOT, 'scripts', 'fullclip'))
 from fuse_members import fit_thresholds, load, metrics  # noqa: E402
+from segment_features import missing_series  # noqa: E402
 
 ANN = f'{ROOT}/preprocessing/engagenet/annotations_engagement_a10.txt'
 BEH, NF = f'{ROOT}/datasets/EngageNet/behavior', 22
@@ -33,7 +35,11 @@ OUT = f'{ROOT}/results/paper_springer/segment_count_sweep.json'
 CLS = np.arange(4)
 
 
-def series(stems):
+def series(stems, allow_missing=False):
+    missing = missing_series(stems, BEH)
+    if missing and not allow_missing:
+        raise FileNotFoundError(f'{len(missing)} clips have no OpenFace series in {BEH} (e.g. {missing[:3]})')
+
     def one(stem):
         p = os.path.join(BEH, stem + '.npy')
         return np.load(p)[:, :NF] if os.path.isfile(p) else np.zeros((0, NF), np.float32)
@@ -57,13 +63,13 @@ def thr_pred(pv, yv, pt):
 
 
 def main():
-    seg_counts = [int(a) for a in sys.argv[1:]] or [1, 5, 10, 20, 40]
+    seg_counts = [int(a) for a in sys.argv[1:] if not a.startswith('--')] or [1, 5, 10, 20, 40]
     rows = [r for r in csv.reader(open(ANN), delimiter=';') if r]
     stems = [re.sub(r'_facecroppad\.npy$', '', os.path.basename(r[0])) for r in rows]
     y = np.array([int(r[2]) for r in rows])
     split = np.array([r[3] for r in rows])
     tr, va, te = split == 'training', split == 'validation', split == 'testing'
-    xs = series(stems)
+    xs = series(stems, allow_missing='--allow_missing' in sys.argv)
     avs = [load(f'{FC}/A_av_s{s}/context/logits.npz') for s in (1, 2, 3)]
     tfs = [load(f'{FC}/segtf/T7_d64_L2_lr1e3_s{s}/logits.npz') for s in (1, 2, 3)]
     yv, yt = y[va], y[te]

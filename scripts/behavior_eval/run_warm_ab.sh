@@ -4,9 +4,11 @@
 # trained classifier with zeros on the new behavior/text columns, so the model
 # begins numerically identical to E04 (verified: max abs logit diff = 0.0).
 set -uo pipefail
-ROOT=/home/user/AVTCA-Research
-WT=/home/user/AVTCA-collab-test
-PY=/home/user/.conda/envs/avtca/bin/python
+# Historical (August 2026; docs/plan.md Sec. 15-16), not used for the paper. It ran from the retired
+# collaborator worktree WT; set WT (and PY, the interpreter) to rerun it.
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+WT="${WT:-$ROOT/../AVTCA-collab-test}"
+PY="${PY:-python}"
 OUT=$WT/results/warm_ab
 BEH=$ROOT/datasets/EngageNet/behavior
 ANN=$WT/annotations_a10_subject.txt

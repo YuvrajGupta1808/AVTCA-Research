@@ -1,5 +1,22 @@
 #!/usr/bin/env python3
-"""Create EngageNet annotations for the current AVT-CA pipeline."""
+"""Create EngageNet annotations for the current AVT-CA pipeline.
+
+Row format: video_path;audio_path;label;split[;text[;subject]] with absolute paths, one row per labelled
+clip (SNP clips are skipped), splits in the order training, validation, testing and clips sorted by name.
+
+Defaults reproduce the files the paper's runs read: the full-clip audio (*_croppad10s.wav from
+extract_audios_full.py) and an empty text column. ``--subject_column`` appends the participant ID
+(subject_<n>_<suffix>), which the networks' annotation file carries:
+
+  python preprocessing/engagenet/create_annotations.py \
+      --annotation_file preprocessing/engagenet/annotations_engagement_a10.txt
+  python preprocessing/engagenet/create_annotations.py --subject_column \
+      --annotation_file preprocessing/engagenet/annotations_engagement_a10_subject.txt
+
+``--text_source chat`` writes the v1 synthetic chat, which is sampled BY THE LABEL: a label oracle,
+kept only to reproduce the retracted text experiments (docs/plan.md Sec. 16-17). Never train or
+evaluate a text model on it.
+"""
 
 from __future__ import annotations
 
@@ -7,6 +24,7 @@ import argparse
 import contextlib
 import csv
 from pathlib import Path
+import re
 import sys
 import wave
 
@@ -20,6 +38,8 @@ from preprocessing.engagenet.chat_text import build_chat_text
 from preprocessing.engagenet.chat_text import stratified_chat_assignment
 from preprocessing.engagenet.label_utils import load_all_labels
 
+
+SUBJECT = re.compile(r"(subject_\d+_[a-z0-9]+)_vid_\d+_\d+")
 
 SPLIT_DIR_MAP = {
     "training": "Train",
@@ -61,12 +81,17 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--text_source",
         choices=("chat", "behavior", "none"),
-        default="chat",
+        default="none",
         help=(
-            "Column-5 text source: 'chat' = legacy synthetic chat sampled by label "
-            "(v1, label-leaking — kept only for reproduction), 'behavior' = label-free "
-            "captions from OpenFace features, 'none' = empty text column."
+            "Column-5 text source: 'none' (default) = empty text column, 'behavior' = label-free "
+            "captions from OpenFace features, 'chat' = legacy synthetic chat SAMPLED BY THE LABEL "
+            "(v1; a label oracle, kept only to reproduce the retracted experiments)."
         ),
+    )
+    parser.add_argument(
+        "--subject_column",
+        action="store_true",
+        help="Append the participant ID (subject_<n>_<suffix>) as column 6 (an empty text column is kept).",
     )
     parser.add_argument(
         "--behavior_dir",
@@ -83,8 +108,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--audio_suffix",
         choices=("croppad", "croppad10s"),
-        default="croppad",
-        help="Which extracted wav variant to reference (croppad10s = 10 s audio).",
+        default="croppad10s",
+        help="Which extracted wav variant to reference: croppad10s (default) = the full clip "
+             "(extract_audios_full.py); croppad = the legacy centred 3.6 s window (extract_audios.py).",
     )
     return parser.parse_args()
 
@@ -138,6 +164,14 @@ def main() -> None:
     labels_by_split = load_all_labels(data_root)
     missing_paths: list[str] = []
     use_chat = args.text_source == "chat" and not args.disable_chat_text
+    if use_chat:
+        print(
+            "WARNING: --text_source chat writes synthetic chat sampled by the ground-truth label, a label "
+            "oracle. Use it only to reproduce the retracted v1 text experiments.",
+            file=sys.stderr,
+        )
+    if args.subject_column and args.disable_chat_text:
+        raise SystemExit("--subject_column needs the text column; drop --disable_chat_text")
     chat_assignments = (
         stratified_chat_assignment(labels_by_split=labels_by_split, text_ratio=args.text_ratio)
         if use_chat
@@ -187,6 +221,11 @@ def main() -> None:
                     row.append(chat_text)
                 elif args.text_source == "none" and not args.disable_chat_text:
                     row.append("")
+                if args.subject_column:
+                    match = SUBJECT.match(raw_video_path.stem)
+                    if match is None:
+                        raise ValueError(f"cannot read the participant ID from {raw_video_path.name}")
+                    row.append(match.group(1))
                 writer.writerow(row)
 
     if missing_paths and args.strict:
