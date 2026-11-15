@@ -16,6 +16,13 @@
 > 69.86 ± 0.50. Our 22-feature segment transformer alone reproduces the published 67.6. Detail and the measured-null levers (neighbour
 > smoothing, prior shift) in [`plan.md` §19.6](plan.md). Not yet in the paper or the UI.
 >
+> **Full review and fixes 2026-11-14 ([`plan.md` §22](plan.md)):** every number of the JAIHC paper reproduces from
+> the stored results. The seven overclaims (P1–P7) are reworded, the Chumachenko et al. (ICPR 2022) reference is
+> added, and the supplement's stage-2 epoch count is corrected (2, not 25); the paper is still 12 pages. CI is
+> fixed (383 tests, replayed in a fresh environment). The README is rewritten for the paper, scripts use
+> repo-relative paths, every new number has a script, and 18 dataset-derived files are untracked. Nothing is
+> committed; the Overleaf upload, the commit and the decisions in §22.8 are open.
+>
 > All numbers below this block are historical; the sections dated 2026-09-12 at the bottom are current.
 
 > **Note (2026-08-08):** `docs/` was reduced to the four canonical files. The former external-facing
@@ -645,7 +652,7 @@ First external contribution (Gakshith), evaluated in an isolated worktree. **Not
 |---|---|
 | Branch reviewed (6 commits, +1595/-23, 25 files) | done |
 | Test suite on his branch (283 passed, 191 subtests) | done |
-| Isolated worktree at `/home/user/AVTCA-collab-test` | done |
+| Isolated worktree at `~/AVTCA-collab-test` | done |
 | Matched A/B training, 7 epochs, one arm per GPU | done |
 | A_control result — best 67.69 (UAR 56.04, adj 93.74) | done |
 | B_text_fusion result — 62.47, no `_best.pth` written | done, but **not interpretable** |
