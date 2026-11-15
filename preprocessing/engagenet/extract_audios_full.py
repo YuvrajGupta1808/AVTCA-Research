@@ -29,6 +29,9 @@ def parse_args():
     parser.add_argument("--workers", default=16, type=int)
     parser.add_argument("--force", action="store_true")
     parser.add_argument("--limit", default=0, type=int)
+    parser.add_argument("--silent_list", type=Path, default=None,
+                        help="file listing the clips that fell back to a silent track "
+                             "(default: <data_root>/silent_fallback<suffix stem>.txt)")
     return parser.parse_args()
 
 
@@ -67,15 +70,24 @@ def main():
 
     print(f"extracting {len(tasks)} clips with {args.workers} workers -> *{args.suffix}", flush=True)
     counts = {"ok": 0, "silent": 0}
+    fallback = []
     with ProcessPoolExecutor(max_workers=args.workers) as pool:
         futures = [pool.submit(extract_one, t) for t in tasks]
         for i, future in enumerate(as_completed(futures), 1):
-            _, status = future.result()
+            path, status = future.result()
             counts[status] += 1
+            if status == "silent":
+                fallback.append(path)
             if i % 500 == 0:
                 print(f"  {i}/{len(tasks)}  ok={counts['ok']} silent={counts['silent']}", flush=True)
 
     print(f"done: ok={counts['ok']} silent={counts['silent']}", flush=True)
+    if fallback:
+        # Clips whose source has no decodable audio stream got 10 s of zeros; list them so they can be
+        # told apart from clips whose audio stream is itself silent.
+        silent_list = args.silent_list or args.data_root / f"silent_fallback{Path(args.suffix).stem}.txt"
+        silent_list.write_text("\n".join(sorted(fallback)) + "\n")
+        print(f"wrote {len(fallback)} silent-fallback clips to {silent_list}", flush=True)
 
 
 if __name__ == "__main__":

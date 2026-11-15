@@ -1,3 +1,11 @@
+> **Superseded (2026-11-14).** This list dates from August 2026 and is kept as history. The contributions as finally
+> claimed are in the manuscript (`research/paper/AVB-Engage_JAIHC_final/`, Section 1); the evidence and its limits
+> are in `docs/plan.md` §19–§22. The headline is now 70.29 ± 0.14% test top-1 (three-way late fusion), above the
+> best published 67.61%, and the test split has 2,256 clips. The audio claim is narrower than stated below:
+> +0.74 points over video only, positive in 7 of 9 networks, significant in 1 after Holm adjustment and not
+> established when test participants are resampled. "Ensembling loses" holds only for networks fine-tuned from one
+> checkpoint; models with different inputs gain about four points. The rename to AVB-Engage is done.
+
 # Major Research Contributions
 
 **Project:** Audio-Visual Engagement Detection in Online Classrooms

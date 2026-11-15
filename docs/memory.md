@@ -162,7 +162,7 @@ Two bugs discovered during first GPU training attempt:
 
 2. **Annotation audio paths used wrong RAVDESS modality prefix** — `create_annotations.py` generated `03-01-...` filenames (audio-only channel) but the dataset only contains `01-01-...` (full AV) and `02-01-...` (video-only) files. Fixed by changing prefix `03→01`. Annotations regenerated; now point directly to `datasets/RAVDESS/` via absolute paths.
 
-**RAVDESS symlink at project root is now redundant** — `RAVDESS/` was a symlink to `datasets/RAVDESS/` created as a workaround. New annotations use absolute paths to `datasets/RAVDESS/` directly. Delete with: `rm /home/user/AVTCA-Research/RAVDESS`
+**RAVDESS symlink at project root is now redundant** — `RAVDESS/` was a symlink to `datasets/RAVDESS/` created as a workaround. New annotations use absolute paths to `datasets/RAVDESS/` directly. Delete with: `rm RAVDESS` (from the repository root)
 
 ### Early Training Results (2026-05-22 — Epoch 3)
 
@@ -1148,7 +1148,7 @@ contributions (neither prior dataset has them). Extracted texts cached in sessio
 
 ### Collaborator branch `feat/behavior-text-fusion` — evaluated, not merged (2026-08-16)
 
-First external contribution (Gakshith). Tested in a **detached worktree** at `/home/user/AVTCA-collab-test`,
+First external contribution (Gakshith). Tested in a **detached worktree** at `~/AVTCA-collab-test`,
 never merged into `development`. This matters because his branch touches five files that have uncommitted
 local edits (`datasets/engagenet.py`, `models/multimodal_cnn.py`, `src/config/opts.py`, `src/data/dataset.py`,
 `scripts/calibrate_engagement_logits.py`).
@@ -1341,9 +1341,9 @@ development; `--behavior`/`--text_fusion` from the branch; `late_text_fusion` st
 Verified before committing: 293 tests pass; arm A and B smokes through `scripts/fullclip/run_job.sh`
 from the main repo reproduce the pre-merge numbers exactly. The fullclip scripts now derive the repo root
 from their own location; the seeded warm starts live in gitignored `pretrained/`. The worktree
-`/home/user/AVTCA-collab-test` is retired (its `results/` for §15–16 stay there, uncommitted).
+`~/AVTCA-collab-test` is retired (its `results/` for §15–16 stay there, uncommitted).
 Five development commits preceded the merge (MARLIN/text-v2 code, text-v2 preprocessing, night scripts,
-UI, docs). **How to apply:** run everything from `/home/user/AVTCA-Research`; do not resurrect the
+UI, docs). **How to apply:** run everything from this repository (`~/AVTCA-Research`); do not resurrect the
 worktree paths in scripts or docs.
 
 - **2026-09-16 — architecture diagram corrected.** The 70.29 headline fuses arm A (`classifier_1`, AV-only) checkpoints, not `classifier_fused`; the diagram previously drew p_AV from the fused head. The neural behavior branch (arm B) was then removed from the main diagram entirely, since it adds nothing and is not in the headline; it remains in code and in the "Behavior stream" doc section. Also noted: audio stage 2 pools 50 → ~12 tokens while video stays at 50, so the 1:1 clock holds only at `av1`/`va1`; GBM is 3 averaged fits; SegmentTransformer 2/64/128 is the sweep pick, not the script default (4/128/256).
@@ -1392,12 +1392,65 @@ worktree paths in scripts or docs.
   - The August G-sweep's "single-variable" runs are single changes relative to G01 (50-frame cap, 6 epochs), not to the control G00 (all frames, 8 epochs); G05 changes both learning rate and schedule. The reported AV network = G04 (sampler) seeds.
   - The fusion uses 8 networks (3 A + 3 B + 2 C) because `C_behtext_s3` has no saved logits; the modality ablation uses all 9.
   - Nine-network mean with audio is 66.154 → 66.15 (66.16 came from averaging rounded arm means).
-  - Fixes and cleanup were applied the same day: the pre-fix Overleaf version, the 22-pp long version and the first 12-pp cut live only in archive commit `c2827d2` (`git show c2827d2:research/paper_springer/paper.tex`); the review fixes and cleanup are commit `2461716`; Section S13 and the re-verification fixes of plan.md §21.11 came after it. Every added sentence costs page-12 space: the fixes used ~10 of ~24 free lines, so optional DOIs for arXiv preprints were left out.
-  - **Paired tests (plan.md §21.10).** The nine fine-tuned networks reproduce bit-exactly only from `~/AVTCA-collab-test` (commit 39ea143, the tree in their calib.log); their opts point to an annotation file that no longer exists, but `preprocessing/engagenet/annotations_engagement_a10_subject.txt` has the same order and labels. Exact McNemar: the fusion beats every member on every seed (p ≤ 0.006); audio vs. video-only is significant in 3 of 9 networks raw and 1 of 9 after Holm, so the audio claim must stay "consistent sign", not "significant".
+  - Fixes and cleanup were applied the same day: the pre-fix Overleaf version, the 22-pp long version and the first 12-pp cut live only in archive commit `4dcf929` (`git show 4dcf929:research/paper_springer/paper.tex`); the review fixes and cleanup are commit `0ff89c8`; Section S13 and the re-verification fixes of plan.md §21.11 came after it. Every added sentence costs page-12 space: the fixes used ~10 of ~24 free lines, so optional DOIs for arXiv preprints were left out.
+  - **Paired tests (plan.md §21.10).** The nine fine-tuned networks reproduce bit-exactly only from `~/AVTCA-collab-test` (commit 88f8652, the tree in their calib.log); their opts point to an annotation file that no longer exists, but `preprocessing/engagenet/annotations_engagement_a10_subject.txt` has the same order and labels. Exact McNemar: the fusion beats every member on every seed (p ≤ 0.006); audio vs. video-only is significant in 3 of 9 networks raw and 1 of 9 after Holm, so the audio claim must stay "consistent sign", not "significant".
   - **Re-verification (plan.md §21.11).** `FlopCounterMode` misses `nn.TransformerEncoder` in eval mode (fused fast path): count FLOPs in train mode under `torch.no_grad()`. Every run used SGD dampening 0.9 (repo default; PyTorch's is 0) — state it whenever the optimizer is described. The August G-sweep's G04 seeds are the reported A_av seeds, so sweep evidence must exclude them.
   - **Template manual (plan.md §21.12).** sn-jnl redefines `table` (with `\footnotetext[mark]`) but not `table*`: in a full-width table, `\footnotetext[a]` fails with "Missing number" — use the class's `tablenotes` environment. sn-basic.bst cuts author lists longer than three to "3 et al" and sentence-cases titles, so brace proper nouns in `references.bib`. The manual's `[referee]` request is overridden by JAIHC's 12-page two-column rule. No EPS converter is installed on this machine.
   - **EPS figures (2026-11-13).** No converter exists on this machine; Ghostscript was installed per session into the scratchpad (`conda create -p <scratchpad>/gsenv -c conda-forge ghostscript`) and `eps2write` produced vector EPS with embedded fonts. Keep both FigN.pdf and FigN.eps and call `\includegraphics{FigN}` without extension; regenerate the EPS whenever the PDF changes.
   - **Figure export (plan.md §21.13).** draw.io exports headlessly with puppeteer + `app.diagrams.net/export3.html` (`render({xml, format:'pdf', crop:'1'})`, then `page.pdf` at the reported bounds × 0.959); the Electron CLI needs X and Docker has no daemon here. Chrome for Testing only lacked `libasound.so.2`. One draw.io px = 0.719 pt in the PDF. The template's review layout is narrower (76/160 mm) than Springer's final columns (84/174 mm), so draw at 9 pt to stay ≥ 8 pt in both. **Fonts (2026-11-14):** headless Chrome here has no Helvetica — "Helvetica" fell back to DejaVu Sans, and TeX Gyre Heros (CFF) embeds as Type 3; export with `FONTCONFIG_FILE` → a private fonts.conf that prepends FreeSans (TrueType Nimbus Sans clone, `FreeSans*.ttf` from the tectonic bundle) for Helvetica, and give glyphs FreeSans lacks (★) an explicit TrueType face. `eps2write` cannot take `-dColorImageFilter=/FlateEncode` (Level-2 output) but its default keeps the spectrogram lossless.
-  - **The GitHub repo is PUBLIC** (`YuvrajGupta1808/AVTCA-Research`, checked 2026-11-13). On 2026-11-14 Yuvraj asked to "commit and push" after being reminded it is public: `development` was pushed (up to `36d8927`), so the manuscript, supplement, figures and their generators, the submission folder (cover letter, checklist), Springer's user manual and the docs, including the SFSU partner-recording notes (plan.md §20, no names), are now public. `main` was not touched then; later the same day, at Yuvraj's request ("push it to main"), `development` was merged into `main` with a merge commit (`main`'s only extra commit, 2a96cac, changed no content) and both were pushed, so the repository root holds the paper's code, as the Code availability statement says. Springer Nature counts the public manuscript as a preprint: allowed (not prior publication, any time, any legal platform) but to be disclosed at submission (cover letter and checklist item 6 do); after acceptance never post the publisher's PDF and check the licence before pushing the accepted version (plan.md §21.23). Before later pushes, still check new commits for names, e-mails or IDs (the Overleaf project ID stays out of the repo).
+  - **The GitHub repo is PUBLIC** (`YuvrajGupta1808/AVTCA-Research`, checked 2026-11-13). On 2026-11-14 Yuvraj asked to "commit and push" after being reminded it is public: `development` was pushed (up to `456e2ca`), so the manuscript, supplement, figures and their generators, the submission folder (cover letter, checklist), Springer's user manual and the docs, including the SFSU partner-recording notes (plan.md §20, no names), are now public. `main` was not touched then; later the same day, at Yuvraj's request ("push it to main"), `development` was merged into `main` with a merge commit (`main`'s only extra commit, 05cf572, changed no content) and both were pushed, so the repository root holds the paper's code, as the Code availability statement says. Springer Nature counts the public manuscript as a preprint: allowed (not prior publication, any time, any legal platform) but to be disclosed at submission (cover letter and checklist item 6 do); after acceptance never post the publisher's PDF and check the licence before pushing the accepted version (plan.md §21.23). Before later pushes, still check new commits for names, e-mails or IDs (the Overleaf project ID stays out of the repo).
   - **Overleaf and the submission package (plan.md §21.14).** Yuvraj's Overleaf project "Springer Nature LaTeX Template" holds the final files in `SpringerNature/` plus a root `submission/` folder (checklist README, draft cover letter); the zip and checklist are in `AVB-Engage_JAIHC_final/submission/`. After uploading the files, Overleaf's main document read "None" and a recompile built the supplement: set it explicitly to `SpringerNature/paper.tex` and re-check after any re-upload (overwriting existing files through Upload on 2026-11-14 kept it). **Overleaf compiles the file open in the editor when that file declares a document class**, whatever the main document is: with `cover_letter.tex` open, Recompile builds the letter; a Markdown checklist that merely quoted `\documentclass[...]` made Recompile run `pdflatex README` and fail with "README.tex" not found (2026-11-14) — keep that command out of non-LaTeX files uploaded there. Overleaf's delete dialog says "permanently delete" — ask before removing files there (the 5 unused old figure files were deleted at Yuvraj's OK; only `figures/fig_colors.tex` remains in `SpringerNature/figures/`). On Overleaf the paper gives 3 harmless hyperref bookmark warnings from the template's level-5 `\bmhead`. The manual asks not to add packages, so stretched DOI lines in the references stay (no `xurl`). `letter.cls` fixes `\indentedwidth` at class load: widen the signature with `\AtBeginDocument{\setlength{\indentedwidth}{\textwidth}}`.
   - **Images in the paper (checked 2026-11-13).** Springer's journal policies forbid publishing identifiable facial features without the participant's written consent for publication (masking the eye region is not enough) and list photorealistic AI-generated images as not permitted; JAIHC wants vector art as EPS, halftones ≥ 300 dpi and combination art ≥ 600 dpi. Our EngageNet download has no licence file and the official README only says to e-mail the dataset authors for access, so EngageNet face frames stay out of the paper unless those authors allow it: show signals (spectrogram, OpenFace curves, probabilities), a schematic face, or an author's own recording with consent. Page 12 had ~104 mm free in its right column with the placeholder title block; **with the real title block (2026-11-14, plan.md §21.21) Overleaf's pdfLaTeX build had about 16 free lines (right column ends at 171 mm), and about 11 since the Supplementary information fix (192 mm, §21.22); the local tectonic build only about 6** (it reflows section 5 to p. 7); the supplement has no page limit. **Done 2026-11-14 (plan.md §21.15):** Fig. 1 now shows test clip `subject_82_gofy9p13pj_vid_1_29` (true level 2; seed-1 members disagree, fusion right; no voiced audio frame) with a drawn face; its spectrogram is the only bitmap in the figures (lossless, ~1000 dpi). **Keep Fig. 1 at or below ~104 mm tall** (now 102 mm, §21.16): page 2 absorbs growth up to 106.0 mm, but from 106.5 mm the heading of section 5 leaves page 6, the floats reflow and page 12 fills to 233 mm, eating the room the author block and declarations need. Likewise **Fig. 2's full-width caption must stay at 7 lines**: one more line moves page 12 from 138 to 188 mm (§21.17). These guards were measured with tectonic against the placeholder title block. With the real block the engines diverge (tectonic reflows section 5 to p. 7, Overleaf's pdfLaTeX does not), so judge any figure, caption or text change on Overleaf, which compiles as the journal does. eps2write sets an EPS bounding box from the marks, not the page: give a figure with blank margins a white ground (Fig. 3). **Figure style (survey of `papers/`, 2026-11-14, §21.18):** Yuvraj judged the box-flowchart Fig. 2 "very ordinary"; the redesign follows the modern architecture figures (DeepAVFusion, MBT, GLP-fusion, AVT-CA): modality lanes, token strips sized by sequence length, trapezoid encoders, attention blocks with q and k, v, (+) residual nodes, data thumbnails in, probability bars out. Keep that vocabulary for any new architecture drawing.
+
+## Full review of paper and code — facts that limit what the paper may claim (2026-11-14, plan.md §22)
+
+- **The network's training recipe was chosen on test.** The August sweep (`scripts/night/collect.py`, `phase2.py`)
+  ranks runs by test top-1 and seeds the winner; the winner (class-balanced sampler) is the paper's network, and that
+  run is its seed 1. On validation the control wins (68.63 against 67.97). The effect is small (66.27 against the
+  control's 66.09), but never write "the test split is used only for the final evaluation" or "each test result is
+  computed once". What is true: no checkpoint, size, weight or threshold was fitted on test.
+- **The 1.99-point decoding gain belongs to that recipe.** Refined thresholds minus argmax over the 14 sweep runs:
+  sampler seeds +1.73 / +1.86 / +2.39, same network without the sampler +0.80, the rest −0.04 to +1.33. The sampler
+  costs 0.76 points under argmax and thresholds return it. Thresholds lower both behaviour models (Transformer 67.58
+  → 66.99, GBM 66.53 → 66.27), and validation accuracy would pick the logit-bias decoder. Quote 1.99 only with its
+  recipe.
+- **Clips are not independent: 26 test participants.** Per-participant fused accuracy runs from 27% to 100%. With
+  participants resampled, the fusion gain over the network is +4.02 with a 95% interval of +0.7 to +7.6 (15
+  participants better, 9 worse); the audio gain +0.74 has −0.9 to +2.5 (13 better, 11 worse). Binomial intervals and
+  McNemar p-values on clips overstate certainty. The audio claim is a sign that repeats across networks sharing one
+  warm start and one test set, not across people.
+- **Lineage and backbone.** The network code descends from Chumachenko, Iosifidis and Gabbouj (ICPR 2022, doi
+  10.1109/ICPR56361.2022.9956592) through the AVT-CA repository; `LICENSE` carries her copyright, and the intermediate
+  fusion and the modality dropout are hers. The paper cited only AVT-CA as of this review. The visual backbone is a
+  modified EfficientFace: commit `42f2845` moved the modulator before stage 2 (29 channels), so its 27 pre-trained
+  tensors are skipped ("loaded 389 layers, skipped 27").
+- **Robust versions of the headline, useful if a reviewer attacks the selection:** equal weights with argmax decoding
+  (nothing fitted on validation) 69.30 ± 0.25; argmax with 0.6 / 0.2 / 0.2 gives 68.57 ± 0.31; audio + video beats
+  video only under argmax in 9 of 9 networks (+0.74) and on the clips that have sound (+0.75, 7 of 9).
+- **Data quirks of the release.** 9% of clips have an OpenFace series of exactly 10,000 rows (seven subjects; 70% have
+  300), so frame-weighted statistics such as the 98.2% detection rate are dominated by them (per clip: 96.3%). 101 used
+  clips have no detected face, 100 of them *not engaged*; every model predicts level 0 on about 90% of low-detection
+  clips. 237 test clips (10.5%) have a silent audio track, validation none. Validation also differs from test in
+  recording conditions (19% against 10% 10,000-row clips; 1% against 13% low-frame-rate clips), not only in the label
+  prior.
+- **Threshold fits are fragile.** A 0.05 step in one fusion weight moves one seed by two points (0.55 / 0.45: 67.91),
+  and equal thirds give 69.28 or 69.39 depending on whether the weights are 0.334 / 0.333 / 0.333 or exact.
+- **Tooling:** `conda run -n avtca python - <<EOF` prints nothing (stdin is not forwarded); write a script file and
+  run that. No LaTeX engine or `pdfinfo` is on the PATH; PyMuPDF (`fitz`) in the `avtca` environment reads the PDFs.
+- **Fixes applied the same day (plan.md §22.8), and what they imply for later work:**
+  - The paper now states P1–P7. Do not reintroduce "the test split is used only for the final evaluation" or an
+    unqualified "decoding beats any training change".
+  - Pre-training stage 2 (`results/v12_05_*`) trained **two** epochs (24–25 of the continued count, 3.6 s audio), not
+    25. Older notes, including §18.18's "1e-2 10 ep → 5e-4 …", are wrong; trust the run logs and the README lineage.
+  - The validation choice between the control and the sampler recipe depends on the decoder: refined thresholds
+    prefer the control, the logit-bias decoder the sampler run.
+  - Bit-exactness guard: any change on the reported path (`--fusion it`, modern, 8 heads) must leave the seed-1
+    logits identical (old vs new code, max difference 0). `need_weights=False` in the second exchange fails this
+    (fused kernel, 2.4e-7) and was reverted.
+  - Untracking the 18 dataset-derived files only stops new commits from carrying them; GitHub history still has
+    them until a history rewrite.
+- **History rewritten and force-pushed on 2026-11-15 (plan.md §22.9).** Every commit hash changed. The hashes cited in
+  the docs, the README, the scripts and the memory notes were mapped to the new ones. A hash from anywhere else, such
+  as an old log, can be translated with `~/AVTCA-Research-backups/2026-11-15-before-history-rewrite/commit-map.txt`.
+  The same folder holds the pre-rewrite bundle and the GitHub mirror. Gakshith's fork, GitHub's caches and the
+  pull-request ref still hold the old history.

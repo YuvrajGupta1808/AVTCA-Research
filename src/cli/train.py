@@ -1,6 +1,9 @@
+import hashlib
+import json
 import math
 import numbers
 import os
+import time
 from collections.abc import Mapping, Sequence
 
 import torch
@@ -10,6 +13,7 @@ from src.engine.checkpointing import (
     load_checkpoint_object,
     load_named_state_dict_from_checkpoint,
     load_state_dict_flexible,
+    model_config_of,
     resolve_checkpoint_file,
 )
 from src.engine.evaluation import canonical_evaluate_split, run_validation_epoch, validation_selection_score
@@ -275,6 +279,9 @@ def build_checkpoint_state(
     return {
         'epoch': epoch,
         'arch': opt.arch,
+        # Settings that change the computation without changing any tensor shape;
+        # verified by the checkpoint loaders when present.
+        'model_config': model_config_of(model),
         'state_dict': state_dict,
         'raw_state_dict': raw_state_dict if model_ema is not None else None,
         'ema_state_dict': model_ema.state_dict() if model_ema is not None else None,
@@ -291,20 +298,72 @@ def build_checkpoint_state(
     }
 
 
+def _sha256_file(path):
+    digest = hashlib.sha256()
+    with open(path, 'rb') as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b''):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def warm_start_record_path(options_path):
+    """warm_start<stamp>.json next to the opts<stamp>.json of the same launch."""
+    directory, name = os.path.split(options_path)
+    stamp = name[len('opts'):-len('.json')] if name.startswith('opts') and name.endswith('.json') else str(time.time())
+    return os.path.join(directory, f'warm_start{stamp}.json')
+
+
+def write_warm_start_record(record_path, checkpoint_path, report):
+    """Record which weights an implicit warm start (result_path/model.pth) loaded.
+
+    The opts*.json of a run does not show that its initial weights came from a copied
+    model.pth, so the path, hash and load counts are written next to it.
+    """
+    record = {
+        'path': os.path.abspath(checkpoint_path),
+        'sha256': _sha256_file(checkpoint_path),
+        'restored': report.get('restored'),
+        'skipped': report.get('skipped'),
+        'left_at_init': report.get('left_at_init'),
+        'skipped_keys': report.get('skipped_keys', []),
+        'left_at_init_keys': report.get('left_at_init_keys', []),
+        'loaded_at': time.strftime('%Y-%m-%dT%H:%M:%S%z'),
+    }
+    with open(record_path, 'w') as handle:
+        json.dump(record, handle, indent=2)
+    return record
+
+
 def main():
     opt = parse_opts()
     opt = prepare_run_options(opt)
-    persist_run_options(opt)
+    options_path = persist_run_options(opt)
 
     set_random_seed(opt.manual_seed)
     model, parameters = generate_model(opt)
     print_runtime_summary(opt, model)
 
     if not opt.resume_path and not (opt.no_train and opt.no_val and opt.test):
+        # Implicit warm start: a model.pth already in result_path (written every epoch by
+        # train_epoch, or copied there by scripts/fullclip/run_job.sh) is loaded as the
+        # initial weights. The optimiser, epoch counter and best score start fresh.
         checkpoint_path = os.path.join(opt.result_path, 'model.pth')
         if os.path.isfile(checkpoint_path):
-            load_state_dict_flexible(model, checkpoint_path, map_location=torch.device(opt.device))
-            print('Loaded model weights from {}'.format(checkpoint_path))
+            report = {}
+            load_state_dict_flexible(model, checkpoint_path, map_location=torch.device(opt.device), report=report)
+            record_path = warm_start_record_path(options_path)
+            record = write_warm_start_record(record_path, checkpoint_path, report)
+            print(
+                'Warm start: loaded model weights from {} (sha256 {}; {} tensors restored, {} skipped, '
+                '{} left at init); recorded in {}'.format(
+                    checkpoint_path,
+                    record['sha256'][:12],
+                    record['restored'],
+                    record['skipped'],
+                    record['left_at_init'],
+                    record_path,
+                )
+            )
         else:
             print('No existing model weights found at {}. Starting from initialized weights.'.format(checkpoint_path))
 

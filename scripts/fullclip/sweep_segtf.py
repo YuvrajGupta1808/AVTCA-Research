@@ -3,6 +3,7 @@
 
 Pre-registered selection: rank configs by MEAN best-validation argmax top-1 over the 3 seeds; the
 val-selected config is the one claimed. Test numbers are printed for every run for transparency.
+No config is selected until every config has all three seeds (a failed or missing run is an error).
 """
 import json
 import os
@@ -13,8 +14,8 @@ from concurrent.futures import ThreadPoolExecutor
 
 WT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 FS = sys.argv[sys.argv.index('--features') + 1] if '--features' in sys.argv else '22'
-OUT = '/home/user/AVTCA-Research/results/fullclip/segtf' + ('' if FS == '22' else f'_f{FS}')
-PY = '/home/user/.conda/envs/avtca/bin/python'
+OUT = os.path.join(WT, 'results', 'fullclip', 'segtf' + ('' if FS == '22' else f'_f{FS}'))
+PY = os.environ.get('PY', sys.executable)
 BASE = ['--features', FS, '--n_segments', '20', '--n_heads', '8', '--dropout', '0.3', '--weight_decay', '0.05',
         '--ordinal_weight', '0.15', '--label_smoothing', '0.1', '--epochs', '60', '--batch_size', '64']
 CONFIGS = {
@@ -53,17 +54,22 @@ with ThreadPoolExecutor(4) as pool:
 print('\n=== segment transformer sweep — val-selected config marked ===')
 print(f"{'config':<28} {'seed':>4} {'ep':>3} {'val argmax':>10} {'TEST argmax':>11} {'TEST E-thr':>10} {'adj':>7} {'MAE':>7} {'F1':>6}")
 summary = {}
+missing = []
 for name in CONFIGS:
     vals = []
     for seed in SEEDS:
         p = os.path.join(OUT, f'{name}_s{seed}', 'results.json')
         if not os.path.isfile(p):
+            missing.append(f'{name}_s{seed}')
             continue
         r = json.load(open(p)); vals.append(r['val_argmax']['top1'])
         print(f"{name:<28} {seed:>4} {r['best_epoch']:>3} {r['val_argmax']['top1']:>10.2f} {r['test_argmax']['top1']:>11.2f} "
               f"{r['test_ethr']['top1']:>10.2f} {r['test_ethr']['adj']:>7.2f} {r['test_ethr']['mae']:>7.3f} {r['test_ethr']['f1']:>6.2f}")
     if vals:
         summary[name] = sum(vals) / len(vals)
+if missing:
+    # Selecting on a partial set of seeds would compare means over different seeds; see train.out of each run.
+    sys.exit(f'refusing to select: {len(missing)} run(s) have no results.json: {", ".join(missing)}')
 best = max(summary, key=summary.get)
 print('\nmean best-val argmax top-1 per config:')
 for name, v in sorted(summary.items(), key=lambda kv: -kv[1]):

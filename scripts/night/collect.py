@@ -4,13 +4,20 @@
 Reports top-1, adjacent, MAE and macro-F1 together. Per plan.md 13.10, top-1
 alone is misleading at this class imbalance: a majority-class predictor scores
 50.27 top-1 at 16.73 macro-F1.
+
+Selection uses VALIDATION only: each run's decoder is the one with the highest
+validation top-1, and runs are ranked by that validation top-1; test is shown
+alongside. ``--rank_by test`` restores the August 2026 behaviour (decoder and
+ranking by TEST top-1), which picked the G04 recipe and wrote results/night/WINNER;
+it is kept only to reproduce that file and must not be used to select anything.
 """
+import argparse
 import glob
 import json
 import os
 import sys
 
-ROOT = '/home/user/AVTCA-Research'
+ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 NIGHT = os.path.join(ROOT, 'results', 'night')
 DECODES = ('argmax', 'logit_bias', 'expected_thresholds', 'refined_expected_thresholds')
 
@@ -46,28 +53,41 @@ def load_rows(night_dir=NIGHT):
     return rows
 
 
-def best_per_run(rows, modality='none'):
-    """Best decode per run, ranked by test top-1."""
+def best_per_run(rows, modality='none', rank_by='validation'):
+    """Decoder per run and run ranking by validation top-1 (default), or by test top-1 (legacy).
+
+    Ties in validation top-1 keep the simpler decoder (DECODES order); test top-1 never decides.
+    """
+    key = 'val_top1' if rank_by == 'validation' else 'test_top1'
     best = {}
     for r in rows:
-        if r['modality'] != modality or r['test_top1'] is None:
+        if r['modality'] != modality or r[key] is None or r['test_top1'] is None:
             continue
         cur = best.get(r['run'])
-        if cur is None or r['test_top1'] > cur['test_top1']:
+        if cur is None or r[key] > cur[key]:
             best[r['run']] = r
-    return sorted(best.values(), key=lambda r: -r['test_top1'])
+    return sorted(best.values(), key=lambda r: (-r[key], r['run']))
 
 
-def main():
+def parse_args(argv=None):
+    ap = argparse.ArgumentParser(description=__doc__)
+    ap.add_argument('--rank_by', choices=['validation', 'test'], default='validation',
+                    help="'test' reproduces the August 2026 selection on TEST top-1; never use it to select")
+    return ap.parse_args(argv)
+
+
+def main(argv=None):
+    a = parse_args(argv)
     rows = load_rows()
     if not rows:
         print('No calibration results yet under', NIGHT)
         return 0
 
-    print('=== Best decode per run (AV fusion), ranked by test top-1 ===')
-    print(f"{'run':<34} {'decode':<28} {'top1':>7} {'adj':>7} {'MAE':>7} {'f1_macro':>9}")
-    for r in best_per_run(rows):
-        print(f"{r['run']:<34} {r['decode']:<28} {r['test_top1']:>7.2f} "
+    label = 'validation top-1 (decoder and ranking)' if a.rank_by == 'validation' else 'TEST top-1 (legacy; not a valid selection)'
+    print(f'=== Best decode per run (AV fusion), selected by {label} ===')
+    print(f"{'run':<34} {'decode':<28} {'val top1':>8} {'TEST top1':>9} {'adj':>7} {'MAE':>7} {'f1_macro':>9}")
+    for r in best_per_run(rows, rank_by=a.rank_by):
+        print(f"{r['run']:<34} {r['decode']:<28} {r['val_top1']:>8.2f} {r['test_top1']:>9.2f} "
               f"{r['test_adjacent']:>7.2f} {r['test_mae']:>7.3f} {r['test_f1_macro']:>9.2f}")
 
     print()
@@ -80,9 +100,9 @@ def main():
     if abl:
         print()
         print('=== Modality ablation (plan.md 13.10 question b) ===')
-        av = {r['run']: r for r in best_per_run(rows, 'none')}
+        av = {r['run']: r for r in best_per_run(rows, 'none', rank_by=a.rank_by)}
         for modality in ('video_only', 'audio_only'):
-            for r in best_per_run(rows, modality):
+            for r in best_per_run(rows, modality, rank_by=a.rank_by):
                 base = av.get(r['run'])
                 delta = ('' if base is None
                          else f"   fusion-{modality} = {base['test_top1'] - r['test_top1']:+.2f}")

@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # Re-run every headline EngageNet number on the corrected (50-frame) test/val split.
 # All steps are calibration-only (inference), so this is fast relative to training.
+# Historical (August 2026), not used for the paper.
 set -euo pipefail
-cd /home/user/AVTCA-Research
+cd "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 A36="$PWD/preprocessing/engagenet/annotations_engagement.txt"
 A10="$PWD/preprocessing/engagenet/annotations_engagement_a10.txt"

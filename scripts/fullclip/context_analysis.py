@@ -24,7 +24,8 @@ import sys
 import numpy as np
 
 WT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+ROOT = WT
+DEFAULT_ANN = os.path.join(ROOT, 'preprocessing', 'engagenet', 'annotations_engagement_a10_subject.txt')
 sys.path.insert(0, WT)
 os.chdir(WT)
 KEY = re.compile(r'(subject_\d+_[a-z0-9]+)_vid_(\d+)_(\d+)')
@@ -48,7 +49,11 @@ def opt_value(run_dir, key, default=''):
 def collect(run_dir, out_dir):
     cal = load_cal()
     ckpt = os.path.join(run_dir, 'ENGAGENET_multimodal_cnn_15_best.pth')
-    argv = ['x', '--annotation_path', str(opt_value(run_dir, 'annotation_path')), '--checkpoint_path', ckpt,
+    ann = str(opt_value(run_dir, 'annotation_path'))
+    if not os.path.isfile(ann):  # runs launched from a since-removed worktree; this tree's file holds the same clips
+        print(f'stored annotation path {ann!r} is missing; using {DEFAULT_ANN}')
+        ann = DEFAULT_ANN
+    argv = ['x', '--annotation_path', ann, '--checkpoint_path', ckpt,
             '--result_path', out_dir, '--dataset', 'ENGAGENET', '--n_classes', '4', '--model', 'multimodal_cnn',
             '--fusion', 'it', '--audio_features', 'mel', '--num_heads', '8', '--visual_backbone', 'efficientface',
             '--data_root', f'{ROOT}/datasets/EngageNet', '--device', 'cuda', '--n_threads', '8',

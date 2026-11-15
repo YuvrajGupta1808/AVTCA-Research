@@ -34,7 +34,7 @@ from src.engine.runtime import prepare_run_options  # noqa: E402
 from src.engine.train import _unpack_multimodal_batch  # noqa: E402
 from src.models.factory import generate_model  # noqa: E402
 
-ROOT = '/home/user/AVTCA-Research'
+ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 
 def member_opts(run_dir, base):
@@ -50,9 +50,16 @@ def member_opts(run_dir, base):
     for key in ('max_video_frames', 'frame_sampling', 'max_audio_steps', 'num_heads',
                 'audio_features', 'visual_backbone', 'visual_stem_pooling', 'fusion',
                 'mask', 'late_text_fusion', 'n_classes', 'full_video_preprocessing',
-                'max_text_tokens', 'text_vocab_size'):
-        if key in trained:
+                'max_text_tokens', 'text_vocab_size', 'text_fusion_arch', 'audio_channel_attention',
+                'behavior', 'behavior_frames', 'behavior_feature_dim', 'behavior_skip_dim',
+                'text_fusion', 'text_backend', 'visual_features', 'marlin_tokens'):
+        if trained.get(key) is not None:
             values[key] = trained[key]
+    for key in ('behavior_dir', 'behavior_baselines'):  # data paths: keep the stored one only if it still exists
+        if trained.get(key) and os.path.exists(trained[key]):
+            values[key] = trained[key]
+    if values.get('behavior') and not values.get('behavior_dir'):
+        values['behavior_dir'] = os.path.join(ROOT, 'datasets/EngageNet/behavior')
     return prepare_run_options(SimpleNamespace(**values))
 
 
@@ -61,13 +68,16 @@ def collect(model, loader, device, name):
     logits, targets = [], []
     with torch.no_grad():
         for i, batch in enumerate(loader):
-            audio, video, y, alen, vlen, amask, vmask, ttok, tmask = _unpack_multimodal_batch(batch)
+            (audio, video, y, alen, vlen, amask, vmask,
+             ttok, tmask, bfeat, bpres) = _unpack_multimodal_batch(batch)
             out = model(
                 audio.to(device), video.to(device),
                 audio_mask=amask.to(device), video_mask=vmask.to(device),
                 audio_lengths=alen.to(device), video_lengths=vlen.to(device),
                 text_tokens=None if ttok is None else ttok.to(device),
                 text_mask=None if tmask is None else tmask.to(device),
+                behavior_feats=None if bfeat is None else bfeat.to(device),
+                behavior_present=None if bpres is None else bpres.to(device),
             )
             logits.append(out.cpu())
             targets.append(y.cpu())
@@ -82,19 +92,9 @@ def softmax(x):
     return e / e.sum(axis=1, keepdims=True)
 
 
-def main():
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--members', nargs='+', required=True)
-    parser.add_argument('--result_path', required=True)
-    parser.add_argument('--annotation_path',
-                        default=os.path.join(ROOT, 'preprocessing/engagenet/annotations_engagement_a10.txt'))
-    parser.add_argument('--device', default='cuda')
-    parser.add_argument('--batch_size', default=8, type=int)
-    parser.add_argument('--n_threads', default=10, type=int)
-    args = parser.parse_args()
-
-    os.makedirs(args.result_path, exist_ok=True)
-    base = {
+def base_options(args):
+    """Evaluation-time options shared by every member; member_opts() overrides them from each run."""
+    return {
         'annotation_path': args.annotation_path, 'data_root': os.path.join(ROOT, 'datasets/EngageNet'),
         'result_path': args.result_path, 'store_name': 'ensemble', 'dataset': 'ENGAGENET',
         'n_classes': 4, 'model': 'multimodal_cnn', 'audio_features': 'mel', 'num_heads': 8,
@@ -117,7 +117,26 @@ def main():
         'spec_time_mask_width': 20, 'spec_freq_mask_width': 8, 'audio_channel_attention': False,
         'n_epochs': 1, 'begin_epoch': 1, 'resume_path': '', 'no_train': True, 'no_val': True,
         'test': True, 'test_subset': 'test', 'manual_seed': 1, 'save_every_epoch': False,
+        'behavior': False, 'behavior_dir': '', 'behavior_baselines': '', 'behavior_frames': 0,
+        'behavior_feature_dim': 22, 'behavior_skip_dim': 64, 'text_fusion': False, 'text_backend': 'hashing',
+        'text_fusion_arch': 'legacy', 'visual_features': 'frames', 'marlin_root': os.path.join(ROOT, 'datasets/EngageNet'),
+        'marlin_tokens': 9,
     }
+
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--members', nargs='+', required=True)
+    parser.add_argument('--result_path', required=True)
+    parser.add_argument('--annotation_path',
+                        default=os.path.join(ROOT, 'preprocessing/engagenet/annotations_engagement_a10.txt'))
+    parser.add_argument('--device', default='cuda')
+    parser.add_argument('--batch_size', default=8, type=int)
+    parser.add_argument('--n_threads', default=10, type=int)
+    args = parser.parse_args()
+
+    os.makedirs(args.result_path, exist_ok=True)
+    base = base_options(args)
 
     val_probs, test_probs = [], []
     val_y = test_y = None

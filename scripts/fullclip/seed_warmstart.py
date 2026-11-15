@@ -38,7 +38,7 @@ def parse():
     p.add_argument('--n_classes', default=4, type=int)
     p.add_argument('--verify_batches', default=2, type=int, help='Real validation batches to compare logits on (0 skips).')
     p.add_argument('--annotation_path', default=os.path.join(ROOT, 'preprocessing', 'engagenet', 'annotations_engagement_a10_subject.txt'))
-    p.add_argument('--behavior_dir', default='/home/user/AVTCA-Research/datasets/EngageNet/behavior')
+    p.add_argument('--behavior_dir', default=os.path.join(ROOT, 'datasets', 'EngageNet', 'behavior'))
     p.add_argument('--device', default='cuda' if torch.cuda.is_available() else 'cpu')
     return p.parse_args()
 

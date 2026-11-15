@@ -1,5 +1,8 @@
 """Staged hyperparameter sweep for the behavior+text architecture.
 
+Historical (August 2026; docs/plan.md Sec. 16), not used for the paper. It ran from the retired
+collaborator worktree WT; set the WT and PY environment variables to rerun it.
+
 Greedy, not factorial: stage 1 finds the best stabiliser (schedule / EMA /
 clipping), stage 2 varies capacity + data handling on top of that winner, and
 stage 3 trains the winner long alongside a matched audio-video control so the
@@ -23,9 +26,9 @@ import sys
 import time
 from concurrent.futures import ThreadPoolExecutor
 
-ROOT = "/home/user/AVTCA-Research"
-WT = "/home/user/AVTCA-collab-test"
-PY = "/home/user/.conda/envs/avtca/bin/python"
+ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+WT = os.environ.get("WT", os.path.join(os.path.dirname(ROOT), "AVTCA-collab-test"))  # retired worktree
+PY = os.environ.get("PY", sys.executable)
 OUT = f"{WT}/results/sweep"
 ANN = f"{WT}/annotations_a10_subject.txt"
 BEH = f"{ROOT}/datasets/EngageNet/behavior"
@@ -161,7 +164,8 @@ json.dump({"stage1": r1, "stage2": r2, "winner": best,
            "winner_args": best_extra}, open(f"{OUT}/ranking.json", "w"), indent=2)
 
 # ---------------- stage 3: long run, winner + matched control ----------------
-# num_heads defaults to 8 unless the winner overrode it; the control must match.
+# --num_heads is not in COMMON, so both runs use the src/config/opts.py default (1) unless the
+# winner's flags set it; the control keeps every winner flag except the behavior/text ones.
 ctrl = [a for a in best_extra if a not in ("--behavior", "--text_fusion")]
 skip_next = False
 ctrl2 = []

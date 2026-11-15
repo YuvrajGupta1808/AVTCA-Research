@@ -7,9 +7,10 @@
 # GPU is taken from CUDA_VISIBLE_DEVICES set by the caller.
 set -euo pipefail
 
-ROOT="/home/user/AVTCA-Research"
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
-PY="/home/user/.conda/envs/avtca/bin/python"
+# Python interpreter: set PY, or activate the environment (conda activate avtca) before running.
+PY="${PY:-python}"
 OUT_ROOT="$ROOT/results/exp2026"
 
 A36="$ROOT/preprocessing/engagenet/annotations_engagement.txt"
@@ -48,7 +49,11 @@ run_train() {
     "$@" > "$dir/train.console.log" 2>&1
 
   local best="$dir/ENGAGENET_multimodal_cnn_15_best.pth"
-  [[ -f "$best" ]] || best="$dir/model.pth"
+  # Never fall back to model.pth: before the first finished epoch it is still the warm-start copy.
+  if [[ ! -f "$best" ]]; then
+    echo "[exp2026] $name: no best checkpoint in $dir; refusing to calibrate model.pth" >&2
+    exit 3
+  fi
   run_calib "$name/calibration" "$best" "$ann"
   echo "[exp2026] train $name DONE"
 }

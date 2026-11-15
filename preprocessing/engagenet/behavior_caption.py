@@ -37,8 +37,11 @@ _INDEX = {name: i for i, name in enumerate(FEATURE_NAMES)}
 
 # OpenFace AU_r intensities are on a 0-5 scale; 1.0 is the usual "active" cut.
 AU_ACTIVE_LEVEL = 1.0
-# Assumed capture rate of the 300-frame series (10 s clips @ 30 fps).
-FRAMES_PER_SECOND = 30.0
+# Duration of an EngageNet clip. The frame rate is derived from it (rows / duration): most series have
+# 300 rows (30 fps), but some have 150, 100 or exactly 10,000 rows for the same 10 s, so a fixed
+# 30 fps understated the blink rate of a 10,000-row series 33-fold. behavior_caption_stats.json was
+# fitted with the fixed 30 fps; refit it (compute_caption_stats.py) before captioning again.
+CLIP_SECONDS = 10.0
 
 # Statistic name -> (low, mid, high) phrase. Order here is caption order.
 PHRASES: Dict[str, tuple] = {
@@ -62,11 +65,12 @@ def _col(feats: np.ndarray, name: str) -> np.ndarray:
     return feats[:, _INDEX[name]]
 
 
-def compute_clip_stats(feats: np.ndarray) -> Dict[str, float]:
-    """Clip-level scalar statistics from a ``(T, 22)`` OpenFace series.
+def compute_clip_stats(feats: np.ndarray, duration_secs: float = CLIP_SECONDS) -> Dict[str, float]:
+    """Clip-level scalar statistics from a ``(T, 22)`` OpenFace series spanning ``duration_secs``.
 
     Uses the full temporal series (all frames), which is the caption path's main
-    advantage over the frame-subsampled visual branch.
+    advantage over the frame-subsampled visual branch. Rates are per second of clip,
+    whatever the number of rows.
     """
     feats = np.asarray(feats, dtype=np.float32)
     if feats.ndim != 2 or feats.shape[1] != FEATURE_DIM:
@@ -75,7 +79,8 @@ def compute_clip_stats(feats: np.ndarray) -> Dict[str, float]:
     if t == 0:
         raise ValueError("empty feature series")
 
-    duration_secs = t / FRAMES_PER_SECOND
+    if duration_secs <= 0:
+        raise ValueError(f"duration_secs must be positive, got {duration_secs}")
 
     au45 = _col(feats, "AU45")
     active = au45 > AU_ACTIVE_LEVEL

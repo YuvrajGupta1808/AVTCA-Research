@@ -17,7 +17,7 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from collect import best_per_run, load_rows  # noqa: E402
 
-ROOT = '/home/user/AVTCA-Research'
+ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 QUEUE_DIR = os.path.join(ROOT, 'scripts', 'night')
 NIGHT = os.path.join(ROOT, 'results', 'night')
 
@@ -51,15 +51,17 @@ def main():
         print(f'[phase2] phase 1 still running, {len(pending)} pending: {", ".join(pending)}')
         return 1
 
-    ranked = best_per_run(load_rows())
+    # Winner = highest VALIDATION top-1 (decoder chosen on validation too). The August 2026 run of this
+    # script ranked by test top-1 and wrote the G04 WINNER; collect.py --rank_by test reproduces that table.
+    ranked = best_per_run(load_rows(), rank_by='validation')
     if not ranked:
         print('[phase2] no calibration results found; cannot pick a winner')
         return 1
 
     winner = ranked[0]
     runner_up = ranked[1] if len(ranked) > 1 else None
-    print(f"[phase2] winner: {winner['run']} test top-1 {winner['test_top1']:.2f} "
-          f"({winner['decode']})")
+    print(f"[phase2] winner (selected on validation): {winner['run']} val top-1 {winner['val_top1']:.2f}, "
+          f"test top-1 {winner['test_top1']:.2f} ({winner['decode']})")
 
     # Recover the winner's own training flags so the seed repeats are identical
     # except for --manual_seed.
@@ -95,7 +97,8 @@ def main():
         print(f'[phase2] wrote {path}')
 
     with open(os.path.join(NIGHT, 'WINNER'), 'w') as handle:
-        handle.write(f"{winner['run']}\t{winner['test_top1']:.4f}\t{winner['decode']}\n")
+        handle.write(f"{winner['run']}\tval {winner['val_top1']:.4f}\ttest {winner['test_top1']:.4f}\t"
+                     f"{winner['decode']}\tselected on validation\n")
     return 0
 
 

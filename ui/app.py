@@ -1,8 +1,12 @@
-"""Streamlit UI for AVT-CA engagement detection (EngageNet-trained).
+"""Streamlit UI for engagement detection with the audio-visual network (EngageNet-trained).
 
 Upload any recording of a person on camera; the app slices it into 10-second
 windows — the clip length the EngageNet models were trained on — and reports an
 engagement level per window plus a session-level rollup.
+
+The app runs the audio-visual cross-attention network only, not the full AVB-Engage
+system of the paper (which also averages two OpenFace models). Checkpoints are read
+from results/ or from the directory in the environment variable AVTCA_RESULTS_DIR.
 """
 
 import os
@@ -17,9 +21,12 @@ import torch
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from inference import (  # noqa: E402
     ENGAGEMENT_LABELS,
+    RESULTS_DIR_ENV,
     WINDOW_SECONDS,
+    FFmpegNotFoundError,
     analyze_video,
     available_models,
+    expected_checkpoints,
     load_model,
     mtcnn_available,
 )
@@ -35,7 +42,7 @@ LEVEL_HELP = {
 }
 
 
-st.set_page_config(page_title="AVT-CA Engagement Detection", layout="wide")
+st.set_page_config(page_title="Engagement Detection", layout="wide")
 
 
 @st.cache_resource(show_spinner=False)
@@ -45,11 +52,10 @@ def get_model(checkpoint_path, model_key, device):
 
 
 def default_device():
-    if torch.cuda.is_available():
-        return "cuda"
-    if hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
-        return "mps"
-    return "cpu"
+    # CUDA when present, otherwise the CPU. MPS is not chosen automatically: the
+    # per-sample audio alignment pools to lengths that do not divide the input, which
+    # MPS adaptive pooling does not support.
+    return "cuda" if torch.cuda.is_available() else "cpu"
 
 
 def fmt_time(seconds):
@@ -58,8 +64,8 @@ def fmt_time(seconds):
 
 st.title("Engagement Detection")
 st.caption(
-    "Audio-Video Transformer with Cross-Attention · trained on EngageNet · "
-    "4-level engagement scale"
+    "Audio-visual cross-attention network · trained on EngageNet · 4-level engagement scale · "
+    "the network alone, without the two OpenFace models of the full AVB-Engage system"
 )
 
 models = available_models(REPO_ROOT)
@@ -69,9 +75,12 @@ with st.sidebar:
     st.header("Model")
 
     if not models:
+        expected = "\n".join(f"- `{path}`" for path in expected_checkpoints(REPO_ROOT).values())
         st.error(
-            "No EngageNet checkpoints found. Expected at least\n\n"
-            "`results/exp2026/E04_ft10s_ord_lr5e5_e8/ENGAGENET_multimodal_cnn_15_best.pth`"
+            "No EngageNet checkpoint found. The trained weights are not part of the repository; "
+            "train the network (see the README) or copy the checkpoints into place. The app looks for:"
+            f"\n\n{expected}\n\nSet the environment variable `{RESULTS_DIR_ENV}` to read them from "
+            "another results directory."
         )
         st.stop()
 
@@ -98,8 +107,11 @@ with st.sidebar:
 
     st.divider()
     st.header("Analysis")
-    device_choice = st.selectbox("Device", ["auto", "cuda", "cpu", "mps"])
+    device_choice = st.selectbox("Device", ["auto", "cuda", "cpu"])
     device = default_device() if device_choice == "auto" else device_choice
+    if device == "cuda" and not torch.cuda.is_available():
+        st.warning("CUDA is not available here; running on the CPU instead.")
+        device = "cpu"
 
     window_seconds = st.slider(
         "Window length (s)", 4.0, 20.0, float(WINDOW_SECONDS), 1.0,
@@ -166,7 +178,11 @@ if st.button("Analyse engagement", type="primary"):
 
     try:
         with st.spinner("Loading model weights…"):
-            model = get_model(spec["checkpoint_path"], model_key, device)
+            try:
+                model = get_model(spec["checkpoint_path"], model_key, device)
+            except (ValueError, RuntimeError, OSError) as exc:
+                st.error(f"Could not load the checkpoint `{spec['checkpoint_path']}`: {exc}")
+                st.stop()
 
         progress = st.progress(0.0, text="Starting…")
         result = analyze_video(
@@ -183,8 +199,17 @@ if st.button("Analyse engagement", type="primary"):
         progress.empty()
         st.session_state.result = result
         st.session_state.result_model = spec["label"]
-    except FileNotFoundError:
-        st.error("**ffmpeg** not found. Install it with:\n```\nsudo apt install ffmpeg\n```")
+    except FFmpegNotFoundError:
+        st.error(
+            "**ffmpeg** not found. Install it (for example `sudo apt install ffmpeg`) or the "
+            "`imageio-ffmpeg` package."
+        )
+        st.stop()
+    except ValueError as exc:            # unreadable video, no frames, malformed input
+        st.error(f"Could not analyse this file: {exc}")
+        st.stop()
+    except Exception as exc:             # model or runtime failure: show it, keep the app alive
+        st.error(f"Analysis failed: {type(exc).__name__}: {exc}")
         st.stop()
     finally:
         if os.path.exists(video_path):
@@ -212,7 +237,8 @@ cols[0].metric("Mean engagement score", f"{summary['mean_score']:.2f} / 3")
 cols[1].metric("Time engaged", f"{summary['engaged_fraction'] * 100:.0f}%",
                help="Share of analysed time at level Engaged or Highly Engaged.")
 cols[2].metric("Analysed", f"{fmt_time(summary['total_seconds'])} "
-                           f"({summary['n_windows']} windows)")
+                           f"({summary['n_windows']} windows)",
+               help="Recording time covered by the windows; overlapping windows are not counted twice.")
 cols[3].metric("Variability", f"±{summary['score_std']:.2f}",
                help="Standard deviation of the window scores. Low means a flat session.")
 
@@ -226,8 +252,8 @@ low_face = [w for w in windows if w["face_rate"] < 0.5]
 if low_face:
     st.warning(
         f"A face was detected in fewer than half the sampled frames for "
-        f"{len(low_face)} of {len(windows)} windows. Those windows fell back to the full "
-        "frame and their scores are unreliable."
+        f"{len(low_face)} of {len(windows)} windows. Frames without a detected face are "
+        "resized whole (as in the training data), so those windows' scores are unreliable."
     )
 
 # ── Timeline ──────────────────────────────────────────────────────────────────

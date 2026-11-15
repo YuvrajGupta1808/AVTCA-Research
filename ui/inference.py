@@ -1,6 +1,13 @@
 """Engagement inference for the Streamlit UI.
 
-Runs the EngageNet-trained AVT-CA checkpoints on an arbitrary uploaded video.
+Runs EngageNet-trained checkpoints of the audio-visual cross-attention network on an
+arbitrary uploaded video. This is the network block of AVB-Engage only: the paper's
+70.29% system also averages two models on OpenFace action units, gaze and head pose,
+which the UI does not run (OpenFace is not part of this pipeline).
+
+Checkpoints are looked up under ``results/`` of the repository, or under the directory
+named by the environment variable ``AVTCA_RESULTS_DIR``. The weights are not published
+with the repository; without them the app reports which files it expected.
 
 The training pipeline consumed fixed 10-second EngageNet clips.  A real
 recording is minutes long, so this module slices the upload into 10-second
@@ -36,7 +43,6 @@ import cv2
 import librosa
 import numpy as np
 import torch
-import torch.nn.functional as F
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if REPO_ROOT not in sys.path:
@@ -47,7 +53,6 @@ from src.models.factory import generate_model
 
 # EngageNet label order — see preprocessing/engagenet/label_utils.py
 ENGAGEMENT_LABELS = ["Not Engaged", "Barely Engaged", "Engaged", "Highly Engaged"]
-ENGAGEMENT_SHORT = ["Not", "Barely", "Engaged", "Highly"]
 N_CLASSES = 4
 
 SAMPLE_RATE = 22050
@@ -60,17 +65,19 @@ MIN_WINDOW_SECONDS = 2.0       # discard a trailing sliver shorter than this
 
 
 # ── Curated checkpoints ───────────────────────────────────────────────────────
-# Only models that beat the published EngageNet video-only baselines are listed.
-# Metrics are copied from the matching results/exp2026/*/calibration_results.json
-# ("refined_expected_thresholds" block), which is the decoder used below.
+# Audio-visual networks only. Neither reaches the best published EngageNet test result
+# (67.61%, a Transformer on OpenFace features); the paper's AVB-Engage (70.29%) adds two
+# OpenFace models that the UI does not run. Metrics and thresholds are copied from the
+# "refined_expected_thresholds" block of each run's calibration file (thresholds rounded
+# to three decimals): results/exp2026/R04_e04_av_fixed/ for E04 and
+# results/exp2026/R01_v12_av_fixed/ for V12-05. Checkpoint paths are relative to the
+# results directory (see results_dir()).
 MODEL_REGISTRY = {
     "e04_ft10s": {
-        "label": "E04 · 10 s audio, ordinal fine-tune  (best — 66.36% test)",
-        "checkpoint": "results/exp2026/E04_ft10s_ord_lr5e5_e8/ENGAGENET_multimodal_cnn_15_best.pth",
-        "calibration": "results/exp2026/R04_e04_av_fixed/calibration_results.json",
+        "label": "E04 · audio-visual network, 10 s audio (66.36% test)",
+        "checkpoint": "exp2026/E04_ft10s_ord_lr5e5_e8/ENGAGENET_multimodal_cnn_15_best.pth",
         "num_heads": 8,
         "fusion": "it",
-        "audio_features": "mel",
         "audio_seconds": None,          # full 10 s window (annotations_..._a10.txt)
         "thresholds": [1.02, 1.405, 2.04],
         "metrics": {
@@ -80,17 +87,16 @@ MODEL_REGISTRY = {
             "test_f1_macro": 52.03,
         },
         "notes": (
-            "Fine-tuned on full-length 10 s audio with the ordinal-distance loss. "
-            "Best top-1 and best adjacent-accuracy trade-off of every run in this repo."
+            "Fine-tuned on full-length 10 s audio with the ordinal-distance loss; the warm start "
+            "of the paper's networks. Audio-visual network only, below the best published "
+            "test result (67.61%)."
         ),
     },
     "v12_05": {
-        "label": "V12-05 · 3.6 s audio, ordinal fine-tune  (66.13% test)",
-        "checkpoint": "results/v12_05_finetune_uniform_best_ord_nosampler_lr0001_e30/model.pth",
-        "calibration": "results/exp2026/R01_v12_av_fixed/calibration_results.json",
+        "label": "V12-05 · audio-visual network, 3.6 s audio (66.13% test)",
+        "checkpoint": "v12_05_finetune_uniform_best_ord_nosampler_lr0001_e30/model.pth",
         "num_heads": 8,
         "fusion": "it",
-        "audio_features": "mel",
         "audio_seconds": 3.6,           # legacy centre-cropped audio contract
         "thresholds": [1.22, 1.47, 1.995],
         "metrics": {
@@ -100,7 +106,7 @@ MODEL_REGISTRY = {
             "test_f1_macro": 52.32,
         },
         "notes": (
-            "Second-best run. Its audio branch only ever saw a 3.6 s centre crop of each "
+            "Earlier checkpoint. Its audio branch only ever saw a 3.6 s centre crop of each "
             "clip, so speech outside that crop is invisible to it."
         ),
     },
@@ -116,13 +122,27 @@ def mtcnn_available():
         return False
 
 
+RESULTS_DIR_ENV = "AVTCA_RESULTS_DIR"
+
+
+def results_dir(repo_root=REPO_ROOT):
+    """Directory holding the checkpoints: $AVTCA_RESULTS_DIR, else <repo>/results."""
+    override = os.environ.get(RESULTS_DIR_ENV, "").strip()
+    return os.path.abspath(os.path.expanduser(override)) if override else os.path.join(repo_root, "results")
+
+
+def expected_checkpoints(repo_root=REPO_ROOT):
+    """Registry key -> absolute checkpoint path the UI looks for."""
+    root = results_dir(repo_root)
+    return {key: os.path.join(root, spec["checkpoint"]) for key, spec in MODEL_REGISTRY.items()}
+
+
 def available_models(repo_root=REPO_ROOT):
     """Registry entries whose checkpoint file actually exists on disk."""
     found = {}
-    for key, spec in MODEL_REGISTRY.items():
-        path = os.path.join(repo_root, spec["checkpoint"])
+    for key, path in expected_checkpoints(repo_root).items():
         if os.path.isfile(path):
-            resolved = dict(spec)
+            resolved = dict(MODEL_REGISTRY[key])
             resolved["key"] = key
             resolved["checkpoint_path"] = path
             found[key] = resolved
@@ -130,7 +150,7 @@ def available_models(repo_root=REPO_ROOT):
 
 
 def load_model(spec, device):
-    """Build MultiModalCNN with the run's config and load its weights."""
+    """Build MultiModalCNN with the run's config and load its weights (all of them)."""
     opt = SimpleNamespace(
         model="multimodal_cnn",
         n_classes=N_CLASSES,
@@ -148,7 +168,9 @@ def load_model(spec, device):
         text_vocab_size=4096,
     )
     model, _ = generate_model(opt)
-    load_state_dict_flexible(model, spec["checkpoint_path"], map_location="cpu")
+    # require_complete: a checkpoint that does not fit the model would leave part of the
+    # network at random weights, so refuse to serve it.
+    load_state_dict_flexible(model, spec["checkpoint_path"], map_location="cpu", require_complete=True)
     model = model.to(device)
     model.eval()
     model.ablate_modality = "none"
@@ -228,9 +250,16 @@ def window_frame_indices(first, last, fps):
 class FaceCropper:
     """MTCNN face crop with Haar fallback, matching extract_faces.py.
 
-    ``redetect_every`` > 1 reuses the previous bounding box for intermediate
-    frames.  Detection is the dominant cost on CPU; reuse trades a little
-    fidelity for a large speedup on long recordings.
+    With ``redetect_every`` = 1 (faithful mode) every sampled frame is detected on
+    its own, and a frame without a detected face is resized whole — exactly what
+    ``crop_face_or_resize`` in preprocessing/engagenet/extract_faces.py does when
+    building the training arrays.
+
+    ``redetect_every`` > 1 runs detection on every n-th sampled frame only and
+    reuses the last successful box for the frames in between. Detection is the
+    dominant cost on CPU; reuse trades a little fidelity for a large speedup on long
+    recordings. A detection attempt that finds no face clears the box, so the
+    following frames fall back to the full frame until the next successful detection.
     """
 
     def __init__(self, device="cpu", redetect_every=1):
@@ -277,10 +306,12 @@ class FaceCropper:
         return None
 
     def crop(self, frame_bgr):
+        """Return (224x224 BGR crop, found). ``found`` is True when the crop comes from a
+        detected face (on this frame, or reused from a recent detection in fast mode)."""
         if self._seen % self.redetect_every == 0:
-            box = self._detect(frame_bgr)
-            if box is not None:
-                self._box = box
+            # A failed detection clears the box: like the training arrays, this frame
+            # (and, in fast mode, the reuse window after it) is resized whole.
+            self._box = self._detect(frame_bgr)
         self._seen += 1
 
         box, found = self._box, self._box is not None
@@ -351,6 +382,10 @@ def video_tensor(frames_bgr):
 
 
 # ── Audio ─────────────────────────────────────────────────────────────────────
+class FFmpegNotFoundError(FileNotFoundError):
+    """Neither an ffmpeg executable nor the imageio-ffmpeg package is available."""
+
+
 def _resolve_ffmpeg():
     exe = shutil.which("ffmpeg")
     if exe:
@@ -359,11 +394,11 @@ def _resolve_ffmpeg():
         import imageio_ffmpeg
         return imageio_ffmpeg.get_ffmpeg_exe()
     except Exception as exc:
-        raise FileNotFoundError("ffmpeg executable not available") from exc
+        raise FFmpegNotFoundError("ffmpeg executable not available") from exc
 
 
 def extract_waveform(video_path):
-    """Mono 22050 Hz waveform for the whole file; silence if there is no track."""
+    """Mono 22050 Hz waveform for the whole file; an empty array if there is no audio track."""
     ffmpeg = _resolve_ffmpeg()
     with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as handle:
         tmp_wav = handle.name
@@ -441,7 +476,6 @@ def decode(logits, thresholds):
         "score": score,
         "level": level,
         "label": ENGAGEMENT_LABELS[level],
-        "argmax_level": int(np.argmax(probs)),
         "confidence": float(probs.max()),
     }
 
@@ -472,6 +506,11 @@ def analyze_video(
 
     report(0.02, "Extracting audio…")
     waveform, has_audio = extract_waveform(video_path)
+    if not has_audio or waveform.size == 0:
+        # No usable track: feed silence for the whole video, as the training clips without
+        # audio got a full-length silent wav (not a short zero-padded stub).
+        has_audio = False
+        waveform = np.zeros(int(round(info["duration"] * SAMPLE_RATE)), dtype=np.float32)
 
     cropper = FaceCropper(device=device if device == "cuda" else "cpu", redetect_every=redetect_every)
     report(0.05, f"Detecting faces with {cropper.backend}…")
@@ -517,11 +556,29 @@ def analyze_video(
     return {
         "windows": results,
         "video_info": info,
-        "has_audio": bool(has_audio and waveform.size),
+        "has_audio": bool(has_audio),
         "face_backend": cropper.backend,
         "summary": summarize(results, spec["thresholds"]),
         "thresholds": spec["thresholds"],
     }
+
+
+def owned_durations(results):
+    """Seconds of the recording each window accounts for, without double counting.
+
+    Window i owns [start_i, start_{i+1}) and the last window owns [start, end). With
+    back-to-back windows this is each window's length; with overlapping windows (50%
+    hop) each second of the recording is counted once, so totals and per-level times
+    stay in recording time.
+    """
+    durations = []
+    for index, window in enumerate(results):
+        if index + 1 < len(results):
+            end = min(window["end"], results[index + 1]["start"])
+        else:
+            end = window["end"]
+        durations.append(max(end - window["start"], 0.0))
+    return np.array(durations, dtype=np.float32)
 
 
 def summarize(results, thresholds):
@@ -530,7 +587,7 @@ def summarize(results, thresholds):
         return {}
     scores = np.array([r["score"] for r in results], dtype=np.float32)
     levels = np.array([r["level"] for r in results], dtype=np.int64)
-    durations = np.array([r["end"] - r["start"] for r in results], dtype=np.float32)
+    durations = owned_durations(results)
     total = float(durations.sum()) or 1.0
 
     time_per_level = {

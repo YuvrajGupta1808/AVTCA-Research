@@ -3,7 +3,10 @@
 # run_job.sh ablate <name>
 # Calibration re-reads every input-shape / modality flag from the run's own
 # opts json (docs/memory.md: shared defaults silently overriding per-run flags
-# caused four evaluation redos in this project).
+# caused four evaluation redos in this project). Stored data paths that no longer
+# exist (the runs of 2026-09-12 were launched from a since-removed worktree) fall
+# back to this tree's files, which hold the same clips. DONE / ABLATED are written
+# only when every step succeeded.
 set -uo pipefail
 source "$(dirname "$0")/common.sh"
 cd "$WT"
@@ -18,13 +21,18 @@ print('' if v is None else v)
 PYEOF
 }
 
+existing_or() {
+  # Echo $1 if that path exists, else $2 (with a note on stderr).
+  if [[ -n "$1" && -e "$1" ]]; then echo "$1"; else echo "[fullclip]   stored path '$1' is missing; using $2" >&2; echo "$2"; fi
+}
+
 modality_flags() {
   # Echo the behavior/text flags a trained run needs at evaluation time.
   local dir="$1"; local flags=()
   [[ "$(opt_value "$dir" behavior)" == "True" ]] && flags+=(--behavior)
   [[ "$(opt_value "$dir" text_fusion)" == "True" ]] && flags+=(--text_fusion)
   if [[ ${#flags[@]} -gt 0 ]]; then
-    flags+=(--behavior_dir "$(opt_value "$dir" behavior_dir)" --behavior_frames "$(opt_value "$dir" behavior_frames)")
+    flags+=(--behavior_dir "$(existing_or "$(opt_value "$dir" behavior_dir)" "$BEH")" --behavior_frames "$(opt_value "$dir" behavior_frames)")
   fi
   [[ ${#flags[@]} -gt 0 ]] && printf '%s\n' "${flags[@]}"
   return 0
@@ -36,8 +44,9 @@ run_calib() {
   local mvf fs; mvf="$(opt_value "$src" max_video_frames)"; fs="$(opt_value "$src" frame_sampling)"
   local mflags=(); mapfile -t mflags < <(modality_flags "$src")
   [[ ${#mflags[@]} -eq 1 && -z "${mflags[0]}" ]] && mflags=()
+  local ann; ann="$(existing_or "$(opt_value "$src" annotation_path)" "$ANN")"
   "$PY" scripts/calibrate_engagement_logits.py \
-    --annotation_path "$(opt_value "$src" annotation_path)" --checkpoint_path "$ckpt" --result_path "$dir" \
+    --annotation_path "$ann" --checkpoint_path "$ckpt" --result_path "$dir" \
     --dataset ENGAGENET --n_classes 4 --model multimodal_cnn --fusion it \
     --audio_features mel --num_heads 8 --visual_backbone efficientface \
     --data_root "$ROOT/datasets/EngageNet" --device cuda --n_threads 8 \
@@ -80,7 +89,10 @@ train)
   grep -m1 "\[shape\]" "$dir/train.console.log" | sed 's/^/[fullclip]   /'
   if [[ $rc -ne 0 ]]; then echo "FAILED train rc=$rc" > "$dir/FAILED"; exit $rc; fi
   best="$dir/ENGAGENET_multimodal_cnn_15_best.pth"
-  [[ -f "$best" ]] || best="$dir/ENGAGENET_multimodal_cnn_15_checkpoint.pth"
+  if [[ ! -f "$best" ]]; then
+    best="$dir/ENGAGENET_multimodal_cnn_15_checkpoint.pth"
+    echo "[fullclip]   WARNING: no _best.pth (no validation-selected epoch); calibrating the last-epoch checkpoint"
+  fi
   if run_calib "$dir/calibration" "$best" "$dir" "$name/fusion"; then
     echo "$(date -Is)" > "$dir/DONE"
   else
@@ -93,9 +105,12 @@ ablate)
   dir="$OUT_ROOT/$name"
   [[ -f "$dir/ABLATED" ]] && { echo "[fullclip] $name already ABLATED"; exit 0; }
   best="$dir/ENGAGENET_multimodal_cnn_15_best.pth"
+  [[ -f "$best" ]] || { echo "[fullclip] $name: no best checkpoint, cannot ablate" >&2; exit 2; }
+  ok=1
   for m in video_only audio_only; do
-    run_calib "$dir/calibration_$m" "$best" "$dir" "$name/$m" --ablate_modality "$m"
+    run_calib "$dir/calibration_$m" "$best" "$dir" "$name/$m" --ablate_modality "$m" || ok=0
   done
+  if [[ $ok -ne 1 ]]; then echo "[fullclip] $name ablation FAILED; ABLATED not written" >&2; exit 3; fi
   echo "$(date -Is)" > "$dir/ABLATED"
   ;;
 *) echo "unknown command: $cmd" >&2; exit 1 ;;

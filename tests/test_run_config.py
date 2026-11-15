@@ -1061,8 +1061,10 @@ class TestRunConfig(unittest.TestCase):
             def __getitem__(self, index):
                 raise IndexError(index)
 
+        result_dir = tempfile.TemporaryDirectory()
+        self.addCleanup(result_dir.cleanup)
         opt = SimpleNamespace(
-            result_path=tempfile.mkdtemp(),
+            result_path=result_dir.name,
             batch_size=2,
             n_threads=0,
             video_norm_value=255,

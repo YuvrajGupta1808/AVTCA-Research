@@ -7,9 +7,15 @@ Exact McNemar tests on the 2,256 test clips, with the same decoders as the paper
   2. Audio + video against video only at inference, for the nine fine-tuned networks of Section 5.4.1.
      `collect` runs every network on every validation and test clip twice, without ablation and with the
      audio tokens zeroed (the model's own `ablate_modality` switch, applied where modality dropout acts),
-     using the code tree that produced the runs, and caches the logits in results/paper_jaihc/sigtest/.
-     `analyze` decodes them with the refined thresholds stored in each run's calibration JSON and checks
-     that every top-1 accuracy equals the stored value before testing.
+     and caches the logits in results/paper_jaihc/sigtest/. `analyze` decodes them with the refined
+     thresholds stored in each run's calibration JSON and checks that every top-1 accuracy equals the
+     stored value before testing.
+
+Provenance: the stored results/paper_jaihc/sigtest/*.npz files were collected (2026-11-13) with the code of
+commit 88f8652, the commit the nine networks were trained and calibrated with (see their calib.log).
+`collect` now runs this repository by default (--code_tree selects another checkout, e.g. a worktree of
+88f8652); later code reproduces the seed-1 logits to about 3e-4 on CPU, which `analyze` checks clip by clip.
+The paper's numbers come from `analyze` on the stored files; `collect` (GPU) was not rerun after 2026-11-13.
 
 Usage (avtca environment):
   python scripts/paper/significance_tests.py collect --gpu 0 --runs A_av_s1 A_av_s2
@@ -29,8 +35,9 @@ ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)
 FC = os.path.join(ROOT, 'results', 'fullclip')
 OUT = os.path.join(ROOT, 'results', 'paper_jaihc')
 CACHE = os.path.join(OUT, 'sigtest')
-# The nine networks were trained and calibrated from this tree (commit 39ea143; see their calib.log).
-CODE_TREE = '/home/user/AVTCA-collab-test'
+# Code tree that `collect` imports the model from: this repository unless --code_tree names another
+# checkout (the nine networks were trained and calibrated with commit 88f8652; see their calib.log).
+CODE_TREE = ROOT
 ANN = os.path.join(ROOT, 'preprocessing', 'engagenet', 'annotations_engagement_a10_subject.txt')
 RUNS = [f'{arm}_s{s}' for arm in ('A_av', 'B_beh', 'C_behtext') for s in (1, 2, 3)]
 CLS = np.arange(4)
@@ -121,7 +128,7 @@ def analyze():
     sys.path.insert(0, os.path.join(ROOT, 'scripts', 'paper'))
     sys.path.insert(0, ROOT)
     import springer_analysis as sa
-    from src.engine.calibration import decode_expected_thresholds  # unchanged since the runs (39ea143)
+    from src.engine.calibration import decode_expected_thresholds  # unchanged since the runs (88f8652)
     res = dict(fusion_vs_members=[], audio_vs_video=[])
     gbm = sa.load(os.path.join(FC, 'gbm', 'probs.npz'))
     stored = json.load(open(os.path.join(ROOT, 'results', 'paper_springer', 'analysis.json')))['per_seed']
@@ -129,6 +136,7 @@ def analyze():
         av = sa.av_member(s)
         yv, yt = av['validation_y'], av['testing_y']
         tf = sa.load(os.path.join(FC, 'segtf', f'T7_d64_L2_lr1e3_s{s}', 'logits.npz'))
+        sa.align_members([av, tf, gbm], [f'A_av_s{s}', f'T7_s{s}', 'gbm'])  # same clips, same order, by key
         tf_pred, _ = sa.fitted_pred(tf['validation'], yv, tf['testing'])
         gbm_pred, _ = sa.fitted_pred(gbm['validation'], yv, gbm['testing'])
         w = sa.FIXED

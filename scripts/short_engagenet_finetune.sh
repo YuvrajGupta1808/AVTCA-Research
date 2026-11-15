@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 # Short AV-only EngageNet finetune with alignment fix + synced random crop.
 # Target: beat 63.96% (and ideally 64.18% V12) within ~1 hour.
+# Historical (July 2026), not used for the paper.
 set -euo pipefail
 
-ROOT="/home/user/AVTCA-Research"
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 source /etc/profile.d/conda.sh
 conda activate avtca
@@ -16,7 +17,7 @@ mkdir -p "$RESULT_PATH"
 echo "[short_finetune] GPU=$CUDA_VISIBLE_DEVICES result=$RESULT_PATH"
 echo "[short_finetune] resume=$CKPT"
 
-python -m src.main \
+python main.py \
   --dataset ENGAGENET \
   --n_classes 4 \
   --model multimodal_cnn \

@@ -67,26 +67,77 @@ def _unpack_multimodal_batch(batch):
     raise ValueError(f'Unexpected multimodal batch size: {len(batch)}')
 
 
-def _grad_norm(model):
-    total = 0.0
+def _gradient_summary(model):
+    """Per-parameter gradient norms and finiteness, read back with one device sync.
+
+    Returns (names, norms, finite) in named_parameters() order for every parameter
+    that has a gradient. The norms are the float32 values that ``grad.norm(2).item()``
+    returns, so the total norm computed from them is unchanged.
+    """
+    names, norms, finite = [], [], []
     for name, parameter in model.named_parameters():
-        if parameter.grad is not None:
-            parameter_norm = parameter.grad.data.norm(2).item()
-            if not math.isfinite(parameter_norm):
-                raise ValueError(f'Non-finite gradient norm for parameter "{name}"')
-            total += parameter_norm ** 2
+        if parameter.grad is None:
+            continue
+        grad = parameter.grad.detach()
+        names.append(name)
+        norms.append(grad.norm(2).float().reshape(()))
+        finite.append(torch.isfinite(grad).all().reshape(()))
+    if not names:
+        return [], [], []
+    by_device = {}
+    for index, norm in enumerate(norms):
+        by_device.setdefault(norm.device, []).append(index)
+    norm_values = [0.0] * len(names)
+    finite_values = [True] * len(names)
+    for indices in by_device.values():
+        norm_tensor = torch.stack([norms[i] for i in indices])
+        finite_tensor = torch.stack([finite[i] for i in indices]).float()
+        norm_list, finite_list = torch.stack((norm_tensor, finite_tensor)).cpu().tolist()
+        for i, norm_value, finite_flag in zip(indices, norm_list, finite_list):
+            norm_values[i] = norm_value
+            finite_values[i] = bool(finite_flag)
+    return names, norm_values, finite_values
+
+
+def _total_norm(names, norm_values):
+    total = 0.0
+    for name, parameter_norm in zip(names, norm_values):
+        if not math.isfinite(parameter_norm):
+            raise ValueError(f'Non-finite gradient norm for parameter "{name}"')
+        total += parameter_norm ** 2
     norm = total ** 0.5
     if not math.isfinite(norm):
         raise ValueError('Non-finite total gradient norm')
     return norm
 
 
+def _grad_norm(model):
+    names, norm_values, _finite = _gradient_summary(model)
+    return _total_norm(names, norm_values)
+
+
 def _require_finite_gradients(model, epoch, batch_index):
-    for name, parameter in model.named_parameters():
-        if parameter.grad is not None and not torch.all(torch.isfinite(parameter.grad)):
+    names, _norms, finite_values = _gradient_summary(model)
+    _raise_on_non_finite(names, finite_values, epoch, batch_index)
+
+
+def _raise_on_non_finite(names, finite_values, epoch, batch_index):
+    for name, finite in zip(names, finite_values):
+        if not finite:
             raise ValueError(
                 f'Non-finite gradient for parameter "{name}" at epoch {epoch}, batch {batch_index}'
             )
+
+
+def _check_gradients(model, epoch, batch_index):
+    """Finiteness check plus total gradient norm in one pass over the parameters.
+
+    Same checks, order and messages as _require_finite_gradients followed by
+    _grad_norm, but with one device synchronisation instead of two per parameter.
+    """
+    names, norm_values, finite_values = _gradient_summary(model)
+    _raise_on_non_finite(names, finite_values, epoch, batch_index)
+    return _total_norm(names, norm_values)
 
 
 def _clip_gradients(model, max_norm):
@@ -190,6 +241,13 @@ def train_epoch_multimodal(epoch, data_loader, model, criterion, optimizer, opt,
                         behavior_present = behavior_present[shuffle]
 
                 elif opt.mask == 'softhard':
+                    if visual_inputs.dim() != 5:
+                        raise ValueError(
+                            '--mask softhard blends and zeroes raw video frames and needs (B, T, 3, H, W) '
+                            f'batches; got visual inputs of shape {tuple(visual_inputs.shape)}. '
+                            'With precomputed visual features (--visual_features marlin) use '
+                            '--mask nodropout or noise.'
+                        )
                     coefficients = torch.randint(low=0, high=100,size=(audio_inputs.size(0),1,1))/100
                     vision_coefficients = 1 - coefficients
                     coefficients = coefficients.repeat(1,audio_inputs.size(1),audio_inputs.size(2))
@@ -266,8 +324,7 @@ def train_epoch_multimodal(epoch, data_loader, model, criterion, optimizer, opt,
         top1.update(prec1, audio_inputs.size(0))
         top5.update(prec5, audio_inputs.size(0))
         (loss / accumulation_divisor(i, total_batches, accumulation_steps)).backward()
-        _require_finite_gradients(model, epoch, i)
-        gnorm = _grad_norm(model)
+        gnorm = _check_gradients(model, epoch, i)
         if should_step_optimizer(i, total_batches, accumulation_steps):
             _clip_gradients(model, getattr(opt, 'grad_clip_norm', 0.0))
             optimizer.step()
@@ -291,9 +348,9 @@ def train_epoch_multimodal(epoch, data_loader, model, criterion, optimizer, opt,
         })
         if i % 10 == 0:
             mem_str = ''
-            if opt.device == 'cuda':
-                alloc = torch.cuda.memory_allocated() / 1e9
-                resv  = torch.cuda.memory_reserved()  / 1e9
+            if str(opt.device).startswith('cuda'):
+                alloc = torch.cuda.memory_allocated(opt.device) / 1e9
+                resv  = torch.cuda.memory_reserved(opt.device)  / 1e9
                 mem_str = f'  GPU {alloc:.2f}/{resv:.2f} GB'
             print('Epoch: [{0}][{1}/{2}]\t lr: {lr:.5f}\t'
                   'Time {batch_time.val:.3f} ({batch_time.avg:.3f})\t'

@@ -3,7 +3,8 @@
 # Same pre-registered protocol as the 22-d run (plan.md 19.4/19.7); test touched once per row.
 set -uo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-PY=/home/user/.conda/envs/avtca/bin/python
+# Python interpreter: set PY, or activate the environment (conda activate avtca) before running.
+PY="${PY:-python}"
 LOG="$ROOT/results/fullclip/f98_pipeline.log"
 cd "$ROOT"
 export OMP_NUM_THREADS=4
@@ -23,7 +24,7 @@ for s in 1 2 3; do $PY scripts/fullclip/fuse_members.py --members results/fullcl
 echo "--- 5d. fixed-weight rows (no selection): A + GBM98 0.5/0.5; A + TF98 + GBM98 equal and 0.6/0.2/0.2"
 for s in 1 2 3; do
   $PY scripts/fullclip/fuse_members.py --members results/fullclip/A_av_s$s/context/logits.npz results/fullclip/gbm98/probs.npz --quiet --fixed 0.5,0.5 2>&1 | grep SELECTED | sed "s/^/A_av_s$s + GBM98 fixed 0.5: /"
-  $PY scripts/fullclip/fuse_members.py --members results/fullclip/A_av_s$s/context/logits.npz results/fullclip/segtf_f98/${SEL}_s$s/logits.npz results/fullclip/gbm98/probs.npz --quiet --fixed 0.334,0.333,0.333 2>&1 | grep SELECTED | sed "s/^/A_av_s$s 3-way98 equal: /"
+  $PY scripts/fullclip/fuse_members.py --members results/fullclip/A_av_s$s/context/logits.npz results/fullclip/segtf_f98/${SEL}_s$s/logits.npz results/fullclip/gbm98/probs.npz --quiet --fixed equal 2>&1 | grep SELECTED | sed "s/^/A_av_s$s 3-way98 equal: /"
   $PY scripts/fullclip/fuse_members.py --members results/fullclip/A_av_s$s/context/logits.npz results/fullclip/segtf_f98/${SEL}_s$s/logits.npz results/fullclip/gbm98/probs.npz --quiet --fixed 0.6,0.2,0.2 2>&1 | grep SELECTED | sed "s/^/A_av_s$s 3-way98 0.6/0.2/0.2: /"
 done
 echo "--- 5c. five-way A + TF22(T7) + GBM22 + TF98(selected) + GBM98, simplex step 0.1"

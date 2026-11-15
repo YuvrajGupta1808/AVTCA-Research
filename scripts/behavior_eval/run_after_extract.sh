@@ -8,9 +8,11 @@
 # confound entirely instead of patching around it.
 set -uo pipefail
 
-ROOT=/home/user/AVTCA-Research
-WT=/home/user/AVTCA-collab-test
-PY=/home/user/.conda/envs/avtca/bin/python
+# Historical (August 2026; docs/plan.md Sec. 15-16), not used for the paper. It ran from the retired
+# collaborator worktree WT; set WT (and PY, the interpreter) to rerun it.
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+WT="${WT:-$ROOT/../AVTCA-collab-test}"
+PY="${PY:-python}"
 BEH=$ROOT/datasets/EngageNet/behavior
 A10=$ROOT/preprocessing/engagenet/annotations_engagement_a10.txt
 OUT=$WT/results/behavior_ab

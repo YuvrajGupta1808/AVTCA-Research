@@ -5,8 +5,9 @@
 # (E04, test 66.36 refined-expected) onto the corrected 50-frame splits.
 # Per docs/plan.md 13.10.5: do not retrain from the AffectNet pretrain.
 
-ROOT="/home/user/AVTCA-Research"
-PY="/home/user/.conda/envs/avtca/bin/python"
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+# Python interpreter: set PY, or activate the environment (conda activate avtca) before running.
+PY="${PY:-python}"
 OUT_ROOT="$ROOT/results/night"
 QUEUE_DIR="$ROOT/scripts/night"
 

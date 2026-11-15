@@ -2,8 +2,12 @@
 # Run one overnight job: warm-start finetune, then calibrate the best checkpoint.
 #
 #   run_job.sh train <name> [extra train args...]
+#   run_job.sh ablate <name>
+#   run_job.sh ensemble [<name> [<member run> ...]]   (members default to every DONE run)
 #   run_job.sh calib <name> <checkpoint> [extra calibrate args...]
 #
+# DONE / ABLATED are written only when every step of the job succeeded; a failed
+# calibration writes FAILED and exits non-zero.
 # Calibration inherits --max_video_frames / --frame_sampling from the run's own
 # opts json. scripts/exp2026_run.sh hardcoded 96 and did NOT forward the
 # override, so F01/F02 were calibrated at a frame cap they never trained at.
@@ -19,7 +23,8 @@ opt_value() {
   "$PY" - "$dir" "$key" <<'PYEOF'
 import glob, json, os, sys
 files = sorted(glob.glob(os.path.join(sys.argv[1], 'opts*.json')), key=os.path.getmtime)
-print(json.load(open(files[-1]))[sys.argv[2]] if files else '')
+v = json.load(open(files[-1])).get(sys.argv[2], '') if files else ''
+print('' if v is None else v)
 PYEOF
 }
 
@@ -86,7 +91,10 @@ train)
   fi
 
   best="$dir/ENGAGENET_multimodal_cnn_15_best.pth"
-  [[ -f "$best" ]] || best="$dir/ENGAGENET_multimodal_cnn_15_checkpoint.pth"
+  if [[ ! -f "$best" ]]; then
+    best="$dir/ENGAGENET_multimodal_cnn_15_checkpoint.pth"
+    echo "[night]   WARNING: no _best.pth (no validation-selected epoch); calibrating the last-epoch checkpoint"
+  fi
   mvf="$(opt_value "$dir" max_video_frames)"
   fs="$(opt_value "$dir" frame_sampling)"
   vf="$(opt_value "$dir" visual_features)"
@@ -101,7 +109,10 @@ train)
     extra+=(--late_text_fusion --text_fusion_arch "$(opt_value "$dir" text_fusion_arch)")
   fi
 
-  run_calib "$dir/calibration" "$best" "$mvf" "$fs" "$name/av" "$vf" "${extra[@]}"
+  if ! run_calib "$dir/calibration" "$best" "$mvf" "$fs" "$name/av" "${vf:-frames}" "${extra[@]}"; then
+    echo "FAILED calibration" > "$dir/FAILED"
+    exit 3
+  fi
   echo "$(date -Is)" > "$dir/DONE"
   echo "[night] === $name DONE $(date -Is) ==="
   ;;
@@ -115,21 +126,33 @@ ablate)
   mvf="$(opt_value "$dir" max_video_frames)"
   fs="$(opt_value "$dir" frame_sampling)"
   vf="$(opt_value "$dir" visual_features)"
+  ok=1
   for m in audio_only video_only; do
-    run_calib "$dir/calibration_$m" "$best" "$mvf" "$fs" "$name/$m" "$vf" --ablate_modality "$m"
+    run_calib "$dir/calibration_$m" "$best" "$mvf" "$fs" "$name/$m" "${vf:-frames}" --ablate_modality "$m" || ok=0
   done
+  if [[ $ok -ne 1 ]]; then
+    echo "[night] $name ablation FAILED (see calibration_*/calib.log); ABLATED not written"
+    exit 3
+  fi
   echo "$(date -Is)" > "$dir/ABLATED"
   ;;
 
 ensemble)
-  # F03 - logit/probability ensembling over every run that reached DONE.
+  # F03 - logit/probability ensembling. Members: the run names given after <name>, or (default)
+  # every run that reached DONE -- which now also includes the later MARLIN and text-v2 runs, so
+  # pass the 14 G-runs explicitly to reproduce F03 (their names are in F03_ensemble/calibration_results.json).
   name="${1:-F03_ensemble}"
+  shift || true
   dir="$OUT_ROOT/$name"
   mkdir -p "$dir"
   members=()
-  for d in "$OUT_ROOT"/*/; do
-    [[ -f "$d/DONE" ]] && members+=("${d%/}")
-  done
+  if [[ $# -gt 0 ]]; then
+    for m in "$@"; do members+=("$OUT_ROOT/$m"); done
+  else
+    for d in "$OUT_ROOT"/*/; do
+      [[ -f "$d/DONE" ]] && members+=("${d%/}")
+    done
+  fi
   echo "[night] ensemble over ${#members[@]} members"
   "$PY" "$QUEUE_DIR/ensemble.py" --members "${members[@]}" --result_path "$dir" \
     > "$dir/ensemble.log" 2>&1

@@ -657,7 +657,7 @@ def write_evaluation_artifacts(
         _validate_prediction_record_schema(metrics['prediction_records'])
 
     os.makedirs(result_path, exist_ok=True)
-    project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))  # repository root
     metrics_payload = {key: value for key, value in metrics.items() if key != 'prediction_records'}
     payload = {
         'status': status,

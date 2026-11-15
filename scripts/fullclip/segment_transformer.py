@@ -6,8 +6,13 @@ OpenFace features (Singh et al., ICMI 2023 baseline). Ours: the 22-d feature set
 Transformer encoder with a CLS token, the repo's OrdinalDistanceCrossEntropy, epoch selection on
 validation argmax top-1, expected-level thresholds fit on validation, seeds, and the saved logits
 that feed fuse_members.py.
+
+Only validation is evaluated during training; the test split is evaluated once, with the weights of
+the kept epoch, which are saved to <out_dir>/model.pt together with the feature standardisation
+(the runs of 2026-09-12 evaluated test after every epoch, without using it, and saved no weights).
 """
 import argparse
+import copy
 import json
 import math
 import os
@@ -20,7 +25,6 @@ import torch.nn as nn
 from sklearn.metrics import f1_score
 
 WT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, WT)
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from segment_features import build  # noqa: E402
@@ -134,7 +138,7 @@ def main():
         with torch.no_grad():
             return torch.cat([model(Xs[i:i + 512]) for i in range(0, len(Xs), 512)]).cpu().numpy()
 
-    best = None; log = []
+    best = None; best_state = None; log = []
     t0 = time.time()
     for ep in range(1, a.epochs + 1):
         model.train(); tot = 0.0; n = 0
@@ -148,15 +152,20 @@ def main():
             loss = crit(model(xb), yb)
             opt.zero_grad(); loss.backward(); nn.utils.clip_grad_norm_(model.parameters(), 1.0); opt.step(); sched.step()
             tot += loss.item() * len(yb); n += len(yb)
-        lv, lt = evaluate(Xva), evaluate(Xte)
-        mv, mt = metrics(lv.argmax(1), yva), metrics(lt.argmax(1), yte)
-        log.append(dict(epoch=ep, train_loss=tot / n, val=mv, test_argmax=mt))
+        lv = evaluate(Xva)
+        mv = metrics(lv.argmax(1), yva)
+        log.append(dict(epoch=ep, train_loss=tot / n, val=mv))
         if best is None or mv['top1'] > best['val']['top1']:
-            best = dict(epoch=ep, val=mv, val_logits=lv, test_logits=lt)
+            best = dict(epoch=ep, val=mv)
+            best_state = copy.deepcopy(model.state_dict())
         if ep % 10 == 0 or ep == 1:
             print(f'ep {ep:3d} loss {tot/n:.4f}  val top1 {mv["top1"]:.2f} adj {mv["adj"]:.2f}  ({time.time()-t0:.0f}s)', flush=True)
 
-    # decode the selected epoch with validation-fit thresholds; test touched once here
+    # restore the kept epoch; evaluate test once, decode it with validation-fit thresholds
+    model.load_state_dict(best_state)
+    best['val_logits'], best['test_logits'] = evaluate(Xva), evaluate(Xte)
+    torch.save(dict(state_dict={k: v.cpu() for k, v in best_state.items()}, mu=mu, sd=sd, config=vars(a),
+                    in_dim=int(X.shape[-1]), best_epoch=best['epoch']), os.path.join(a.out_dir, 'model.pt'))
     cls = np.arange(4)
     def sm(l): l = l - l.max(1, keepdims=True); e = np.exp(l); return e / e.sum(1, keepdims=True)
     Ev, Et = (sm(best['val_logits']) * cls).sum(1), (sm(best['test_logits']) * cls).sum(1)

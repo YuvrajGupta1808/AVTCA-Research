@@ -212,8 +212,7 @@ def main():
     total, with_text = build_v3(cache)
     print(f"wrote {OUT_ANNOTATIONS.name}: {total} clips, {with_text} with chat text "
           f"({100 * with_text / total:.1f}%), {total - with_text} silent")
-    print("Next: python preprocessing/engagenet/audit_text_leakage.py "
-          f"--annotation_path {OUT_ANNOTATIONS}")
+    print(f"Next: python preprocessing/engagenet/audit_text_leakage.py {OUT_ANNOTATIONS}")
 
 
 if __name__ == "__main__":

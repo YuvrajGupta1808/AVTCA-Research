@@ -343,6 +343,7 @@ Expected output: ~10,000–12,000 labeled clips, 2 cohorts, 8 sessions, 24 uniqu
 | — | Implement role conditioning: `role_embedding(is_speaking)` added to video tokens before first AttentionBlock | Critical |
 | — | Replace MaxPool aggregation with learned attention pooling | High |
 | — | Add attention output dropout (p=0.1–0.2) before each residual add | High |
+| RV1–RV9 | Full review of paper + code, 2026-11-14/15 (Sections 22.7–22.9) | **Done**: committed, pushed, history rewritten, on Overleaf, tagged `jaihc-submission-2026-11-15`; merged into `main`; open: GitHub Support cache purge, Gakshith's fork |
 | TX1 | `preprocessing/zoom/extract_chat.py` — parse Zoom chat export, per-student per-clip text (Section 17) | High — unblocked now |
 | TX3 | Chat elicitation prompts + display-name convention into E1 session script (Section 17.1) | High — merge with E1 |
 | TX2, TX4–TX7 | Chat schema, text encoder, null token, text dropout, leakage gate + A/B (Section 17.7) | Blocked on pilot data |
@@ -1440,8 +1441,8 @@ in which case the labels, not the model, are the ceiling.
 ## 15. Collaborator branch evaluation — `feat/behavior-text-fusion` (2026-08-16)
 
 First external contribution to the repo (author: Gakshith). Evaluated **without merging**, in a detached
-git worktree at `/home/user/AVTCA-collab-test` on `f9cce71`. Six commits, +1595/-23 across 25 files,
-branched from `development` at `3def305`.
+git worktree at `~/AVTCA-collab-test` on `a1ff448`. Six commits, +1595/-23 across 25 files,
+branched from `development` at `80b432d`.
 
 ### What the branch adds
 
@@ -1660,11 +1661,11 @@ end-to-end plan to get there.
 ## 16. Behavior modality evaluated with real OpenFace features (2026-08-18)
 
 Continuation of §15. The collaborator branch was untestable there because no OpenFace features existed.
-They now do. Everything below ran in the worktree `/home/user/AVTCA-collab-test`; **still unmerged**.
+They now do. Everything below ran in the worktree `~/AVTCA-collab-test`; **still unmerged**.
 
 ### 16.1 OpenFace built from source (no root)
 
-`TadasBaltrusaitis/OpenFace` -> `/home/user/openface_build/build/bin/FeatureExtraction`, conda env
+`TadasBaltrusaitis/OpenFace` -> `~/openface_build/build/bin/FeatureExtraction`, conda env
 `ofbuild`. Two dependency failures, both worth recording:
 
 - **OpenBLAS**: `cmake/modules/FindOpenBLAS.cmake` searches a hardcoded path list with `NO_DEFAULT_PATH`
@@ -2007,7 +2008,7 @@ figure stands in for the draw.io one (P6); swap if the "not AI-generated" rule a
 
 Yuvraj: Professor Sanchita's FoleyGAN paper (`papers/research/prof papeer.pdf`, IEEE TMM 2023) is the only format
 benchmark; every statement must be specific and true. `research/paper/paper.tex` was rewritten section
-for section on it (previous version kept in git, commit 9e5adca):
+for section on it (previous version kept in git, commit 2803a77):
 
 | FoleyGAN | Ours |
 |---|---|
@@ -2692,98 +2693,32 @@ with residual around the FFN, output width = query width (128 / 64), no dropout;
 
 ## 20. First partner recording — SFSU PSY 371 office hours (reviewed 2026-11-09)
 
-File: `datasets/SFSU/GMT20261029-210729_Recording_1920x1380.mp4` (git-ignored since 2026-11-09 — it holds
-identifiable faces, voices and on-screen names). Zoom **cloud** recording (the `GMT…_Recording_WxH.mp4` naming),
-2026-10-29 21:07 UTC (14:07 Pacific). Presumably the psychology-professor route of §18.5, but this is a
-**synchronous office-hours session**, not an asynchronous class. Reviewed with local tools only (Whisper large-v3-turbo
-on GPU, MTCNN + FaceNet clustering at 1 fps, ffmpeg scene cuts); nothing left the machine. Students are referred to as
-S1–S5 below; names are deliberately not recorded in the repo.
+The Zoom cloud recording of a synchronous office-hours session (2026-10-29) was reviewed locally on 2026-11-09 with
+Whisper, MTCNN/FaceNet clustering and ffmpeg; nothing left the machine, and the video file is git-ignored because it
+holds identifiable faces, voices and on-screen names. On 2026-11-15, at Yuvraj's request, the per-student timeline
+and measurements were removed from this public file; this summary keeps what changes the plan. The full notes remain
+in the repository history before that date.
 
-### 20.1 The file is truncated — only 19 of 84 minutes exist
+### 20.1–20.4 Summary of the review
 
-The container header says 5017.3 s (83.6 min), but packets stop at **1139.7 s** (ffprobe: "partial file"); the
-transfer ended at 240,218,112 B of an expected ≈ 700 MB (1.04 Mbps video + 81 kbps audio × 5017 s). Everything below
-is measured on the first 19 minutes. **Re-transfer the full file before any further analysis.**
-
-### 20.2 What the session is
-
-Voluntary, community-building office hours for a large statistics lecture (PSY 371), run by the course instructor.
-Students take part for **SONA credit**: camera on + a consent survey = recorded participant; a short follow-up survey at
-the end. The slide deck ("Data to Discussion — a working session: we'll meet each other, take our own stats pulse,
-build a tiny survey, and see what the numbers actually say", slide 2 "Five stops, one hour") has five activities:
-
-| Stop | Slide | In our 19 min? |
-|---|---|---|
-| 1 | Name + five words (snowball icebreaker: speaker names the next person; ≥ 2 follow-up questions per person) | yes — still running at the cut |
-| 2 | "How are we feeling about…" (1–5 Likert pulse on stats) | no |
-| 3 | "Let's build a survey" | no |
-| 4 | "Our data, our numbers" | no |
-| 5 | "The Flynn Effect, revisited" | no |
-
-The icebreaker alone used ≥ 19 min of a "one hour" plan, so the content stops (where cognitive load and confusion would
-appear) are all in the missing 64 minutes.
-
-**Timeline of the 19 minutes that exist** (recording time; transcript + 1 fps face identity; S4 is the late joiner):
-
-| Time | What happens | On screen |
-|---|---|---|
-| 00:00–00:58 | Instructor welcome: "build community" in a large lecture, room to ask stats questions | instructor |
-| 00:59–03:08 | Screen share: title slide, then "Name + five words" rules (≥ 2 follow-up questions each); instructor gives own five words (02:04–02:43), picks S1 (02:52) | slides (instructor thumbnail) |
-| 03:06–04:02 | S1 introduces themself | S1 |
-| 04:03–04:16 | Rules confusion; instructor: "you can put yourself off of mute" (04:13) | S1 / instructor |
-| 04:18–05:00 | Another student asks S1 a follow-up; S1 answers | mostly S1 |
-| 05:14–05:27 | "Other questions?" → **11 s silence** (longest gap) | instructor |
-| 05:33–06:12 | S2 asks S1 about music; S1 answers | S2 (3 s), then S1 |
-| 06:27–07:28 | S1 picks S2; S2 introduces themself | S2 |
-| 07:30–09:08 | Instructor exchange; S1 asks S2 a research question (07:58), S2 answers | instructor, S1, S2 |
-| 09:15–09:24 | "Other follow-up questions" → 9 s silence | instructor |
-| 09:24–10:29 | Question on books; S2 answers; instructor–S2 exchange | S2 / instructor |
-| 10:29–11:40 | **S4 joins late**; instructor re-explains and gives the recording/consent/SONA notice; brief re-share ~10:48–11:10 | instructor, slides |
-| 11:44–12:22 | S2 picks S3; S3 introduces themself | S3 (phone, portrait) |
-| 12:31–12:52 | Follow-ups to S3; at 12:45 instructor notes a listener "showing you the heart" — **not captured** | instructor |
-| 12:57–14:15 | More follow-ups (cooking, movies); S3 answers | S3 / instructor |
-| 14:42–15:47 | S3 picks S4; S4 introduces themself | S4 |
-| 15:53–16:56 | Anime questions and recommendations | S4 |
-| 17:11–18:06 | S5 asks S4 "what got you into psychology" (~4 s on screen); S4 answers | S5, then S4 |
-| 18:19–18:56 | Last prompt; S4 picks the next student | instructor / S4 |
-| 18:59.7 | **File ends** mid-handover; 19:00–83:37 missing | — |
-
-Silences > 5 s, all waits after an open prompt: 05:16 (11 s), 06:17 (5 s), 07:45 (6 s), 09:15 (9 s), 09:54 (7 s),
-12:38 (8 s), 12:52 (6 s), 13:39 (6 s), 14:21 (6 s), 15:47 (6 s). Student on-screen totals: S1 2:35, S2 2:27,
-S3 1:31, S4 3:16, S5 ~0:04.
-
-### 20.3 Measured properties (first 1139 s)
-
-| Property | Value | Consequence |
-|---|---|---|
-| Layout | **Active-speaker view** (one person full-frame; switches on voice) + shared-screen view with a speaker thumbnail | Listener faces are never recorded |
-| Video | H.264 1920×1380, 25 fps, ~1.0 Mbps | ample quality |
-| Audio | AAC 48 kHz stereo, **L and R bit-identical** (max diff 0.0) → one mixed track | no per-student audio |
-| Participants seen | instructor + 5 students (S5 on screen ~4 s); one student joined ~10 min late | |
-| Screen time | instructor full-frame ~360 s + screen share ~145 s (≈ 44 %); students 589 s (52 %: S1 155, S2 147, S3 91, S4 196 s); no face 29 s | half the footage is the instructor, who is not a subject |
-| Student on-screen runs | 68 runs, median 4.5 s; only 16 runs ≥ 10 s → **36 non-overlapping 10 s student clips** in 19 min | ≈ 150 clips per full session, **all in the speaking role** |
-| Face size | full-frame median 306–524 px wide; MTCNN finds a face in 97.5 % of seconds | fine for OpenFace/MTCNN |
-| Face size during screen share | 44–66 px (thumbnail) | below OpenFace's usable range — content stops will be unusable in this layout |
-| Capture conditions | 2 of 5 students on phone cameras (portrait, pillar-boxed); 1 under red RGB light; 1 strongly backlit | per-student calibration (decision 4) is necessary, not optional |
-| Speech | ≈ 84 % of the timeline inside a transcribed speech segment; 10 silences > 5 s (all "any other questions?" waits) | speech-rich, as the plan wanted |
-| Mute behaviour | instructor: "you can put yourself off of mute" (04:13) — listeners sit muted | listener audio would be digital silence even with per-student tracks |
-| Missed listener cue | 12:45 instructor: a student "was just showing you the heart" — the recording was on the instructor | a direct example of the engagement signal this layout loses |
-| On-screen name tags | every tile carries the Zoom display name | useful for identity mapping (§17.1); PII — crop before features leave the machine |
-
-### 20.4 Plan vs. this recording
-
-| Plan requirement | Status here |
-|---|---|
-| Gallery view, every student visible all the time | **missing** — active-speaker view |
-| Per-student audio tracks (mandatory) | **missing** — one mixed track |
-| `is_speaking` / role conditioning, listener engagement (§ Speaker vs Listener) | **unlearnable** — every student frame is a speaker frame (`is_speaking ≈ 1`) |
-| Speech in ~75 % of clips | **met** (≈ 84 % of the timeline) |
-| No instructor monologue | **met** for stop 1 (instructor intro 0–3 min, then student turns) |
-| Breakout rooms of 4, cold calls, difficulty ramp, W-curve | **not used** — one main room, instructor-led; stop 1 has no difficulty ramp |
-| Zoom chat export, transcript (VTT) | **not received** — unknown whether they were saved |
-| Every student speaks ≥ 1× (calibration sample) | **met** — the icebreaker guarantees 1–4 min of speech per student |
-| Students not told engagement is measured | **met** — told only that the session is recorded (consent survey) |
-| Session 1 excluded (Hawthorne) | unknown which session this is; the instructor says they do "all the sessions" with new words each time, so several exist |
+- **The file is truncated.** Packets stop after 19 of the 84 minutes in the container header. Re-transfer the full
+  file before any further analysis (SF1).
+- **The session is not the planned format.** It is a voluntary office-hours session, attended for course credit with
+  a consent survey, not an asynchronous class. Only the opening icebreaker falls in the 19 minutes: each student
+  introduces themself and answers follow-up questions. No content activity, and so no confusion or difficulty
+  ramp, was observed.
+- **Layout and audio.** The recording uses active-speaker view plus the shared screen, with one mixed audio track
+  (left and right channels identical). Listener faces are never recorded, there is no per-student audio, and about
+  half of the footage shows the instructor, who is not a subject.
+- **Yield.** About 36 non-overlapping 10 s student clips fit in the 19 minutes, all in the speaking role (about 150
+  per full session). Faces are large enough for MTCNN and OpenFace except during screen sharing, when students shrink
+  to 44–66 px thumbnails.
+- **Speech and conditions.** Speech covers about 84 % of the timeline; listeners stay muted. Capture conditions vary
+  between students (phone cameras in portrait, coloured light, backlight), so per-student calibration (decision 4)
+  is necessary.
+- **Against the plan.** Gallery view, per-student audio and listener footage are missing, so role conditioning cannot
+  be learned: every student frame is a speaker frame. Speech-rich clips, at least one turn per student and no
+  disclosure that engagement is measured are met. Chat and transcript files were not received.
 
 ### 20.5 What this changes in the plan (revisit of §§ Session Design, Recording Setup, Speaker vs Listener)
 
@@ -3005,7 +2940,7 @@ and the qualifiers lost in the cut (F1, F3–F11), which is where every error ab
 2. Move the editable figure sources (tracked) into the final folder with `git mv`:
    `research/paper/figures/{architecture,overview}.{drawio,svg}` and `figures/src/make_{architecture,overview}_drawio.py`
    → `AVB-Engage_JAIHC_final/figures/src/`.
-3. Delete the tracked IEEE-draft files (recoverable from git, last at 46a84cc): `research/paper/paper.tex`,
+3. Delete the tracked IEEE-draft files (recoverable from git, last at 934091e): `research/paper/paper.tex`,
    `research/paper/paper_claude_draft_2026-09-08.tex`, the rest of `research/paper/figures/` (older `fig_*.tex` and
    duplicate PDFs); delete the ignored build `research/paper/paper.pdf`.
 4. Delete the untracked folders, which cannot be recovered unless archived first: `research/paper_jaihc/` (stale
@@ -3037,18 +2972,18 @@ Commit it with the paper so every number traces to committed code.
 | JF2 | Apply F16–F26 | Claude | **done 2026-11-13** (arXiv DOI links left out for page space) |
 | JF3 | draw.io edits D1–D3; decide D4 | Claude / Yuvraj | D1–D3 **done 2026-11-13** (21.13); D4 open — both diagrams are generated from code written with Claude (the AI statement says so); keeping that against Professor Sanchita's "not AI-generated" rule is the authors' call |
 | JF4 | Title block, declarations, AI statement (A1–A2) | Yuvraj / Professor Sanchita | declarations **written 2026-11-14** (21.20), on Overleaf the same day; **title block filled 2026-11-14** (21.21: Yuvraj corresponding, both Dept. of Computer Science, SFSU), on Overleaf the same day (12 pp; judge the layout there, not in the tectonic build); open: Professor Sanchita confirms her line and the contribution split |
-| JF5 | Paired significance tests for the supplement (21.5) | Claude | **done 2026-11-13** (Section S13, Tables S11–S12; 21.10) — committed `ed6d2c4` |
-| JF6 | Cleanup steps 2–6 of 21.7, with the archive commit | Claude | **done 2026-11-13** (archive `c2827d2`; fixes + cleanup `2461716`) |
-| JF7 | Commit the paper's analysis scripts | Claude | **done 2026-11-13** (`c2827d2`) |
+| JF5 | Paired significance tests for the supplement (21.5) | Claude | **done 2026-11-13** (Section S13, Tables S11–S12; 21.10) — committed `8b5b6f1` |
+| JF6 | Cleanup steps 2–6 of 21.7, with the archive commit | Claude | **done 2026-11-13** (archive `4dcf929`; fixes + cleanup `0ff89c8`) |
+| JF7 | Commit the paper's analysis scripts | Claude | **done 2026-11-13** (`4dcf929`) |
 | JF8 | Submission bundle (A3); upload the fixed folder to Overleaf | Claude / Yuvraj | bundle and Overleaf **done 2026-11-13** (21.14); the journal upload itself waits for JF4; unused old Overleaf files deleted |
-| JF10 | Figs. 2–3 improved: generated 84-mm Fig. 3 (21.17); Fig. 2 redesigned in the token-and-lane style after a survey of the papers' architecture figures (21.18) | Claude | **done 2026-11-14** (12 pp, p. 12 unchanged); on Overleaf the same day (same layout); committed `42efe1d` and pushed 2026-11-14 |
-| JF9 | Fig. 1 with the real data of one test clip; Figs. 1–2 relettered in FreeSans (21.15) | Claude | **done 2026-11-14** (21.15–21.16; Fig. 1 now 102 mm, 12 pp); all changed files on Overleaf (12 pp, 0 errors, same layout as local); committed `42efe1d` and pushed 2026-11-14 |
+| JF10 | Figs. 2–3 improved: generated 84-mm Fig. 3 (21.17); Fig. 2 redesigned in the token-and-lane style after a survey of the papers' architecture figures (21.18) | Claude | **done 2026-11-14** (12 pp, p. 12 unchanged); on Overleaf the same day (same layout); committed `073b06b` and pushed 2026-11-14 |
+| JF9 | Fig. 1 with the real data of one test clip; Figs. 1–2 relettered in FreeSans (21.15) | Claude | **done 2026-11-14** (21.15–21.16; Fig. 1 now 102 mm, 12 pp); all changed files on Overleaf (12 pp, 0 errors, same layout as local); committed `073b06b` and pushed 2026-11-14 |
 
 ### 21.9 Applied (2026-11-13, Yuvraj: "Yes, fixes + cleanup")
-- **Archive commit `c2827d2`** (before any change): the Overleaf download as received, `research/paper_springer/`
+- **Archive commit `4dcf929`** (before any change): the Overleaf download as received, `research/paper_springer/`
   (22 pp), `research/paper_jaihc/` (first 12-pp cut) and the uncommitted analysis scripts (`scripts/fullclip/*` edits,
   `scripts/paper/`, `run_f98_pipeline.sh`, `extract_behavior_full.py`). Recover any old file with
-  `git show c2827d2:<path>` (the IEEE draft: `git show 46a84cc:research/paper/paper.tex`).
+  `git show 4dcf929:<path>` (the IEEE draft: `git show 934091e:research/paper/paper.tex`).
 - **Fixes F1–F26** applied to `paper.tex` (35 exact replacements) and `supplementary.tex` (13), each matched exactly
   once; header comments rewritten, ASCII only. Deviations from 21.4, all for page space: the three arXiv DOI links were
   not added (OpenFace and EfficientFace DOIs were); §5.4.3 drops the clause on the lowest values (Table S10 now lists
@@ -3061,7 +2996,7 @@ Commit it with the paper so every number traces to committed code.
   write next to themselves); deleted `research/paper/{paper.tex, paper_claude_draft_2026-09-08.tex, paper.pdf,
   figures/}`, `research/paper_jaihc/`, `research/paper_springer/` and the unused `fig_concept.tex`/`fig_results.tex`.
   `research/` now holds only `research/paper/.gitignore` and `research/paper/AVB-Engage_JAIHC_final/`.
-- **Committed** as `2461716` (research/ only; the docs changes stay uncommitted with earlier sessions' edits).
+- **Committed** as `0ff89c8` (research/ only; the docs changes stay uncommitted with earlier sessions' edits).
   The local folder now differs from the 2026-11-12 Overleaf project: upload `paper.tex`, `supplementary.tex` and
   `figures/` (the `figures/src/` folder is optional on Overleaf).
 
@@ -3071,7 +3006,7 @@ Commit it with the paper so every number traces to committed code.
   (`collect` on GPU, `analyze` on CPU) → `results/paper_jaihc/significance.json`; per-clip logits cached in
   `results/paper_jaihc/sigtest/<run>.npz` (validation and test, without ablation and with audio zeroed).
 - **Reproduction checks (all pass).** The nine networks were re-run from the tree that produced them
-  (`~/AVTCA-collab-test`, commit 39ea143) with `preprocessing/engagenet/annotations_engagement_a10_subject.txt` (the
+  (`~/AVTCA-collab-test`, commit 88f8652) with `preprocessing/engagenet/annotations_engagement_a10_subject.txt` (the
   runs' own annotation file no longer exists; this copy has the same clip order and labels). No-ablation test logits
   equal the saved `context/logits.npz` (max difference 0.0); every network × condition top-1 equals its stored
   calibration value; the AVB-Engage and member predictions equal `analysis.json` (Table 2). About 90 s per network
@@ -3162,7 +3097,7 @@ Fig2.eps after the redraw.
   anti-aliasing; the grayscale render also shows the figure reads without colour). Fig3 unchanged (TikZ, 8 pt).
 - **Text:** AI statement now names "the two diagrams (Figs. 1 and 2)" instead of only the architecture diagram; paper
   header comment documents the figure pipeline. Stale `figures/src/{architecture,overview}.svg` removed (old drawings).
-- **Build:** 12 pp, ≈ 25 free lines on p. 12, 0 overfull, no undefined references; `paper.pdf` refreshed. Committed `bcead4e`.
+- **Build:** 12 pp, ≈ 25 free lines on p. 12, 0 overfull, no undefined references; `paper.pdf` refreshed. Committed `51b5517`.
 - D1–D3 of §21.4 are done. D4 is now explicit: both diagrams are generated from code written with Claude and the AI
   statement says so; Professor Sanchita's "not AI-generated" rule is the authors' call.
 
@@ -3199,7 +3134,7 @@ Fig2.eps after the redraw.
   2, 4 and 10–12 were inspected: Figs. 1–3 and the back matter look as in the local build.
 - **Removed from Overleaf** (Yuvraj: "Yes, delete them"): `SpringerNature/figures/{architecture.pdf, overview.pdf,
   fig_concept.tex, fig_confusion.tex, fig_results.tex}`, unused figures of the pre-fix version (copies in archive
-  commit `c2827d2`). Recompiled afterwards: still 12 pp, 0 errors, the same 3 bookmark warnings.
+  commit `4dcf929`). Recompiled afterwards: still 12 pp, 0 errors, the same 3 bookmark warnings.
 - **Not changed:** a few reference lines with long DOIs are stretched, because the DOI suffix cannot break. The manual
   asks "Wherever possible please do not add further packages to the template", so `xurl` was not added; Springer
   re-typesets accepted papers.
@@ -3429,11 +3364,248 @@ go to the acknowledgements). Tracked as JF4.
   repository named in the Code availability statement (still 1 p.), and the checklist has item 6 (answer "yes" to a
   preprint question in the submission form, with the repository URL; no DOI; after acceptance no publisher PDF, check the
   licence, add the DOI once published).
-- **`main`:** `origin/main` (2a96cac, "Merge production …") was 1 commit ahead and 47 behind `development`; its only extra
-  commit is a merge whose tree equals the merge base `d0e00ac`, and a trial merge of `development` into it (scratch
+- **`main`:** `origin/main` (05cf572, "Merge production …") was 1 commit ahead and 47 behind `development`; its only extra
+  commit is a merge whose tree equals the merge base `a9ee0cf`, and a trial merge of `development` into it (scratch
   worktree) was clean, with a tree identical to `development`. So `development` was merged into `main` with a merge
   commit (no force push) and both branches were pushed: the repository root, which the Code availability statement
   links, now holds the paper's code.
 - Before committing, the changes were scanned for private data: no Overleaf project ID, no personal e-mail, no token;
   the only e-mail addresses are the two SFSU addresses of the title block, which the published paper prints anyway.
   The untracked `preprocessing/engagenet/backup_2026-08-17/` stays out of git.
+- The cover letter and checklist with the preprint disclosure were then uploaded to Overleaf's `submission/` folder
+  (Yuvraj: "Yes, upload") and checked there; `paper.tex` was reopened so that Recompile builds the paper. This note
+  is the only change since the push.
+
+## 22. Full review of the paper, the supplement and the code base (2026-11-14, Yuvraj: "Recheck everything … give an overall review of everything")
+
+Review only: nothing in `paper.tex`, `supplementary.tex` or the code was changed. Method: both LaTeX files read in
+full; every number recomputed from the stored per-clip outputs (`results/fullclip/`, `results/night/`,
+`results/paper_springer/`, `results/paper_jaihc/`), the fusion and threshold search with a re-implementation written
+from the paper's text, not with the repository's code; three parallel code reviews (models + `src/`; EngageNet scripts
+and preprocessing; tests, UI, repository hygiene, docs) whose main findings were then re-checked by hand; `pytest`
+(293 passed, 10 s); the compiled PDFs inspected (pages, fonts, cross-references, figures); five third-party entries
+checked on the web. Scratch scripts are not kept.
+
+### 22.1 Verdict
+
+The numbers are right and the paper is honest about most of its limits. Every table and figure value reproduces to the
+printed digit, the fused headline also from an independent implementation (70.17 / 70.26 / 70.43, thresholds
+0.89 / 1.15 / 1.90 for seed 1). What needs work before the journal upload is wording, disclosure and one missing
+citation: seven statements claim more than the stored evidence supports (22.3). None of them moves the headline.
+The code on the reported path is correct; the repository around it (README, CI, reproducibility, tracked dataset
+files) is not in the state that the paper's "Code availability" statement implies (22.5, 22.6).
+
+### 22.2 What reproduces
+
+- Tables 1–3, S1–S12, Fig. 3 and Fig. S1: all values, including means, sample standard deviations, McNemar counts,
+  p-values and Holm adjustments. Dataset counts (7,879 / 1,071 / 2,256 and per level) match the annotation files;
+  majority-class metrics follow from them. The six baseline accuracies and the "1.5–5.2 points higher on validation"
+  range match the EngageNet paper (`papers/EngageNet.pdf`).
+- Cross-references between the paper and the supplement all resolve to the intended section or table. 12 pages,
+  abstract 246 words, 6 keywords, 22 references all cited, fonts embedded, no "??". The submission zip equals the
+  working files byte for byte.
+- No threshold, weight, checkpoint or model size is fitted on test anywhere in the code. The selected fusion weights are
+  not the test-best point of the grid (70.2–70.4 selected against 70.5–70.8 best), which is what selection on
+  validation looks like. Splits are subject-disjoint (26 / 11 / 91 subject numbers, no overlap).
+- Robustness of the headline beyond what the paper reports: equal weights with argmax decoding, which fits nothing on
+  validation, gives 69.30 ± 0.25; all nine pairings of network seed and Transformer seed give 70.04–70.43. The audio
+  sign is cleaner under argmax (audio + video above video only in 9 of 9 networks, mean +0.74) and it holds on the
+  2,019 test clips that have sound (+0.75, positive in 7 of 9).
+- The two "65.69" values of Section 5.6 and Fig. S1 are a genuine coincidence (seeds 65.69 / 66.40 / 64.98).
+
+### 22.3 Statements that do not hold as written (fix before the upload)
+
+| # | Where | Problem | Evidence | Proposed wording |
+|---|---|---|---|---|
+| P1 | §4.3 "The test split is used only for the final evaluation … each reported test result is computed once" | The network's training recipe (class-balanced sampler) was the best of 14 sweep runs **by test top-1**; that run is network seed 1. By validation the control would have won | `scripts/night/collect.py:49-58`, `phase2.py:59`, `results/night/WINNER`; validation (refined) control 68.63, sampler run 67.97 | "No checkpoint, model size, fusion weight or threshold was fitted on the test split. The training recipe of the network was taken from the sweep of Table S2, in which test accuracy was inspected; its three-seed mean is 0.18 points above the control of that sweep." |
+| P2 | Abstract, contribution 2, §5.3, conclusion: decoding adds 1.99 points, "more than any training change" | 1.99 is the gain of the reported recipe only. Same network without the sampler: +0.80; the other 11 sweep runs: −0.04 to +1.33 (median 0.80). The sampler lowers argmax accuracy by 0.76 and thresholds give it back, so the comparison with "any training change" is partly circular. Thresholds lower both behaviour models (Transformer 67.58 → 66.99, GBM 66.53 → 66.27). By validation accuracy the logit-bias decoder would be chosen (test 65.06) | calibration files of the 14 `results/night/G*` runs; recomputed argmax of the members | Keep 1.99 as the measured value, add in §5.3: "The size of the gain depends on the training recipe (from −0.04 to +2.39 points over the fourteen runs of Table S2, 0.80 for the same network without the class-balanced sampler), and thresholds do not raise the accuracy of the two behavior models." Soften contribution 2 to "by up to two points". |
+| P3 | §2, §3.1, §3.1.2, §3.1.5 | The network code descends from Chumachenko, Iosifidis and Gabbouj (ICPR 2022): the repository's `LICENSE` carries her copyright, and the intermediate fusion and the modality dropout are hers. The paper cites only AVT-CA. The backbone is also not stock EfficientFace: the modulator runs before stage 2 on 29 channels and its 27 tensors are not pre-trained | `LICENSE:3`; `models/multimodal_cnn.py:81,104` (commit `42f2845`); run logs "loaded 389 layers, skipped 27" | Add the reference (Proc. ICPR 2022, pp. 2822–2828, doi 10.1109/ICPR56361.2022.9956592) at the fusion and at the modality dropout; write "a modified EfficientFace backbone, in which the modulator precedes the second stage and is trained from random initialization". One reference is about 4 lines of the ~11 free lines on p. 12: check on Overleaf. |
+| P4 | §5.4.3 "any network weight from 0.5 to 0.7 gives 69.95–70.07%" | True only for 0.5, 0.6, 0.7. Stored 0.05 grid: 0.55 → 69.52 ± 1.40 (one seed 67.91), 0.65 → 70.23 ± 0.33 | `results/paper_springer/analysis.json` → `sensitivity.two_way_av_gbm` | "network weights of 0.5, 0.6 and 0.7 give 69.95–70.07%" (optionally: "at 0.55 the thresholds of one seed transfer poorly, 69.52 ± 1.40%") |
+| P5 | Fig. 2 caption "Blocks marked with a star are the components evaluated in Section 5"; §5.7 "adopted from the emotion-recognition setting" | Alignment and modality dropout carry stars but are never ablated, as §5.7 itself says; the alignment is this work's addition, not adopted | caption; §5.7 | Caption: "… are the components added to the AVT-CA fusion in this work" (keep 7 caption lines). §5.7: "were fixed before the experiments". |
+| P6 | §5.1 "Table 1 lists the published results … together with AVB-Engage and its components" | Table 1 has one row for this work; the components are in Table 2 | Table 1 | Drop "and its components". |
+| P7 | §5.4 binomial ±1.95; S13 McNemar tests | The 2,256 test clips come from 26 participants (4–138 clips each; fused accuracy per participant 27–100%) and are treated as independent. Resampling participants (20,000 draws): fusion minus network +4.02, 95% interval +0.7 to +7.6 (better for 15 participants, worse for 9); audio + video minus video only +0.74, interval −0.9 to +2.5 (better for 13, worse for 11) | recomputed from `results/paper_jaihc/sigtest/*.npz` and the stored logits | One sentence in §5.4 and one in S13 stating that clips of one participant are not independent, with the two participant-level intervals. The fusion gain survives; the audio gain is not established at the participant level, so "consistent sign across networks" must not read as consistency across people. |
+
+### 22.4 Smaller items in the paper
+
+- Equal thirds (Table S10, §5.4.3): 69.28 ± 0.23 reproduces only with weights 0.334 / 0.333 / 0.333; exact thirds give
+  69.39 ± 0.16. No script produces this row.
+- "OpenFace … detects a face in 98.2% of the frames" is frame-weighted over all 11,311 clips. 9% of the clips have an
+  OpenFace series of exactly 10,000 rows (seven subjects, a container frame-rate quirk; 70% have 300 rows), so they
+  dominate the count. Per clip the mean is 96.3%; 101 used clips have no detected face at all, 100 of them labelled
+  *not engaged*, and every model predicts level 0 on about 90% of the 121 low-detection test clips. Part of the
+  *not engaged* recall is therefore face absence. Failed frames enter the segment statistics as zeros.
+- 237 test clips (10.5%, seven participants) have a digitally silent audio track; validation has none. Worth one
+  clause where the Introduction says the audio is "often absent".
+- Gradient boosting "three fits": the first and third differ only in a seed that has no effect, so the model is a 2:1
+  average of two fits (1,200 of the 4,800 trees are duplicates).
+- The reported fusion is not the validation-best of the fusion variants tried (98-d: validation 70.3–71.1, test 69.15).
+  The paper reports the 98-d result; add that the 22-d system was fixed first.
+- "90 participants" in training repeats the dataset paper; the files hold 91 subject numbers (128 in total).
+- Table S3: the segment-Transformer FLOPs (3.1 M) are a manual recount; `complexity.json` and the script still give
+  0.113 M. The 16.0 GFLOPs count a multiply-add twice (correct for the tool, stated in the caption); in the convention
+  of most comparison tables it is 8.0 G.
+- "OpenFace 2.2": the build is upstream master of 2021 (its CMake file says 2.0.2).
+- `submission/cover_letter.pdf` in the zip still contains the bracketed reviewer placeholder.
+- Third-party numbers of Table 1 seen in secondary sources only (71.24, 73.58 confirmed; 68.91 appears in the TCCT-Net
+  group's later paper). One 2026 preprint (arXiv:2602.09904) reports EngageNet test numbers for a binarized label; it
+  does not conflict with "the only published results on the official test split".
+
+### 22.5 Code
+
+Sound: the reported path does what the paper says (11 of 13 method claims match line by line, the other two are the
+backbone naming of P3 and a rounding remark); the current code reproduces the stored seed-1 validation logits to
+2.7e-4; masks are threaded correctly through alignment and all three exchanges; selection uses validation only; run
+bookkeeping (stored options, checkpoint hash, config guard), seeding and the zero-init warm-start check are good;
+McNemar and Holm are implemented correctly.
+
+| # | Finding | Where |
+|---|---|---|
+| C1 | CI has failed on every push since June: a stale assertion expects two datasets, so `pytest` never runs there | `.github/workflows/ci.yml:59` |
+| C2 | `README.md` is still the RAVDESS README (no mention of EngageNet or the paper); the documented commands `python -m src.main` and `python src/evaluate.py` do not exist (`python main.py`, `python -m src.cli.evaluate`). `CLAUDE.md` has the same commands and a stale "Current Project Phase" | `README.md`, `CLAUDE.md` |
+| C3 | The headline cannot be rebuilt by an outside reader: unpublished warm-start checkpoint with unscripted lineage, absolute home paths in about 40 tracked files, the runs' annotation file in a deleted worktree, behaviour-model weights not saved, `requirements.txt` incomplete and at odds with the environment (librosa ≥ 0.10 required, 0.8.1 installed) | `scripts/fullclip/common.sh`, `scripts/paper/significance_tests.py:33` |
+| C4 | No test covers the scripts that produce 70.29 or the significance tests; fusion aligns members by position, not by clip key (checked by key now: aligned, nothing missing) | `scripts/fullclip/fuse_members.py:67-69` |
+| C5 | `--fusion lt`, `--fusion ia` and the legacy path crash on the first batch with the current collate | `models/multimodal_cnn.py:900,943,974` |
+| C6 | Silent partial checkpoint loads: the tolerant loader only prints; the head count is in no tensor shape and its default differs between files (1, 4, 8); `late_text_fusion` defaults differ | `src/engine/checkpointing.py:65-97`, `src/config/opts.py:44`, `scripts/calibrate_engagement_logits.py:37` |
+| C7 | RAVDESS-era defaults are unsafe for EngageNet (`--mask softhard` quadruples each batch, 8 classes, 15 frames, 1 head); the paper recipe exists only in `scripts/fullclip/common.sh` | `src/config/opts.py` |
+| C8 | Scripts that no longer run or regenerate a wrong value: `scripts/night/ensemble.py:64` (unpacks 9 of 11), `scripts/paper/complexity_benchmark.py:129-139` (Transformer FLOPs), `preprocessing/engagenet/compute_baselines.py` | as listed |
+| C9 | Padding value 0.0 is the maximum of the dB mel, not silence; measured effect on short clips negligible (no threshold-decoded flip in 24 clips) | `src/data/temporal.py:163` |
+| C10 | Dead or duplicated code: unused unimodal heads and `AttentionLocalVisualTemporal`, broken CREMA-D loader, MOSEI scripts without a loader, three copies of the threshold search, four validator families | `models/`, `datasets/cremad.py:48,215`, `preprocessing/mosei/` |
+| C11 | Efficiency, none of it material at 32 minutes per run: no mixed precision, two gradient passes with a GPU sync per step, three weight writes per epoch, 60 Transformer epochs when the kept one is 3–7 | `src/engine/train.py:70-89,269-270` |
+| C12 | UI serves pre-paper checkpoints from hard-coded untracked paths and labels 66.36 as beating the baselines | `ui/inference.py:63-107` |
+
+### 22.6 What the public repository exposes (the owner's decisions)
+
+- EngageNet-derived files are tracked: six annotation files with every clip ID, label and split, per-clip audio RMS,
+  per-subject action-unit baselines; DAiSEE annotations as well. The paper says the dataset is available from its
+  authors on request, and the download carries no licence file. One annotation file still has the old label-derived
+  chat text in its fifth column.
+- The numeric cluster account name appears in the absolute paths of 43 tracked files; three commits carry a cluster
+  host e-mail address; `scripts/codex-remote-login.sh` prints user and host.
+- `docs/plan.md` §20 (a minute-by-minute account of a recorded class session, names withheld) and internal notes
+  (`docs/professor_progress_brief.md`, parts of `docs/progress.md`) are public.
+- The MOSEI share link removed from the mainline is still at the tip of three remote branches.
+- `LICENSE` names only the 2022 upstream author; the README's upstream credits were dropped in May.
+- `pretrained/EfficientFace_Trained_on_AffectNet7.pth` is tracked; its redistribution terms are not stated upstream.
+- No token, key or password is in the tree or the history.
+
+### 22.7 Tasks
+
+| ID | Task | Owner | Status |
+|---|---|---|---|
+| RV-status | 2026-11-14 (Yuvraj: "do everything that needs to be fixed … spawn sub agents", then "continue"): four fix agents, then the coordinator's checks (22.8). All Claude-owned RV tasks are **done and verified**; nothing committed or pushed. Open: the Overleaf upload, a commit, and the decisions in 22.8 | Claude | **done 2026-11-14** |
+| RV1 | Apply P1–P7 to `paper.tex` / `supplementary.tex`, add the ICPR 2022 reference, rebuild, check 12 pages on Overleaf, refresh the zip | Claude / Yuvraj | **done 2026-11-14** (12 pp local with ~11 free lines; zip refreshed); Overleaf upload and its page check open |
+| RV2 | Decide the smaller items of 22.4 (equal-thirds row, detection-rate sentence, silent-audio clause, "three fits", participant count) | Claude | **done 2026-11-14**: equal thirds 69.39 ± 0.16, 96.3 % per clip, silent audio in §4.1 and S11, Table S5 footnote; "90, 11 and 26 participants" and "OpenFace 2.2" kept |
+| RV3 | Fill or delete the reviewer placeholder in the cover letter and rebuild its PDF | Claude | **done 2026-11-14** (sentence deleted; reviewers can still be suggested in the submission form) |
+| RV4 | Fix CI (registry assertion) so the suite runs on push | Claude | **done 2026-11-14**: replayed locally and in a fresh Python 3.11 env with the newest packages (torch 2.15, numpy 2.4, librosa 0.11): 383 passed; not yet run on GitHub (nothing pushed) |
+| RV5 | Rewrite `README.md` for the paper; correct `CLAUDE.md` and `AGENTS.md` | Claude | **done 2026-11-14** (30 command lines checked against the scripts' argparse; upstream credits restored) |
+| RV6 | Decide on the tracked dataset-derived files, the account name in paths, the stale branches with the share link, and the internal notes (22.6) | Claude / Yuvraj | **partly done 2026-11-14**: 18 data-derived files and `scripts/codex-remote-login.sh` untracked (staged, kept on disk, gitignored); no tracked file contains the account name. Yuvraj decides the rest (22.8) |
+| RV7 | Reproducibility: relative paths, a tagged commit, the warm-start lineage written down, saved behaviour-model weights | Claude | **done 2026-11-14** except the tag (needs a commit): repo-relative paths, `OPENFACE_BIN`, lineage as commands in README, GBM models saved (`results/fullclip/gbm/models.pkl`, re-fit identical); Transformer weights saved for future runs only |
+| RV8 | Tests for segment statistics, fusion, threshold search, significance; Transformer FLOPs | Claude | **done 2026-11-14** (24 script tests; FLOPs 3,091,456 = analytic) |
+| RV9 | Remove or repair dead paths (`lt` / `ia`, CREMA-D loader, MOSEI scripts, `ensemble.py`) | Claude | **done 2026-11-14** (`lt`/`ia` repaired and tested, CREMA-D fixed, MOSEI marked unsupported, `ensemble.py` fixed) |
+
+
+### 22.8 Fixes applied and verified (2026-11-14, Yuvraj: "do everything that needs to be fixed … spawn sub agents", then "continue")
+
+Four fix agents ran in parallel on disjoint files (paper; scripts and preprocessing; models, `src/`, datasets, UI and
+tests; CI, README, instruction files and repository hygiene). The coordinator then checked their work independently.
+Nothing was committed or pushed.
+
+**Paper and supplement.** P1–P7 and the 22.4 items are in (22.7). Two further corrections came out of the checks:
+
+- Section S4 claimed "25 epochs" for pre-training stage 2. The run's own logs show **two epochs** (24 and 25 of the
+  continued count, from the stage-1 best epoch), on the centred 3.6 s audio window; stage 3 then read the whole
+  track. Section S4 and the source comment of `paper.tex` now say so.
+- Section S5 now states that the validation choice between the control and the sampler run depends on the decoder:
+  refined thresholds prefer the control (68.63 against 67.97), the logit-bias decoder the sampler run (68.91 against
+  68.72). The main text keeps the plain fact that the recipe was chosen by test accuracy.
+
+Build: paper 12 pages (local tectonic, ~11 free lines in the last column), supplement 12 pages, no "??", no overfull
+boxes, abstract 246 words, 23 references all cited, cover letter 1 page; the 15 zip members match the working files.
+
+**Code.** Checked by behaviour, not by trusting the reports:
+
+- The reported network computes exactly what it did before: old (HEAD) and new code on the seed-1 checkpoint, padded
+  clips included, max difference 0.0.
+- Every new number in the paper is written by a repo script (`scripts/paper/{participant_bootstrap,decoding_gain,
+  data_quirks,equal_weights}.py`, `complexity_benchmark.py --flops_only`). Each matches the coordinator's
+  independent calculation exactly.
+- `fuse_members.py` (members now aligned by clip key) reproduces 70.17 / 70.26 / 70.43 with the same thresholds.
+  `springer_analysis.py` and `significance_tests.py analyze` reproduce the stored JSON files exactly. The GBM re-fit is
+  identical (max |Δp| = 0) and is saved as `results/fullclip/gbm/models.pkl`.
+- Both UI checkpoints load under the new strict loading (546 restored, 0 skipped).
+- Tests: 383 pass (293 before). CI replayed locally and in a fresh Python 3.11 environment with the newest packages
+  (torch 2.15, numpy 2.4, librosa 0.11): import check, registry check and tests all pass.
+- 30 command lines in `README.md`, `CLAUDE.md` and `preprocessing/engagenet/README.md` use only flags that the
+  scripts accept. No tracked or new file contains the account name. All 64 changed Python files compile, every changed
+  shell script parses, and no secret is in the diff.
+- `need_weights=False` in the second exchange was reverted. It switches PyTorch to a fused kernel and moves logits by
+  2.4e-7, which would break bit-exact reproduction.
+
+**What the untracking does and does not do.** Removing the 18 data-derived files from tracking (staged, still on disk,
+now gitignored) stops future commits from carrying them. Every earlier commit on GitHub still contains them.
+
+**Decisions left to Yuvraj:**
+
+1. Upload the paper to Overleaf and confirm 12 pages there.
+2. Commit, push and tag the paper's code.
+3. Whether to purge the dataset files and the cluster e-mail address from history (rewrite plus force-push; forks and
+   clones keep the old commits).
+4. Delete the three remote branches that still hold the MOSEI share link (`origin/feat/cmu-mosei-and-streamlit-ui`,
+   `origin/yuvraj/ui-streamlit`, `origin/EngageNet`).
+5. Whether to keep `pretrained/EfficientFace_Trained_on_AffectNet7.pth` tracked; its redistribution terms are unstated.
+6. Whether §20 (the recorded class session) and the internal notes should stay in the public repository.
+7. Before captions are generated again, refit `preprocessing/engagenet/behavior_caption_stats.json` (fitted at the old
+   fixed 30 fps).
+
+### 22.9 Repository clean-up and history rewrite (2026-11-15, Yuvraj: "do all the stuff which is remaining")
+
+Yuvraj's choices in the question dialog: rewrite the history and force-push; delete the three stale branches; untrack
+the EfficientFace weights; shorten §20; attribute the three commits from another SFSU cluster account to himself.
+
+- **Commits** on `development`: `cd9c37f` (paper), `188b409` (code), `92921a8` (scripts; untracks the dataset files,
+  the weights and the login helper), `f5bc772` (repository files), `30b5ca0` (docs). The caption statistics were
+  refitted with the frame-rate-aware code: only the blink-rate thresholds changed (0.066 / 0.205 → 0.100 / 0.300).
+- **Branches deleted on GitHub:** `EngageNet`, `feat/cmu-mosei-and-streamlit-ui`, `yuvraj/ui-streamlit`. All three were
+  merged into `main`; their tips are in its history.
+- **History rewrite** (git-filter-repo, on a mirror of GitHub plus the local branches):
+  - removed the 22 historical paths of the dataset-derived files and the login helper;
+  - replaced the home path with the account number, and the bare number, in every file of every commit;
+  - replaced the MOSEI share link;
+  - mapped the cluster-account identity to Yuvraj's noreply address.
+  94 commits before and after; none was dropped.
+- **Checked before the push:**
+  - no object contains the account number, the second ID, the share link or the cluster host name;
+  - none of the 22 paths occurs in any commit;
+  - `development`'s tree is byte-identical to before;
+  - on each of the 21 GitHub branches, the tip differs only in the stripped files or the replaced paths.
+- **Force-push:** 21 branches in one atomic push with a lease per branch. New tips: `main` `f8b7d7b`, `development`
+  `30b5ca0` (before this note). The local branches were moved to the rewritten history; the files are unchanged.
+- **Backups**, outside the repository, in `~/AVTCA-Research-backups/2026-11-15-before-history-rewrite/`:
+  - `local-all-refs.bundle`: every local ref before the rewrite;
+  - `github-mirror.git`: GitHub as it was;
+  - `commit-map.txt`: old → new SHA for all 94 commits.
+  Every commit hash cited in the README, docs, scripts and memory notes was mapped to its new value.
+- **What a rewrite cannot reach:**
+  - Gakshith's fork (`Gakshith/AVTCA-Research`, created 2026-08-16) keeps the old history.
+  - GitHub keeps old commits reachable by SHA, including through the pull-request ref, until GitHub Support purges
+    them; `commit-map.txt` lists the affected commits.
+  - Any clone made before today keeps the old history too.
+- **Local leftovers, not touched:** the stale `refs/remotes/old-origin/*` refs (no such remote is configured) and the
+  reflog still reach the old commits locally. The 28 GB `.git` is mostly unreachable old blobs. Deleting those refs,
+  expiring the reflog and running `git gc --prune=now` would free the space.
+- **Overleaf (2026-11-15).** The five files changed since the last upload were checked first. On Overleaf they were
+  byte-identical to the last uploaded versions, so no edit made there was lost. The five files were then uploaded:
+  `SpringerNature/{paper.tex, supplementary.tex, references.bib}` and `submission/{README.md, cover_letter.tex}`.
+  Each matches the repository by SHA-256. The main document is still `SpringerNature/paper.tex` (pdfLaTeX, TeX Live
+  2026). Results there:
+  - paper: 12 pages, 0 errors, 0 overfull boxes, and the 3 known hyperref bookmark warnings; about a third of the
+    last right-hand column is free;
+  - supplement: 12 pages, 0 errors;
+  - cover letter: 1 page.
+  The project was left compiled on the paper.
+- **Tag** `jaihc-submission-2026-11-15` marks the repository state prepared for the submission (code, manuscript,
+  supplement, docs).
+- **`main` (2026-11-15, Yuvraj: "Merge into main").** `development` was merged into `main` with a merge commit. The
+  trial merge (`git merge-tree`) was clean, and its tree is identical to `development`'s. `main`'s two extra commits are
+  earlier merges that add no content. The repository root, which the paper's Code availability statement links, now
+  shows the paper's README and code.

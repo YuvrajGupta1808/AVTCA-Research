@@ -1,3 +1,9 @@
+> **Superseded (2026-11-14).** Kept as the August 2026 record. The +3.18 macro-F1 gain reported below was seed
+> noise and is withdrawn. Matched three-seed runs at the video clock (`docs/plan.md` §19) show that the in-network
+> behavior branch changes no metric (66.08 ± 0.59 against 66.27 ± 0.45 top-1). The same OpenFace features help as
+> separate models in the late fusion of the manuscript (70.29 ± 0.14; `research/paper/AVB-Engage_JAIHC_final/`,
+> `docs/plan.md` §22).
+
 # Behavior Modality (OpenFace Action Units) — Result Summary
 
 *2026-08-18 · EngageNet, 4-class engagement*

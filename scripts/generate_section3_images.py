@@ -1,6 +1,10 @@
+"""Section-3 diagrams of the earlier RAVDESS-era AVT-CA write-up (15 frames, 8 emotions). Historical; the
+JAIHC paper's figures are built by research/paper/AVB-Engage_JAIHC_final/figures/src/. Writes
+generated/section3_images/*.png; set SECTION3_FONT to a TrueType font if DejaVu Sans is not installed."""
 from __future__ import annotations
 
 import math
+import os
 from pathlib import Path
 
 from PIL import Image, ImageDraw, ImageFont
@@ -8,10 +12,9 @@ from PIL import Image, ImageDraw, ImageFont
 
 ROOT = Path(__file__).resolve().parents[1]
 OUT_DIR = ROOT / "generated" / "section3_images"
-OUT_DIR.mkdir(parents=True, exist_ok=True)
 
-TITLE_FONT = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
-BODY_FONT = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
+TITLE_FONT = os.environ.get("SECTION3_FONT", "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf")
+BODY_FONT = TITLE_FONT
 
 COLORS = {
     "bg": "#ffffff",
@@ -439,6 +442,7 @@ def make_pipeline(path: Path):
 
 
 def main():
+    OUT_DIR.mkdir(parents=True, exist_ok=True)
     make_architecture(OUT_DIR / "avtca_section3_architecture.png")
     make_pipeline(OUT_DIR / "avtca_section3_pipeline.png")
     print("Created image set in", OUT_DIR)

@@ -1,3 +1,11 @@
+> **Superseded (2026-11-14).** This summary dates from August 2026 and is kept as history. The current results are
+> in the manuscript (`research/paper/AVB-Engage_JAIHC_final/`) and in `docs/plan.md` §19–§22. In particular:
+> - the test split has 2,256 clips, not 2,257;
+> - the audio-visual network reaches 66.27 ± 0.45% over three seeds;
+> - late fusion with two OpenFace-statistics models reaches 70.29 ± 0.14% (so the corpus is not a ceiling at 66%);
+> - audio adds +0.74 points over video only, positive in 7 of 9 networks and significant in 1 after Holm adjustment;
+> - the alignment rows below were measured on a test set that was later withdrawn (15 frames).
+
 # What We Changed, and What Each Change Bought Us
 
 **EngageNet · 11,206 clips · 4-level ordinal engagement · test split 2,257 clips**

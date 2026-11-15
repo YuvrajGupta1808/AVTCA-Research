@@ -31,6 +31,19 @@ pretrained/*.pth
 preprocessing/ravdess/annotations_runtime.txt
 preprocessing/ravdess/processed.txt
 
+# Dataset-derived files: per-clip labels, splits and statistics, written with absolute local paths.
+# They are regenerated locally (preprocessing/<dataset>/create_annotations.py) and are not redistributed,
+# since EngageNet and DAiSEE are released by their authors on request. Untracked on 2026-11-14.
+preprocessing/**/annotations*.txt
+preprocessing/mosei/raw_manifest*.csv
+preprocessing/engagenet/audio_rms_cache.json
+preprocessing/engagenet/behavior_baselines*.json
+preprocessing/engagenet/chat_generation_cache.json
+preprocessing/engagenet/backup_*/
+
+# Personal machine helpers
+scripts/codex-remote-login.sh
+
 # Claude Code local settings
 .claude/
 .cursor/

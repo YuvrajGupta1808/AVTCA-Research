@@ -1,14 +1,25 @@
+# Runtime and test dependencies (training, evaluation, the paper's fusion and analysis scripts, tests).
+# CI installs the CPU build of torch/torchvision first and then this file (.github/workflows/ci.yml).
+# The exact versions behind the paper's results are in requirements-lock.txt.
 torch>=1.13.0
-torchvision>=0.14.0
-torchaudio>=0.13.0
-librosa>=0.10.0
-opencv-python
-tqdm
-facenet-pytorch
-timm
+torchvision>=0.14.0              # used by facenet-pytorch (MTCNN face detection)
 numpy
-Pillow
-scipy
+scipy                            # exact McNemar tests (scripts/paper/significance_tests.py)
+scikit-learn                     # gradient-boosting member and metrics
+librosa>=0.8.1                   # >= 0.10 pads the STFT differently: the first two and the last mel frame change (README)
 soundfile
-scikit-learn
+opencv-python
+Pillow
+tqdm
+facenet-pytorch>=2.5.3,<2.6      # 2.6 pins torch < 2.3 and would replace the installed torch
+imageio-ffmpeg                   # ffmpeg binary for audio extraction and the Streamlit UI
 pytest
+
+# Optional — install only for the part you use:
+#   Streamlit UI (also ui/requirements.txt):      streamlit pandas
+#   dataset downloaders:                          gdown (DAiSEE), requests pyppeteer (EngageNet OneDrive)
+#   CMU-MOSEI utilities (no loader in this repo): h5py
+#   sentence-embedding text backend (--text_backend minilm): sentence-transformers
+#   retired synthetic-chat generator (preprocessing/engagenet/generate_chat.py): anthropic
+# External programs: ffmpeg (or imageio-ffmpeg above), OpenFace 2.x FeatureExtraction for the facial-behavior
+# features (path in the OPENFACE_BIN environment variable), Node.js only to re-export the paper's draw.io figures.

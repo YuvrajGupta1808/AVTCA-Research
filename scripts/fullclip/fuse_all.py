@@ -11,7 +11,7 @@ import subprocess
 import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-PY = '/home/user/.conda/envs/avtca/bin/python'
+PY = os.environ.get('PY', sys.executable)  # the interpreter running this script, unless PY is set
 HERE = os.path.dirname(os.path.abspath(__file__))
 cfg = sys.argv[1]
 segtf_dir = sys.argv[sys.argv.index('--segtf_dir') + 1] if '--segtf_dir' in sys.argv else f'{ROOT}/results/fullclip/segtf'
@@ -35,11 +35,11 @@ for arm in neural_arms:
             singles = {}
             for row in r['rows']:
                 if sum(1 for x in row['w'] if x > 0) == 1:
-                    singles[row['w'].index(1.0)] = row['test']['top1']
+                    singles[max(range(len(row['w'])), key=lambda i: row['w'][i])] = row['test']['top1']
             rows.append((label, singles.get(0), singles.get(1), r['selected']['w'], r['selected']['val']['top1'], r['selected']['test']))
 print(f"{'fusion':<30} {'neural':>7} {'segTF':>7} {'w (val-sel)':<18} {'val':>6} {'TEST top1':>9} {'adj':>7} {'MAE':>7} {'F1':>6}")
 for label, n1, t1, w, v, t in rows:
-    print(f"{label:<30} {n1:7.2f} {t1:7.2f} {str(w):<18} {v:6.2f} {t['top1']:9.2f} {t['adj']:7.2f} {t['mae']:7.3f} {t['f1']:6.2f}")
+    print(f"{label:<30} {n1:7.2f} {t1:7.2f} {str([round(x, 3) for x in w]):<18} {v:6.2f} {t['top1']:9.2f} {t['adj']:7.2f} {t['mae']:7.3f} {t['f1']:6.2f}")
 import statistics
 for k in ('2way', '3way'):
     sel = [t['top1'] for label, _, _, w, _, t in rows if (len(w) == 2) == (k == '2way')]
