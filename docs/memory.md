@@ -1449,3 +1449,8 @@ worktree paths in scripts or docs.
     (fused kernel, 2.4e-7) and was reverted.
   - Untracking the 18 dataset-derived files only stops new commits from carrying them; GitHub history still has
     them until a history rewrite.
+- **History rewritten and force-pushed on 2026-11-15 (plan.md §22.9).** Every commit hash changed. The hashes cited in
+  the docs, the README, the scripts and the memory notes were mapped to the new ones. A hash from anywhere else, such
+  as an old log, can be translated with `~/AVTCA-Research-backups/2026-11-15-before-history-rewrite/commit-map.txt`.
+  The same folder holds the pre-rewrite bundle and the GitHub mirror. Gakshith's fork, GitHub's caches and the
+  pull-request ref still hold the old history.

@@ -61,9 +61,10 @@ in `paper.tex`, `supplementary.tex` and `references.bib`, and the PDFs and this 
    tectonic build breaks lines slightly differently (Section 5 on page 7, about 6 free lines), so judge the page
    budget on Overleaf, and before submitting put Overleaf's PDF in the zip as `paper.pdf`. After the 2026-11-14
    review fixes the local tectonic build is still 12 pages, with Section 5 now on page 6 and about 11 free lines on
-   page 12, and the supplement is 12 pages. **The revised `paper.tex`, `supplementary.tex`, `references.bib` and
-   `cover_letter.tex` are not yet on Overleaf:** upload them, recompile there, and check the page count before
-   submitting.
+   page 12, and the supplement is 12 pages. The revised `paper.tex`, `supplementary.tex`, `references.bib`,
+   `cover_letter.tex` and this checklist were uploaded to Overleaf on 2026-11-15 and checked there: paper 12 pages
+   (about a third of the last right-hand column free), supplement 12 pages, cover letter 1 page, 0 errors. Before
+   submitting, download Overleaf's PDF and put it in the zip as `paper.pdf`.
 6. Preprint: the manuscript (LaTeX source and figures) is public in the GitHub repository since 2026-11-14. Springer
    Nature's preprint policy, which covers all its journals, allows this (a preprint is not prior publication and may
    be posted on any legal platform, before or during review) but asks authors to disclose it at submission: the cover
@@ -86,7 +87,8 @@ The Overleaf project "Springer Nature LaTeX Template" holds the same manuscript 
 its `submission/` folder. Built there on 2026-11-13: paper 12 pages, supplement 11 pages, 0 errors; the redesigned Fig. 1 (with Fig. 2 and
 `paper.tex`) was uploaded on 2026-11-14 and builds at 12 pages, 0 errors; so does the filled title block (`paper.tex`,
 `supplementary.tex`, `cover_letter.tex` and this checklist, uploaded the same day). The review fixes of 2026-11-14
-(`docs/plan.md` §22) were made after these uploads and are not on Overleaf yet. The three hyperref
+(`docs/plan.md` §22) were uploaded on 2026-11-15 (the five changed files, each checked byte for byte against the
+repository): paper 12 pages, 0 errors, 0 overfull boxes; supplement 12 pages; cover letter 1 page. The three hyperref
 warnings ("Difference ... between bookmark levels") come from the template's `\bmhead`, a level-5 heading that follows
 a level-1 section, as the template manual prescribes for the back matter; they only flatten the PDF bookmark tree,
 not the printed pages.

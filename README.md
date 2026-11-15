@@ -154,7 +154,8 @@ Regenerate them for your copy of the data.
 
 ## Reproducing the paper
 
-All runs write to `results/`, which is git-ignored. The commands below use these flags, which every EngageNet run
+The repository state prepared for the JAIHC submission is tagged `jaihc-submission-2026-11-15`. All runs write to
+`results/`, which is git-ignored. The commands below use these flags, which every EngageNet run
 shares:
 
 ```bash

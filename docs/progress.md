@@ -20,8 +20,8 @@
 > the stored results. The seven overclaims (P1–P7) are reworded, the Chumachenko et al. (ICPR 2022) reference is
 > added, and the supplement's stage-2 epoch count is corrected (2, not 25); the paper is still 12 pages. CI is
 > fixed (383 tests, replayed in a fresh environment). The README is rewritten for the paper, scripts use
-> repo-relative paths, every new number has a script, and 18 dataset-derived files are untracked. Nothing is
-> committed; the Overleaf upload, the commit and the decisions in §22.8 are open.
+> repo-relative paths, every new number has a script, and 18 dataset-derived files are untracked. History rewritten
+> and force-pushed 2026-11-15 (§22.9); paper on Overleaf (12 pp); tagged `jaihc-submission-2026-11-15`.
 >
 > All numbers below this block are historical; the sections dated 2026-09-12 at the bottom are current.
 

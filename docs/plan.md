@@ -343,7 +343,7 @@ Expected output: ~10,000–12,000 labeled clips, 2 cohorts, 8 sessions, 24 uniqu
 | — | Implement role conditioning: `role_embedding(is_speaking)` added to video tokens before first AttentionBlock | Critical |
 | — | Replace MaxPool aggregation with learned attention pooling | High |
 | — | Add attention output dropout (p=0.1–0.2) before each residual add | High |
-| RV1–RV9 | Full review of paper + code, 2026-11-14 (Sections 22.7–22.8) | **Done 2026-11-14**, uncommitted; open: Overleaf upload, commit/push, and the decisions in 22.8 |
+| RV1–RV9 | Full review of paper + code, 2026-11-14/15 (Sections 22.7–22.9) | **Done**: committed, pushed, history rewritten, on Overleaf, tagged `jaihc-submission-2026-11-15`; open: merging into `main`, GitHub Support cache purge, Gakshith's fork |
 | TX1 | `preprocessing/zoom/extract_chat.py` — parse Zoom chat export, per-student per-clip text (Section 17) | High — unblocked now |
 | TX3 | Chat elicitation prompts + display-name convention into E1 session script (Section 17.1) | High — merge with E1 |
 | TX2, TX4–TX7 | Chat schema, text encoder, null token, text dropout, leakage gate + A/B (Section 17.7) | Blocked on pilot data |
@@ -3593,3 +3593,15 @@ the EfficientFace weights; shorten §20; attribute the three commits from anothe
 - **Local leftovers, not touched:** the stale `refs/remotes/old-origin/*` refs (no such remote is configured) and the
   reflog still reach the old commits locally. The 28 GB `.git` is mostly unreachable old blobs. Deleting those refs,
   expiring the reflog and running `git gc --prune=now` would free the space.
+- **Overleaf (2026-11-15).** The five files changed since the last upload were checked first. On Overleaf they were
+  byte-identical to the last uploaded versions, so no edit made there was lost. The five files were then uploaded:
+  `SpringerNature/{paper.tex, supplementary.tex, references.bib}` and `submission/{README.md, cover_letter.tex}`.
+  Each matches the repository by SHA-256. The main document is still `SpringerNature/paper.tex` (pdfLaTeX, TeX Live
+  2026). Results there:
+  - paper: 12 pages, 0 errors, 0 overfull boxes, and the 3 known hyperref bookmark warnings; about a third of the
+    last right-hand column is free;
+  - supplement: 12 pages, 0 errors;
+  - cover letter: 1 page.
+  The project was left compiled on the paper.
+- **Tag** `jaihc-submission-2026-11-15` marks the repository state prepared for the submission (code, manuscript,
+  supplement, docs).
