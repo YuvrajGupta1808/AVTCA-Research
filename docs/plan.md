@@ -343,7 +343,7 @@ Expected output: ~10,000–12,000 labeled clips, 2 cohorts, 8 sessions, 24 uniqu
 | — | Implement role conditioning: `role_embedding(is_speaking)` added to video tokens before first AttentionBlock | Critical |
 | — | Replace MaxPool aggregation with learned attention pooling | High |
 | — | Add attention output dropout (p=0.1–0.2) before each residual add | High |
-| RV1–RV9 | Full review of paper + code, 2026-11-14/15 (Sections 22.7–22.9) | **Done**: committed, pushed, history rewritten, on Overleaf, tagged `jaihc-submission-2026-11-15`; open: merging into `main`, GitHub Support cache purge, Gakshith's fork |
+| RV1–RV9 | Full review of paper + code, 2026-11-14/15 (Sections 22.7–22.9) | **Done**: committed, pushed, history rewritten, on Overleaf, tagged `jaihc-submission-2026-11-15`; merged into `main`; open: GitHub Support cache purge, Gakshith's fork |
 | TX1 | `preprocessing/zoom/extract_chat.py` — parse Zoom chat export, per-student per-clip text (Section 17) | High — unblocked now |
 | TX3 | Chat elicitation prompts + display-name convention into E1 session script (Section 17.1) | High — merge with E1 |
 | TX2, TX4–TX7 | Chat schema, text encoder, null token, text dropout, leakage gate + A/B (Section 17.7) | Blocked on pilot data |
@@ -3605,3 +3605,7 @@ the EfficientFace weights; shorten §20; attribute the three commits from anothe
   The project was left compiled on the paper.
 - **Tag** `jaihc-submission-2026-11-15` marks the repository state prepared for the submission (code, manuscript,
   supplement, docs).
+- **`main` (2026-11-15, Yuvraj: "Merge into main").** `development` was merged into `main` with a merge commit. The
+  trial merge (`git merge-tree`) was clean, and its tree is identical to `development`'s. `main`'s two extra commits are
+  earlier merges that add no content. The repository root, which the paper's Code availability statement links, now
+  shows the paper's README and code.
