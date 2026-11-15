@@ -62,7 +62,20 @@ def _validate_state_dict(state_dict, source):
     return state_dict
 
 
-def load_state_dict_into_model(model, state_dict, source='checkpoint'):
+def _format_keys(keys, limit=8):
+    keys = list(keys)
+    shown = ', '.join(keys[:limit])
+    return shown + (f', ... ({len(keys) - limit} more)' if len(keys) > limit else '')
+
+
+def load_state_dict_into_model(model, state_dict, source='checkpoint', report=None, require_complete=False):
+    """Load the tensors whose names and shapes match; leave the rest of the model as is.
+
+    The loader is deliberately tolerant (warm starts load an audio-visual checkpoint
+    into a model with extra branches). Pass ``report`` (a dict) to receive the restored,
+    skipped and left-at-init keys, and ``require_complete=True`` to raise instead when
+    any checkpoint tensor is skipped or any model tensor is left at its initial value.
+    """
     if state_dict is None:
         return False
 
@@ -84,6 +97,28 @@ def load_state_dict_into_model(model, state_dict, source='checkpoint'):
             f'Checkpoint {source} did not contain any tensors compatible with the current model.'
         )
     missing_keys = [key for key in model_state.keys() if key not in compatible_state]
+    if report is not None:
+        report.update({
+            'source': source,
+            'restored': len(compatible_state),
+            'skipped': len(skipped_keys),
+            'left_at_init': len(missing_keys),
+            'skipped_keys': list(skipped_keys),
+            'left_at_init_keys': list(missing_keys),
+        })
+    if require_complete and (skipped_keys or missing_keys):
+        details = []
+        if skipped_keys:
+            details.append(f'{len(skipped_keys)} checkpoint tensors do not fit the model ({_format_keys(skipped_keys)})')
+        if missing_keys:
+            details.append(f'{len(missing_keys)} model tensors are not in the checkpoint ({_format_keys(missing_keys)})')
+        raise ValueError(
+            f'Checkpoint {source} does not match the model built from the run options: '
+            + '; '.join(details)
+            + '. The model would run partly with random weights. Check the run options '
+            '(num_heads, fusion, late_text_fusion, behavior, ...), or pass --allow_partial_load '
+            'if a partial load is intended.'
+        )
     model_state.update(compatible_state)
     model.load_state_dict(model_state)
     print(
@@ -97,9 +132,59 @@ def load_state_dict_into_model(model, state_dict, source='checkpoint'):
     return True
 
 
-def load_named_state_dict_from_checkpoint(model, checkpoint_obj, state_key='state_dict', source='checkpoint'):
+def model_config_of(model):
+    """Architecture metadata of a MultiModalCNN (or a DataParallel wrapping one), else None."""
+    module = getattr(model, 'module', model)
+    config_fn = getattr(module, 'model_config', None)
+    return dict(config_fn()) if callable(config_fn) else None
+
+
+def verify_checkpoint_model_config(checkpoint_obj, model, source='checkpoint'):
+    """Compare the 'model_config' a checkpoint was saved with against the current model.
+
+    Only keys present in both are compared, so older checkpoints (no metadata) and newer
+    ones (extra keys) load as before. Returns the list of compared keys.
+    """
+    if not isinstance(checkpoint_obj, Mapping):
+        return []
+    saved = checkpoint_obj.get('model_config')
+    current = model_config_of(model)
+    if not isinstance(saved, Mapping) or current is None:
+        return []
+    compared = []
+    mismatches = []
+    for key, saved_value in saved.items():
+        if key not in current:
+            continue
+        compared.append(key)
+        current_value = current[key]
+        if isinstance(saved_value, float) or isinstance(current_value, float):
+            same = abs(float(saved_value) - float(current_value)) <= 1e-12
+        else:
+            same = saved_value == current_value
+        if not same:
+            mismatches.append(f'{key}: checkpoint {saved_value!r}, model {current_value!r}')
+    if mismatches:
+        raise ValueError(
+            f'Checkpoint {source} was saved from a model with different settings: '
+            + '; '.join(mismatches)
+            + '. These settings change the computation without changing any tensor shape.'
+        )
+    return compared
+
+
+def load_named_state_dict_from_checkpoint(model, checkpoint_obj, state_key='state_dict', source='checkpoint',
+                                          report=None, require_complete=False):
     state_dict = _extract_named_state_dict(checkpoint_obj, state_key=state_key)
-    return load_state_dict_into_model(model, state_dict, source=f'{source}:{state_key}')
+    if state_dict is not None:
+        verify_checkpoint_model_config(checkpoint_obj, model, source=source)
+    return load_state_dict_into_model(
+        model,
+        state_dict,
+        source=f'{source}:{state_key}',
+        report=report,
+        require_complete=require_complete,
+    )
 
 
 def load_checkpoint_object(checkpoint_path, map_location=None):
@@ -117,7 +202,19 @@ def resolve_checkpoint_file(checkpoint_path, checkpoint_kind='Checkpoint', hint=
     return checkpoint_path
 
 
-def load_state_dict_flexible(model, checkpoint_path, map_location=None):
+def load_state_dict_flexible(model, checkpoint_path, map_location=None, report=None, require_complete=False):
+    """Load a checkpoint file (full training checkpoint or bare state_dict) into ``model``.
+
+    Raises when the checkpoint's saved model_config (num_heads, fusion, ...) disagrees
+    with the model. See load_state_dict_into_model for ``report``/``require_complete``.
+    """
     checkpoint_obj = load_checkpoint_object(checkpoint_path, map_location=map_location)
-    load_state_dict_into_model(model, _extract_state_dict(checkpoint_obj), source=checkpoint_path)
+    verify_checkpoint_model_config(checkpoint_obj, model, source=checkpoint_path)
+    load_state_dict_into_model(
+        model,
+        _extract_state_dict(checkpoint_obj),
+        source=checkpoint_path,
+        report=report,
+        require_complete=require_complete,
+    )
     return checkpoint_obj

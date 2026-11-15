@@ -1,5 +1,6 @@
 import json
 import os
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -542,7 +543,7 @@ class TestEvaluationCore(unittest.TestCase):
             ['git', 'status', '--porcelain'],
             cwd='/repo',
             check=False,
-            stdout=-1,
+            stdout=subprocess.PIPE,
             text=True,
         )
 
@@ -564,53 +565,7 @@ class TestEvaluationCore(unittest.TestCase):
                 max_video_frames=96,
                 max_audio_steps=0,
             )
-            metrics = {
-                'epoch': 10000,
-                'loss': 1.0,
-                'top1_accuracy': 72.9167,
-                'balanced_accuracy': 70.0,
-                'uar': 70.0,
-                'top5_accuracy': 100.0,
-                'expected_calibration_error': 7.5,
-                'mean_confidence': 80.0,
-                'accuracy_confidence_gap': 7.0833,
-                'calibration_bins': [
-                    {'lower': 0.0, 'upper': 0.1, 'count': 0, 'accuracy': 0.0, 'confidence': 0.0, 'gap': 0.0},
-                    {'lower': 0.9, 'upper': 1.0, 'count': 1, 'accuracy': 100.0, 'confidence': 90.0, 'gap': -10.0},
-                ],
-                'classification_report_str': 'report',
-                'confusion_matrix': [[1, 0], [1, 0]],
-                'confusion_matrix_normalized_percent': [[100.0, 0.0], [100.0, 0.0]],
-                'top_confusions': [
-                    {
-                        'true_class': 'calm',
-                        'predicted_class': 'neutral',
-                        'count': 1,
-                        'percent_of_true_class': 100.0,
-                    }
-                ],
-                'prediction_records': [
-                    {
-                        'sample_index': 0,
-                        'video_path': '/tmp/v1.npy',
-                        'audio_path': '/tmp/a1.wav',
-                        'target_index': 0,
-                        'target_class': 'neutral',
-                        'prediction_index': 0,
-                        'prediction_class': 'neutral',
-                        'absolute_class_error': 0,
-                        'logits_json': '[3.0, 1.0]',
-                        'probabilities_json': '[0.9, 0.1]',
-                        'confidence': 0.9,
-                        'target_confidence': 0.9,
-                        'runner_up_index': 1,
-                        'runner_up_class': 'calm',
-                        'runner_up_confidence': 0.1,
-                        'confidence_margin': 0.8,
-                        'correct': True,
-                    }
-                ],
-            }
+            metrics = artifact_metrics()
             fingerprint = build_split_fingerprint(
                 dataset=DummyDataset(),
                 annotation_path=annotation_path,

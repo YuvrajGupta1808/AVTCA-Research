@@ -87,6 +87,12 @@ def _random_synced_audio_video_crop(audio, video, max_video_frames, max_audio_st
 
 
 def _pad_sequence(sequence, target_length, pad_value):
+    # Padding caveat: the default pad value 0.0 is the maximum of the dB mel spectrogram
+    # (power_to_db with ref=np.max), so padded audio steps look like peak energy rather
+    # than silence. The masks returned by collate_variable_length_batch remove padded
+    # steps before attention and pooling, but they still pass through the stage-1
+    # convolutions and BatchNorm. Trained checkpoints were fitted with this padding, so
+    # the value is left unchanged; see tests/test_core_padding.py for the measured effect.
     current_length = int(sequence.shape[0])
     if current_length == target_length:
         return sequence

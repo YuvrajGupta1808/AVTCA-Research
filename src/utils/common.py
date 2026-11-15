@@ -10,9 +10,7 @@ from collections.abc import Mapping
 
 import numpy as np
 import torch
-from torch import nn
-import torch.nn.functional as F
-from sklearn.metrics import accuracy_score, classification_report, confusion_matrix, f1_score
+from sklearn.metrics import accuracy_score, f1_score
 
 
 RANDOM_SEED_MAX = 2**32 - 1
@@ -47,8 +45,14 @@ class AverageMeter(object):
 
 
 class Logger(object):
+    """Tab-separated log with a fixed header.
 
-    def __init__(self, path, header):
+    A new run truncates the file. With ``append=True`` (a run resumed with
+    --resume_path) rows are added to the existing file instead, and the header is
+    written again only when the file is new, empty or has a different header.
+    """
+
+    def __init__(self, path, header, append=False):
         self.log_file = None
         if not isinstance(header, (list, tuple)) or not header:
             raise ValueError('Logger header must be a non-empty list or tuple of column names')
@@ -58,10 +62,16 @@ class Logger(object):
         duplicate_columns = sorted({column for column in header if header.count(column) > 1})
         if duplicate_columns:
             raise ValueError(f'Logger header contains duplicate columns: {", ".join(duplicate_columns)}')
-        self.log_file = open(path, 'w')
+        write_header = True
+        if append and os.path.isfile(path) and os.path.getsize(path) > 0:
+            with open(path, 'r', newline='') as existing:
+                first_line = existing.readline().rstrip('\r\n')
+            write_header = first_line.split('\t') != list(header)
+        self.log_file = open(path, 'a' if append else 'w')
         self.logger = csv.writer(self.log_file, delimiter='\t')
 
-        self.logger.writerow(header)
+        if write_header:
+            self.logger.writerow(header)
         self.header = list(header)
 
     def __del__(self):
@@ -171,89 +181,6 @@ def calculate_accuracy(output, target, topk=(1,), binary=False):
         return res, f1_val * 100
     return res
 
-def calculate_accuracy1(output, target, binary=False):
-    """Computes the accuracy for the specified output and target"""
-    
-    # Assuming output is a tensor with predictions and target is a tensor with true labels
-    # Convert tensors to numpy arrays for compatibility with sklearn
-    output_np = output.cpu().numpy()
-    target_np = target.cpu().numpy()
-    
-    # Calculate the predicted labels
-    # For multi-class classification, you might need to use a different approach to get the predicted labels
-    # Here, we assume the output is already in the form of predicted labels
-    pred_labels = output_np.argmax(axis=1)
-    
-    # Calculate accuracy
-    accuracy = accuracy_score(target_np, pred_labels)
-    
-    return accuracy
-
-
-class FocalLoss(nn.Module):
-    def __init__(self, weight=None, gamma=2.0, label_smoothing=0.0):
-        super().__init__()
-        self.register_buffer('weight', weight if weight is not None else None)
-        self.gamma = gamma
-        self.label_smoothing = label_smoothing
-
-    def forward(self, logits, targets):
-        ce = F.cross_entropy(
-            logits,
-            targets,
-            weight=self.weight,
-            reduction='none',
-            label_smoothing=self.label_smoothing,
-        )
-        pt = torch.exp(-ce)
-        return ((1.0 - pt) ** self.gamma * ce).mean()
-
-
-def get_class_names(dataset_name, n_classes):
-    if dataset_name == 'RAVDESS' and n_classes == 8:
-        return ['neutral', 'calm', 'happy', 'sad', 'angry', 'fearful', 'disgust', 'surprised']
-    return ['class_{}'.format(i) for i in range(n_classes)]
-
-
-def dataset_class_counts(dataset, n_classes):
-    counts = torch.zeros(n_classes, dtype=torch.float32)
-    for sample in getattr(dataset, 'data', []):
-        label = int(sample['label'])
-        if 0 <= label < n_classes:
-            counts[label] += 1
-    return counts
-
-
-def compute_class_weights(dataset, n_classes, device):
-    counts = dataset_class_counts(dataset, n_classes)
-    if counts.sum() == 0:
-        return None
-    weights = counts.sum() / (n_classes * counts.clamp_min(1.0))
-    weights = weights / weights.mean()
-    return weights.to(device)
-
-
-def build_criterion(opt, training_data=None):
-    class_weights = None
-    if getattr(opt, 'use_class_weights', False) and training_data is not None:
-        class_weights = compute_class_weights(training_data, opt.n_classes, opt.device)
-        print('Class counts:', dataset_class_counts(training_data, opt.n_classes).tolist())
-        print('Class weights:', class_weights.detach().cpu().tolist())
-
-    if getattr(opt, 'use_focal_loss', False):
-        criterion = FocalLoss(
-            weight=class_weights,
-            gamma=opt.focal_gamma,
-            label_smoothing=opt.label_smoothing,
-        )
-    else:
-        criterion = nn.CrossEntropyLoss(
-            weight=class_weights,
-            label_smoothing=getattr(opt, 'label_smoothing', 0.0),
-        )
-    return criterion.to(opt.device)
-
-
 def classification_metrics_from_lists(targets, predictions, n_classes):
     _validate_classification_inputs(targets, predictions, n_classes)
     if len(targets) == 0:
@@ -284,23 +211,6 @@ def _validate_classification_inputs(targets, predictions, n_classes):
                 raise ValueError(f'{name}[{index}] must be an integer class index; got {value!r}')
             if value < 0 or value >= n_classes:
                 raise ValueError(f'{name}[{index}] must be between 0 and {n_classes - 1}; got {value!r}')
-
-
-def print_classification_summary(targets, predictions, opt, prefix='validation'):
-    _validate_classification_inputs(targets, predictions, opt.n_classes)
-    labels = list(range(opt.n_classes))
-    names = get_class_names(opt.dataset, opt.n_classes)
-    print('{} classification report:'.format(prefix))
-    print(classification_report(
-        targets,
-        predictions,
-        labels=labels,
-        target_names=names,
-        digits=4,
-        zero_division=0,
-    ))
-    print('{} confusion matrix:'.format(prefix))
-    print(confusion_matrix(targets, predictions, labels=labels))
 
 
 def _checkpoint_output_paths(opt):
@@ -345,7 +255,7 @@ def save_checkpoint(state, is_best, opt):
 
 
 def adjust_learning_rate(optimizer, epoch, opt):
-    """Sets the learning rate to the initial LR decayed by 10 every 30 epochs"""
+    """Step schedule: the initial LR divided by 10 at every epoch listed in --lr_steps (default 40, 55, ...)."""
     lr_new = opt.learning_rate * (0.1 ** (sum(epoch >= np.array(opt.lr_steps))))
     for param_group in optimizer.param_groups:
         param_group['lr'] = lr_new

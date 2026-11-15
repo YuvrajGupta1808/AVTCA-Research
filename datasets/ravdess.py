@@ -11,7 +11,6 @@ import functools
 import numpy as np
 import librosa
 import cv2
-import torch.nn.functional as F
 
 
 def _pil_to_tensor(img):
@@ -33,7 +32,18 @@ def _sample_frame_indices(length, target_frames, sampling='uniform'):
     return np.linspace(0, length - 1, num=target_frames, dtype=int).tolist()
 
 
+_WARNED_MP4_FALLBACK = set()
+
+
 def video_loader(video_dir_path, target_frames=None, frame_sampling='uniform'):
+    """Frames of one clip as a list of PIL images, in OpenCV BGR channel order.
+
+    The ``*_facecroppad.npy`` arrays written by the face-extraction scripts hold BGR
+    crops straight from cv2, and every trained checkpoint saw BGR. The raw .mp4
+    fallback (used when a clip's crop array is missing) therefore keeps BGR as well.
+    It returns whole frames resized to 224x224, not face crops, so a warning is printed
+    once per directory when it is used.
+    """
     if video_dir_path.endswith('.npy'):
         video = np.load(video_dir_path)
         video_data = []
@@ -43,14 +53,19 @@ def video_loader(video_dir_path, target_frames=None, frame_sampling='uniform'):
         return video_data
 
     if video_dir_path.endswith('.mp4'):
+        directory = os.path.dirname(video_dir_path)
+        if directory not in _WARNED_MP4_FALLBACK:
+            _WARNED_MP4_FALLBACK.add(directory)
+            print(f'  [video] warning: no face-crop array for {os.path.basename(video_dir_path)}; '
+                  'using whole raw frames from the .mp4 (BGR, not face-cropped). '
+                  f'Further fallbacks in {directory} are not reported.')
         cap = cv2.VideoCapture(video_dir_path)
         frames = []
         while True:
             ok, frame = cap.read()
             if not ok:
                 break
-            frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-            frame = cv2.resize(frame, (224, 224))
+            frame = cv2.resize(frame, (224, 224))     # BGR, like the .npy crops
             frames.append(frame)
         cap.release()
 

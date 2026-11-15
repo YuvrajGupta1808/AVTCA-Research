@@ -4,6 +4,7 @@ import numbers
 import os
 import random
 import time
+import warnings
 from collections.abc import Sequence
 
 import numpy as np
@@ -80,8 +81,18 @@ CONFIG_IDENTITY_KEYS = [
     'behavior_frames',
     'text_fusion',
     'text_backend',
+    'visual_features',
+    'marlin_tokens',
+    'behavior_dir',
+    'behavior_baselines',
+    'video_norm_value',
 ]
 
+# Identity keys without an entry in CONFIG_IDENTITY_DEFAULTS are "unknown" when a stored
+# opts*.json lacks them (the option did not exist yet when that run was launched), and an
+# unknown value never conflicts. late_text_fusion is deliberately not defaulted: runs from
+# before the option existed include both checkpoints with the text add-on (v9/v10) and
+# checkpoints without it (RAVDESS, engagenet_h8_*), so no single default is right.
 CONFIG_IDENTITY_DEFAULTS = {
     'spec_augment': False,
     'spec_time_masks': 2,
@@ -101,7 +112,6 @@ CONFIG_IDENTITY_DEFAULTS = {
     'max_val_batches': 0,
     'max_text_tokens': 32,
     'text_vocab_size': 4096,
-    'late_text_fusion': True,
     'text_fusion_arch': 'legacy',
     'behavior': False,
     'behavior_feature_dim': 22,
@@ -148,31 +158,48 @@ def list_result_configs(result_path):
     return configs
 
 
-def _identity_tuple(config):
-    return tuple((key, _identity_token(config, key)) for key in CONFIG_IDENTITY_KEYS)
+class _UnknownIdentityValue:
+    """Marker for an identity key that a stored config predates."""
+
+    def __repr__(self):
+        return '<unknown>'
+
+
+UNKNOWN_IDENTITY_VALUE = _UnknownIdentityValue()
 
 
 def _identity_value(config, key):
     value = config.get(key)
     if value is None and key in CONFIG_IDENTITY_DEFAULTS:
         return CONFIG_IDENTITY_DEFAULTS[key]
+    if key not in config:
+        return UNKNOWN_IDENTITY_VALUE
     return value
 
 
 def _identity_token(config, key):
-    return json.dumps(_identity_value(config, key), sort_keys=True)
+    value = _identity_value(config, key)
+    if value is UNKNOWN_IDENTITY_VALUE:
+        return None
+    return json.dumps(value, sort_keys=True)
 
 
 def describe_config_conflicts(configs):
+    """Identity keys whose known values differ between configs (unknown values are skipped)."""
     if len(configs) <= 1:
         return {}
 
     differing = {}
     for key in CONFIG_IDENTITY_KEYS:
-        values = {json.dumps(_identity_value(config, key), sort_keys=True) for config in configs}
-        if len(values) > 1:
+        tokens = {_identity_token(config, key) for config in configs}
+        tokens.discard(None)
+        if len(tokens) > 1:
             differing[key] = [_identity_value(config, key) for config in configs]
     return differing
+
+
+def configs_are_compatible(configs):
+    return not describe_config_conflicts(configs)
 
 
 def load_result_config(result_path, explicit_config_path=''):
@@ -188,8 +215,7 @@ def load_result_config(result_path, explicit_config_path=''):
             'Provide --config_path or evaluate from a result directory with saved run options.'
         )
 
-    identities = {_identity_tuple(config) for config in configs}
-    if len(identities) > 1:
+    if not configs_are_compatible(configs):
         conflicts = describe_config_conflicts(configs)
         raise ValueError(
             'Ambiguous result directory: multiple conflicting run configs found in {}. '
@@ -207,9 +233,7 @@ def ensure_result_path_compatible(result_path, current_config):
     if not configs:
         return
 
-    existing_identities = {_identity_tuple(config) for config in configs}
-    current_identity = _identity_tuple(current_config)
-    if existing_identities != {current_identity}:
+    if not configs_are_compatible(configs + [current_config]):
         conflicts = describe_config_conflicts(configs + [current_config])
         raise ValueError(
             'Refusing to reuse result_path {} because it already contains conflicting run configs. '
@@ -217,14 +241,43 @@ def ensure_result_path_compatible(result_path, current_config):
         )
 
 
+def _mps_available():
+    return hasattr(torch.backends, 'mps') and torch.backends.mps.is_available()
+
+
 def resolve_device(device_name):
-    if device_name == 'cpu':
+    """Map --device to the device actually used.
+
+    'cpu' stays on the CPU. 'cuda' and 'cuda:N' are honoured when CUDA is available
+    (an index beyond the visible GPUs is an error); otherwise the run falls back to
+    MPS, then the CPU, as before. Any other name keeps the old behaviour: CUDA if
+    available, then MPS, then CPU.
+    """
+    name = str(device_name if device_name is not None else 'cuda').strip().lower()
+    if name == 'cpu':
         return 'cpu'
+    if name.startswith('cuda') and torch.cuda.is_available():
+        if name == 'cuda':
+            return 'cuda'
+        index_text = name.split(':', 1)[1] if ':' in name else ''
+        if not index_text.isdigit():
+            raise ValueError(f'--device must be cpu, cuda or cuda:N; got {device_name!r}')
+        index = int(index_text)
+        count = torch.cuda.device_count()
+        if index >= count:
+            raise ValueError(f'--device {device_name} requested, but only {count} CUDA device(s) are visible')
+        return f'cuda:{index}'
+    if name == 'mps' and _mps_available():
+        return 'mps'
     if torch.cuda.is_available():
         return 'cuda'
-    if hasattr(torch.backends, 'mps') and torch.backends.mps.is_available():
+    if _mps_available():
         return 'mps'
     return 'cpu'
+
+
+def is_cuda_device(device):
+    return str(device).startswith('cuda')
 
 
 def active_conda_environment():
@@ -372,12 +425,51 @@ def validate_run_options(opt):
     _require_choice(opt, 'fusion', ['lt', 'it', 'ia'])
     _require_choice(opt, 'mask', ['softhard', 'noise', 'nodropout'], allow_none=True)
     _require_choice(opt, 'test_subset', ['test', 'val'])
+    if getattr(opt, 'mask', None) == 'softhard' and getattr(opt, 'visual_features', 'frames') == 'marlin':
+        raise ValueError(
+            '--mask softhard blends and zeroes raw video frames and needs (B, T, 3, H, W) batches; '
+            'with --visual_features marlin use --mask nodropout (or noise).'
+        )
     return opt
+
+
+def legacy_default_warnings(opt):
+    """Messages for engagement runs that still use RAVDESS-era defaults.
+
+    The parser defaults reproduce the original RAVDESS recipe (8 classes, 15 frames and
+    a 3.6 s audio crop, --mask softhard), which is almost never what an EngageNet or
+    DAiSEE run wants. The paper's EngageNet runs pass --n_classes 4
+    --full_video_preprocessing --mask nodropout explicitly (scripts/fullclip/common.sh).
+    """
+    dataset = getattr(opt, 'dataset', '')
+    if dataset not in {'ENGAGENET', 'DAISEE'}:
+        return []
+    messages = []
+    if not getattr(opt, 'full_video_preprocessing', False):
+        messages.append(
+            f'{dataset} run without --full_video_preprocessing: every clip is cut to the legacy '
+            '15 frames and a centred 3.6 s audio crop instead of the full clip.'
+        )
+    if dataset == 'ENGAGENET' and getattr(opt, 'n_classes', 4) != 4:
+        messages.append(f'ENGAGENET has 4 engagement levels, but --n_classes is {getattr(opt, "n_classes", None)}.')
+    if getattr(opt, 'mask', None) == 'softhard':
+        messages.append(
+            '--mask softhard (the default) quadruples every training batch with blended and zeroed '
+            'copies, on top of the model\'s own modality dropout; the paper runs use --mask nodropout.'
+        )
+    return messages
 
 
 def prepare_run_options(opt):
     validate_run_options(opt)
     opt.device = resolve_device(opt.device)
+    if opt.device.startswith('cuda:'):
+        # Make cuda:N the current device too, so memory statistics, pinned-memory
+        # transfers and any default-device tensor land on the requested GPU.
+        torch.cuda.set_device(torch.device(opt.device))
+    for message in legacy_default_warnings(opt):
+        warnings.warn(message, stacklevel=2)
+        print(f'WARNING: {message}')
     os.makedirs(opt.result_path, exist_ok=True)
     opt.arch = '{}'.format(opt.model)
     opt.store_name = '_'.join([opt.dataset, opt.model, str(opt.sample_duration)])
@@ -428,10 +520,12 @@ def print_runtime_summary(opt, model):
     print(f'Params: total={total_params:,}  trainable={trainable_params:,}')
     print(training_control_summary(opt))
     print(f'Device: {opt.device}')
-    if opt.device == 'cuda':
+    if is_cuda_device(opt.device):
+        gpu_index = torch.device(opt.device).index
+        gpu_index = torch.cuda.current_device() if gpu_index is None else gpu_index
         print(
-            f'  GPU: {torch.cuda.get_device_name(0)}  '
-            f'memory={torch.cuda.get_device_properties(0).total_memory/1e9:.1f} GB  '
+            f'  GPU: {torch.cuda.get_device_name(gpu_index)}  '
+            f'memory={torch.cuda.get_device_properties(gpu_index).total_memory/1e9:.1f} GB  '
             f'count={torch.cuda.device_count()}'
         )
     elif opt.device == 'mps':
@@ -749,6 +843,11 @@ def build_lr_scheduler(opt, optimizer, steps_per_epoch):
     raise ValueError(f'Unknown lr_scheduler "{scheduler_name}". Expected one of: plateau, step, warmup_cosine')
 
 
+def resuming_run(opt):
+    """True when the run continues from --resume_path; its logs are then appended to."""
+    return bool(getattr(opt, 'resume_path', ''))
+
+
 def build_training_components(opt, parameters):
     training_data = get_training_set(
         opt,
@@ -773,13 +872,16 @@ def build_training_components(opt, parameters):
         worker_init_fn=seed_data_loader_worker,
         generator=train_generator,
     )
+    append_logs = resuming_run(opt)
     train_logger = Logger(
         os.path.join(opt.result_path, 'train.log'),
         ['epoch', 'loss', 'prec1', 'prec5', 'lr'],
+        append=append_logs,
     )
     train_batch_logger = Logger(
         os.path.join(opt.result_path, 'train_batch.log'),
         ['epoch', 'batch', 'iter', 'loss', 'prec1', 'prec5', 'lr'],
+        append=append_logs,
     )
     optimizer = build_optimizer(opt, parameters)
     scheduler = build_lr_scheduler(opt, optimizer, len(train_loader))
@@ -814,5 +916,6 @@ def build_validation_components(opt):
             'selection_value',
             'selection_score',
         ],
+        append=resuming_run(opt),
     )
     return validation_data, val_loader, val_logger

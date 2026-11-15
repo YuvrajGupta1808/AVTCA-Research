@@ -1,37 +1,59 @@
 import os
 import sys
 import unittest
-from unittest.mock import patch, MagicMock
+from types import SimpleNamespace
+from unittest.mock import MagicMock
+
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
+from models.multimodal_cnn import MultiModalCNN  # noqa: E402
 
-class TestOpts(unittest.TestCase):
-    """Smoke test: opts parse without errors and key values are set."""
+# Option parsing is covered by tests/test_opts.py.
 
-    def test_parse_does_not_crash(self):
-        from src.config.opts import parse_opts
-        with patch('sys.argv', ['main.py', '--n_epochs', '1', '--no_train', '--no_val']):
-            opt = parse_opts()
-            self.assertEqual(opt.n_epochs, 1)
-            self.assertFalse(opt.no_train is None)
+
+def run_options(**overrides):
+    """The options of the reported EngageNet network (fusion 'it', 8 heads, 4 levels)."""
+    options = dict(
+        model='multimodal_cnn',
+        n_classes=4,
+        fusion='it',
+        sample_duration=15,
+        max_video_frames=50,
+        pretrain_path='None',
+        num_heads=8,
+        device='cpu',
+        late_text_fusion=False,
+    )
+    options.update(overrides)
+    return SimpleNamespace(**options)
 
 
 class TestModelFactory(unittest.TestCase):
-    """Smoke test: generate_model builds without errors for multimodal_cnn."""
+    """generate_model builds the network the run options describe."""
 
-    def test_generate_model_cpu(self):
+    def test_builds_the_reported_network(self):
         from src.models.factory import generate_model
-        opt = MagicMock()
-        opt.model = 'multimodal_cnn'
-        opt.n_classes = 8
-        opt.fusion = 'it'
-        opt.sample_duration = 15
-        opt.pretrain_path = 'None'
-        opt.num_heads = 1
-        opt.device = 'cpu'
-        model, params = generate_model(opt)
-        self.assertIsNotNone(model)
-        self.assertIsNotNone(params)
+        model, params = generate_model(run_options())
+
+        self.assertIsInstance(model, MultiModalCNN)
+        self.assertEqual(
+            model.model_config(),
+            {'num_heads': 8, 'fusion': 'it', 'it_fusion_mode': 'modern', 'modality_dropout': 0.15},
+        )
+        self.assertFalse(hasattr(model, 'text_addon'))
+        # The parameter count reported in the paper (Online Resource 1, Table S3).
+        self.assertEqual(sum(parameter.numel() for parameter in params), 2_377_842)
+
+    def test_late_text_fusion_is_off_unless_requested(self):
+        from src.models.factory import generate_model
+        options = run_options()
+        del options.late_text_fusion
+        model, _ = generate_model(options)
+        self.assertFalse(model.late_text_fusion)
+        self.assertFalse(hasattr(model, 'text_addon'))
+
+        model, _ = generate_model(run_options(late_text_fusion=True, text_vocab_size=64))
+        self.assertTrue(hasattr(model, 'text_addon'))
 
     def test_generate_model_cpu_ignores_non_primitive_optional_values(self):
         from src.models.factory import generate_model
@@ -40,9 +62,13 @@ class TestModelFactory(unittest.TestCase):
         opt.n_classes = 8
         opt.fusion = 'it'
         opt.sample_duration = 15
+        opt.max_video_frames = 15
         opt.pretrain_path = 'None'
         opt.num_heads = 1
         opt.device = 'cpu'
+        opt.text_vocab_size = 64
+        opt.behavior_feature_dim = 22
+        opt.behavior_skip_dim = 64
         opt.visual_backbone = MagicMock()
         opt.visual_stem_pooling = MagicMock()
         opt.audio_channel_attention = MagicMock()
@@ -51,8 +77,10 @@ class TestModelFactory(unittest.TestCase):
         model, params = generate_model(opt)
 
         self.assertEqual(model.visual_backbone, 'efficientface')
+        self.assertEqual(model.it_fusion_mode, 'modern')
         self.assertFalse(model.audio_channel_attention)
-        self.assertIsNotNone(params)
+        self.assertFalse(model.late_text_fusion)
+        self.assertGreater(sum(parameter.numel() for parameter in params), 0)
 
     def test_unknown_model_raises_value_error(self):
         from src.models.factory import generate_model

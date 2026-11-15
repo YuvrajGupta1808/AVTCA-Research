@@ -41,9 +41,11 @@ def parse_opts(argv=None):
     parser.add_argument('--text_fusion', action='store_true', help='Fuse behavior-caption text via the sentence TextEncoder (it fusion only). Replaces the hashed late-text add-on.')
     parser.set_defaults(text_fusion=False)
     parser.add_argument('--text_backend', default='hashing', choices=['hashing', 'minilm', 'auto'], help='Sentence embedding backend for text fusion. hashing = dependency-free (default).')
-    parser.add_argument('--num_heads', default=1, type=int, help='number of heads, in the paper 1 or 4')
-    
-    parser.add_argument('--device', default='cuda', type=str, help='Specify the device to run. Defaults to cuda, fallsback to cpu')
+    parser.add_argument('--num_heads', default=1, type=int, help='Number of attention heads. The default (1) is the RAVDESS-era setting; the EngageNet runs of the paper use 8.')
+
+    parser.add_argument('--device', default='cuda', type=str, help='Device to run on: cuda, cuda:N (a specific GPU) or cpu. Falls back to cpu when CUDA is unavailable.')
+    parser.add_argument('--data_parallel', action='store_true', help='Wrap the model in torch.nn.DataParallel over all visible GPUs. Off by default: DataParallel changes the per-replica BatchNorm statistics.')
+    parser.set_defaults(data_parallel=False)
     
     
     parser.add_argument('--sample_size', default=224, type=int, help='Video dimensions: ravdess = 224 ')

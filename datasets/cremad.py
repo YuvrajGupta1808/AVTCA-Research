@@ -10,13 +10,23 @@ import torch
 import torch.utils.data as data
 from PIL import Image
 
+from datasets.ravdess import _pil_to_tensor, _sample_frame_indices
+
 
 # ── video loading ────────────────────────────────────────────────────────────
 
-def video_loader(video_dir_path):
+def video_loader(video_dir_path, target_frames=15, frame_sampling='uniform'):
+    """Frames of one clip as a list of PIL images, in OpenCV BGR channel order.
+
+    ``*_facecroppad.npy`` arrays (preprocessing/cremad/extract_faces.py) hold BGR face
+    crops straight from cv2, so the raw .flv fallback keeps BGR too; converting it to
+    RGB would hand the model swapped channels for exactly the clips whose crops are
+    missing. ``target_frames`` None or <= 0 keeps every frame.
+    """
     if video_dir_path.endswith('.npy'):
         video = np.load(video_dir_path)
-        return [Image.fromarray(video[i]) for i in range(video.shape[0])]
+        indices = _sample_frame_indices(video.shape[0], target_frames, sampling=frame_sampling)
+        return [Image.fromarray(video[i]) for i in indices]
 
     if video_dir_path.endswith('.flv'):
         cap = cv2.VideoCapture(video_dir_path)
@@ -25,34 +35,37 @@ def video_loader(video_dir_path):
             ok, frame = cap.read()
             if not ok:
                 break
-            frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-            frame = cv2.resize(frame, (224, 224))
+            frame = cv2.resize(frame, (224, 224))     # BGR, like the .npy crops
             frames.append(frame)
         cap.release()
 
-        target_frames = 15
+        fill = target_frames if target_frames and target_frames > 0 else None
         if not frames:
-            frames = [np.zeros((224, 224, 3), dtype=np.uint8)] * target_frames
-        elif len(frames) >= target_frames:
-            indices = np.linspace(0, len(frames) - 1, num=target_frames, dtype=int)
+            frames = [np.zeros((224, 224, 3), dtype=np.uint8)] * (fill or 1)
+        elif fill is None:
+            pass
+        elif len(frames) >= fill:
+            indices = _sample_frame_indices(len(frames), fill, sampling=frame_sampling)
             frames = [frames[i] for i in indices]
         else:
             blank = np.zeros((224, 224, 3), dtype=np.uint8)
-            frames += [blank] * (target_frames - len(frames))
+            frames += [blank] * (fill - len(frames))
 
         return [Image.fromarray(f) for f in frames]
 
     raise ValueError(f'Unsupported video format: {video_dir_path}')
 
 
-def get_default_video_loader():
-    return functools.partial(video_loader)
+def get_default_video_loader(target_frames=15, frame_sampling='uniform'):
+    return functools.partial(video_loader, target_frames=target_frames, frame_sampling=frame_sampling)
 
 
 # ── audio loading ────────────────────────────────────────────────────────────
 
 def load_audio(audiofile, sr=22050, target_secs=3.6):
     y, sr = librosa.core.load(audiofile, sr=sr)
+    if target_secs is None or target_secs <= 0:
+        return y, sr
     target_length = int(sr * target_secs)
     if len(y) < target_length:
         y = np.pad(y, (0, target_length - len(y)))
@@ -225,6 +238,8 @@ class CREMAD(data.Dataset):
             if self.spatial_transform is not None:
                 self.spatial_transform.randomize_parameters()
                 clip = [self.spatial_transform(img) for img in clip]
+            else:
+                clip = [_pil_to_tensor(img) for img in clip]
             clip = torch.stack(clip, 0).permute(1, 0, 2, 3)
             if self.data_type == 'video':
                 return clip, target
